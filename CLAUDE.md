@@ -29,14 +29,15 @@ Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build`
 | 1.4 | Consent Service — gate de gravação (FR20) | ✅ Ready for Review | `8ca9679` |
 | 1.6 | Provider Abstraction Layer (NFR8) | ✅ Ready for Review | `aa0ce03` |
 | 1.5 | Audit Service — proveniência (NFR10) | ✅ Ready for Review | (ver git log) |
-| 1.7 | Disclaimers persistentes (FR19) | ⬜ Ready (a implementar) | — |
+| 1.7 | Disclaimers persistentes (FR19) | ✅ Ready for Review | (ver git log) |
 | 1.8 | ADR residência BR + checklist jurídico | ⬜ Ready (a implementar) | — |
 
-Testes acumulados: **56/56 PASS**. CodeRabbit pre-commit **diferido p/ pre-PR** em todas (CLI exige `auth login` interativo via WSL).
+Testes acumulados: **65/65 PASS** (inclui testes de UI — jsdom + Testing Library). CodeRabbit pre-commit **diferido p/ pre-PR** em todas (CLI exige `auth login` interativo via WSL).
 
 ### Destaques de implementação
 - **1.4 Consent:** servidor é fonte de verdade; default NEGA. Gate `isCaptureAuthorized`/`assertCaptureAuthorized` + rota `GET /api/consultations/[id]/capture-authorization` (401/403/200). `CONSENT` 1:1 `CONSULTATION`; auditável (`granted_by`+`granted_at`).
 - **1.5 Audit:** package `@nutrimed/audit` — `writeAudit` (valida proveniência: gatilho+kb_sources+model_version), `auditedClinicalWrite` (transação atômica; exige sessão única, não Pool), `getAuditTrail`. Migration `0003` torna `audit_log` append-only via trigger plpgsql.
+- **1.7 Disclaimers:** `<DisclaimerNote>` Atom (fonte única `DISCLAIMER_TEXT`, variants chrome/card, a11y) + `<AppChrome>` no layout raiz — disclaimer persistente em toda rota (FR19). Vitest agora roda testes de UI (`apps/web`, jsdom).
 - **1.6 Providers:** `ISttProvider`, `ILlmProvider`, `IKnowledgeRetriever` (escopo por persona — FR21), `IVideoAssetProvider` (catálogo pré-renderizado — ADR-007). Package sem deps de vendor. Fakes = ativo REUSE p/ E2–E8.
 
 ## Pendências
@@ -45,7 +46,7 @@ Testes acumulados: **56/56 PASS**. CodeRabbit pre-commit **diferido p/ pre-PR** 
    Push é **exclusivo do @devops**; `gh auth login -h github.com` ainda pendente (bootstrap do repo).
 2. **Quality gates formais** das stories em Ready for Review (1.2/1.3/1.4/1.6) — rodar @qa/@architect conforme `quality_gate` de cada story.
 3. **CodeRabbit pre-PR** — autenticar a CLI e rodar antes do PR.
-4. **Stories restantes do E1:** 1.7 (FR19 disclaimers), 1.8 (jurídico/ADR residência BR).
+4. **Story restante do E1:** 1.8 (jurídico/ADR residência BR — executor @architect).
 5. **Caminho crítico do produto:** E1 → E2 (pipeline transcrição) → E3 (POC latência/custo). Os fakes da 1.6 destravam E3 antes da escolha de vendor.
 
 ## Regras de fronteira (resumo)

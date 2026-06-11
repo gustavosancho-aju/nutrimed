@@ -2,7 +2,6 @@ import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth';
 import { logoutAction } from '@/lib/auth-actions';
 import { startConsultationAction } from '@/lib/consent-actions';
-import { DisclaimerNote } from '@/components/disclaimer-note';
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
@@ -56,10 +55,6 @@ export default async function DashboardPage() {
           </button>
         </form>
       </section>
-
-      <footer className="mt-10 border-t border-gray-200 pt-4">
-        <DisclaimerNote />
-      </footer>
     </main>
   );
 }

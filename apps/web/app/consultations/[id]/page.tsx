@@ -78,16 +78,17 @@ export default async function ConsultationPage({
             </form>
           )}
         </div>
+
+        {/* Disclaimer no contexto do card (frontend-spec §6) — mesmo Atom do chrome (AC6) */}
+        <div className="mt-4 border-t border-gray-200/70 pt-3">
+          <DisclaimerNote variant="card" />
+        </div>
       </section>
 
       <p className="mt-4 text-xs text-gray-500">
         A decisão de autorização é do servidor: a captura do board (E2) só liga após consultar o
         gate <code>/api/consultations/{id}/capture-authorization</code>.
       </p>
-
-      <footer className="mt-10 border-t border-gray-200 pt-4">
-        <DisclaimerNote />
-      </footer>
     </main>
   );
 }
