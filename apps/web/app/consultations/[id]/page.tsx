@@ -1,10 +1,14 @@
 import Link from 'next/link';
+import { cookies } from 'next/headers';
 import { redirect, notFound } from 'next/navigation';
 import { getConsentStatus } from '@nutrimed/consent';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser, SESSION_COOKIE } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { grantConsentAction, revokeConsentAction } from '@/lib/consent-actions';
+import { startDemoBoardAction } from '@/lib/board-actions';
+import { getBoardRuntime, BOARD_WS_PORT } from '@/lib/board-runtime';
 import { DisclaimerNote } from '@/components/disclaimer-note';
+import { BoardFeed } from '@/components/board-feed';
 
 export default async function ConsultationPage({
   params,
@@ -20,6 +24,11 @@ export default async function ConsultationPage({
   if (!consent) notFound();
 
   const authorized = consent.granted;
+
+  // demo do board (E3): garante o gateway WS de pé e passa o token p/ o cliente
+  await getBoardRuntime();
+  const sessionToken = (await cookies()).get(SESSION_COOKIE)?.value ?? '';
+  const wsBaseUrl = process.env.NEXT_PUBLIC_BOARD_WS_URL ?? `ws://localhost:${BOARD_WS_PORT}`;
 
   return (
     <main className="mx-auto min-h-screen max-w-3xl p-8">
@@ -89,6 +98,31 @@ export default async function ConsultationPage({
         A decisão de autorização é do servidor: a captura do board (E2) só liga após consultar o
         gate <code>/api/consultations/{id}/capture-authorization</code>.
       </p>
+
+      {/* Walking skeleton do board (E3): consulta simulada → Dr. Paulo ao vivo */}
+      {authorized ? (
+        <section className="mt-8 space-y-4 rounded-lg border border-gray-200 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Demo do board (E3)</h2>
+              <p className="text-sm text-gray-500">
+                Consulta simulada (STT roteirizado) — o restante do caminho é real: gatilho →
+                Claude Haiku → auditoria → WebSocket → feed.
+              </p>
+            </div>
+            <form action={startDemoBoardAction}>
+              <input type="hidden" name="consultationId" value={id} />
+              <button
+                type="submit"
+                className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+              >
+                ▶ Iniciar consulta simulada
+              </button>
+            </form>
+          </div>
+          <BoardFeed consultationId={id} token={sessionToken} wsBaseUrl={wsBaseUrl} />
+        </section>
+      ) : null}
     </main>
   );
 }

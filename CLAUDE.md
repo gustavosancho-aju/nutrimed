@@ -65,6 +65,8 @@ Ordem sugerida: 2.3 (só fakes, sem vendor) → 2.4 → 2.1 (exige credencial de
 
 LLM adapters: `@nutrimed/llm-anthropic` (Claude Haiku default) pronto; 2º candidato na 3.4.
 
+**DEMO FIM-A-FIM FUNCIONANDO** (2026-06-11, verificada via browser): login → consulta → consentimento → "▶ Iniciar consulta simulada" → card real do Dr. Paulo gerado pelo claude-haiku-4-5 chega via WS em ~3s. Rota: `/consultations/[id]`. STT roteirizado (mic real = wiring E3 final); gateway WS in-process do Next (PGlite single-process; `apps/web/lib/board-runtime.ts`). Keys em `apps/web/.env.local` (gitignored — Next não lê o .env da raiz).
+
 ## Pendências
 
 1. ~~Push bloqueado~~ → **RESOLVIDO (2026-06-11):** remote `git@github.com:gustavosancho-aju/nutrimed.git` via **SSH porta 443** (`~/.ssh/config` → ssh.github.com:443), pois `api.github.com` é **bloqueado na rede** (gh CLI/API indisponíveis — github.com e codeload funcionam). main sincronizada.
