@@ -22,9 +22,21 @@ export interface SttSession extends AsyncIterable<TranscriptSegment> {
   close(): Promise<void>;
 }
 
+/**
+ * Opções de abertura do stream (extensão ADITIVA — Stories 2.1/2.6, sem quebrar
+ * consumidores que passam só `{ lang }`):
+ * - `audio`: fonte de áudio bruto (Story 2.2 entrega; fakes ignoram).
+ * - `vocabularyBoost`: termos clínicos a reforçar quando o vendor suportar (T4).
+ */
+export interface SttOpenOptions {
+  readonly lang: 'pt-BR';
+  readonly audio?: AsyncIterable<Uint8Array>;
+  readonly vocabularyBoost?: readonly string[];
+}
+
 /** Speech-to-Text em streaming PT-BR (§5). */
 export interface ISttProvider {
-  openStream(opts: { lang: 'pt-BR' }): SttSession;
+  openStream(opts: SttOpenOptions): SttSession;
 }
 
 /** Requisição de completon do LLM para gerar uma contribuição de persona. */

@@ -14,6 +14,7 @@ export type {
 export type {
   ISttProvider,
   SttSession,
+  SttOpenOptions,
   ILlmProvider,
   LlmCompletionRequest,
   IKnowledgeRetriever,

@@ -28,6 +28,8 @@ export interface TranscriptSegment {
   /** Offsets opcionais em ms desde o início do stream. */
   readonly startMs?: number;
   readonly endMs?: number;
+  /** Epoch ms de recepção no cliente — insumo de medição de latência (NFR5, POC 2.5). */
+  readonly receivedAtMs?: number;
 }
 
 /**
