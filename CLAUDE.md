@@ -42,9 +42,8 @@ Testes acumulados: **65/65 PASS** (inclui testes de UI — jsdom + Testing Libra
 
 ## Pendências
 
-1. **Push / PR bloqueado** — 9 commits locais não-pushados.
-   Push é **exclusivo do @devops**; `gh auth login -h github.com` ainda pendente (bootstrap do repo).
-2. **CodeRabbit pre-PR** — autenticar a CLI e rodar antes do PR.
+1. ~~Push bloqueado~~ → **RESOLVIDO (2026-06-11):** remote `git@github.com:gustavosancho-aju/nutrimed.git` via **SSH porta 443** (`~/.ssh/config` → ssh.github.com:443), pois `api.github.com` é **bloqueado na rede** (gh CLI/API indisponíveis — github.com e codeload funcionam). main sincronizada.
+2. **CodeRabbit pre-PR** — autenticar a CLI e rodar antes do próximo PR. `gh pr create` indisponível enquanto a API estiver bloqueada (usar web UI se preciso).
 3. **Consultoria jurídica externa** — CJ-1…CJ-6 do checklist (`docs/architecture/project-decisions/checklist-consultoria-juridica.md`) bloqueiam o piloto E10, não o dev. Gates de QA do E1 todos emitidos (`docs/qa/gates/1.*.yml` — 1.8 PASS, demais CONCERNS→Done).
 4. **Caminho crítico do produto:** E1 → E2 (pipeline transcrição) → E3 (POC latência/custo). Os fakes da 1.6 destravam E3 antes da escolha de vendor.
 
