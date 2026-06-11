@@ -40,6 +40,19 @@ Testes acumulados: **65/65 PASS** (inclui testes de UI — jsdom + Testing Libra
 - **1.7 Disclaimers:** `<DisclaimerNote>` Atom (fonte única `DISCLAIMER_TEXT`, variants chrome/card, a11y) + `<AppChrome>` no layout raiz — disclaimer persistente em toda rota (FR19). Vitest agora roda testes de UI (`apps/web`, jsdom).
 - **1.6 Providers:** `ISttProvider`, `ILlmProvider`, `IKnowledgeRetriever` (escopo por persona — FR21), `IVideoAssetProvider` (catálogo pré-renderizado — ADR-007). Package sem deps de vendor. Fakes = ativo REUSE p/ E2–E8.
 
+## Épico 2 — Pipeline de Transcrição (em andamento)
+
+| Story | Tema | Executor | Status |
+|-------|------|----------|--------|
+| 2.1 | ISttProvider real (streaming PT-BR, parciais/finais) | @dev | Ready |
+| 2.2 | Captura de áudio + mic check no lobby (gate 1.4) | @dev | Ready |
+| 2.3 | Consultation Session Service (transcript em memória) | @dev | Ready |
+| 2.4 | `<TranscriptPanel>` auto-follow + estados | @ux-design-expert | Ready |
+| 2.5 | POC STT: ≥2 candidatos, latência NFR5 + precisão T4 | @analyst | Ready |
+| 2.6 | Degradação graciosa + boost de vocabulário | @dev | Ready |
+
+Ordem sugerida: 2.3 (só fakes, sem vendor) → 2.4 → 2.1 (exige credencial de vendor) → 2.2 → 2.6 → 2.5 (POC, exige áudio + 2 vendors).
+
 ## Pendências
 
 1. ~~Push bloqueado~~ → **RESOLVIDO (2026-06-11):** remote `git@github.com:gustavosancho-aju/nutrimed.git` via **SSH porta 443** (`~/.ssh/config` → ssh.github.com:443), pois `api.github.com` é **bloqueado na rede** (gh CLI/API indisponíveis — github.com e codeload funcionam). main sincronizada.
