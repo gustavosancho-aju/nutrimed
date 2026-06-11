@@ -1,0 +1,163 @@
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { randomBytes } from 'node:crypto';
+import { WebSocket } from 'ws';
+import { PGlite } from '@electric-sql/pglite';
+import { runMigrations, type SqlExecutor } from '@nutrimed/db';
+import { createSession } from '@nutrimed/auth';
+import { createConsultation } from '@nutrimed/consent';
+import type { BoardOrchestrator, BoardContributionEvent, BoardListener } from '@nutrimed/board';
+import type { BoardServerMessage } from '@nutrimed/shared-types';
+import { BoardGateway } from './gateway';
+
+function fromPglite(db: PGlite): SqlExecutor {
+  return {
+    exec: async (sql: string): Promise<void> => {
+      await db.exec(sql);
+    },
+    query: async <T = Record<string, unknown>>(text: string, params?: unknown[]) => {
+      const result = await db.query<T>(text, params as unknown[]);
+      return { rows: result.rows };
+    },
+  };
+}
+
+/** Fonte de eventos controlável com a MESMA superfície de subscribe do orchestrator. */
+function makeEventSource() {
+  const listeners = new Set<BoardListener>();
+  return {
+    orchestrator: {
+      subscribe(listener: BoardListener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    } as unknown as BoardOrchestrator,
+    emit(event: BoardContributionEvent) {
+      listeners.forEach((l) => l(event));
+    },
+  };
+}
+
+function contributionEvent(consultationId: string, id = 'evt-1'): BoardContributionEvent {
+  return {
+    type: 'contribution',
+    id,
+    consultationId,
+    triggeredBy: 'paulo-seguranca-cv-farmacos',
+    at: 123,
+    contribution: {
+      personaId: 'paulo',
+      type: 'atencao',
+      severity: 'critical',
+      text: 'Vale checar PA e FC.',
+      relevanceScore: 0.9,
+    },
+  };
+}
+
+function connect(port: number, query: string): Promise<{ ws: WebSocket; closeCode?: number }> {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/board?${query}`);
+    ws.on('open', () => resolve({ ws }));
+    ws.on('close', (code) => resolve({ ws, closeCode: code }));
+    ws.on('error', reject);
+  });
+}
+
+function nextMessage(ws: WebSocket): Promise<BoardServerMessage> {
+  return new Promise((resolve) => {
+    ws.once('message', (data) => resolve(JSON.parse(String(data)) as BoardServerMessage));
+  });
+}
+
+function waitClose(ws: WebSocket): Promise<number> {
+  return new Promise((resolve) => ws.once('close', (code) => resolve(code)));
+}
+
+describe('BoardGateway (Story 3.2 — ADR-003)', () => {
+  let db: PGlite;
+  let exec: SqlExecutor;
+  let gateway: BoardGateway;
+  let token: string;
+  let consultationId: string;
+
+  beforeAll(async () => {
+    db = new PGlite();
+    exec = fromPglite(db);
+    await runMigrations(exec);
+    const res = await exec.query<{ id: string }>(
+      'INSERT INTO app_user (email, display_name, password_hash) VALUES ($1, $2, $3) RETURNING id',
+      ['nutro@nutrimed.test', 'Dra. Ana', 'x'],
+    );
+    const userId = res.rows[0]!.id;
+    token = (await createSession(exec, userId)).token;
+    consultationId = await createConsultation(exec, userId, 'P', randomBytes(32));
+    gateway = new BoardGateway(exec, { port: 0, heartbeatMs: 60_000 });
+  });
+
+  afterAll(async () => {
+    await gateway.close();
+    await db.close();
+  });
+
+  it('AC1 — rejeita conexão sem token (4400) e com token inválido (4401)', async () => {
+    const noToken = new WebSocket(`ws://127.0.0.1:${gateway.port}/board?consultationId=x`);
+    expect(await waitClose(noToken)).toBe(4400);
+
+    const badToken = new WebSocket(
+      `ws://127.0.0.1:${gateway.port}/board?consultationId=${consultationId}&token=invalido`,
+    );
+    expect(await waitClose(badToken)).toBe(4401);
+  });
+
+  it('AC1 — rejeita consulta inexistente/de outro usuário (4403)', async () => {
+    const ws = new WebSocket(
+      `ws://127.0.0.1:${gateway.port}/board?consultationId=00000000-0000-0000-0000-000000000000&token=${token}`,
+    );
+    expect(await waitClose(ws)).toBe(4403);
+  });
+
+  it('AC2/AC5 — evento do orchestrator chega ao cliente como mensagem tipada v1', async () => {
+    const source = makeEventSource();
+    gateway.bind(consultationId, source.orchestrator);
+
+    const { ws } = await connect(gateway.port, `consultationId=${consultationId}&token=${token}`);
+    const received = nextMessage(ws);
+    source.emit(contributionEvent(consultationId));
+
+    const message = await received;
+    expect(message).toMatchObject({
+      v: 1,
+      type: 'contribution',
+      id: 'evt-1',
+      consultationId,
+      triggeredBy: 'paulo-seguranca-cv-farmacos',
+      contribution: { personaId: 'paulo', severity: 'critical', text: 'Vale checar PA e FC.' },
+    });
+    ws.close();
+  });
+
+  it('AC2 — evento de OUTRA consulta não vaza para este cliente', async () => {
+    const source = makeEventSource();
+    gateway.bind(consultationId, source.orchestrator);
+    const { ws } = await connect(gateway.port, `consultationId=${consultationId}&token=${token}`);
+
+    const messages: BoardServerMessage[] = [];
+    ws.on('message', (d) => messages.push(JSON.parse(String(d)) as BoardServerMessage));
+
+    source.emit(contributionEvent('outra-consulta', 'evt-vazado'));
+    source.emit(contributionEvent(consultationId, 'evt-meu'));
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(messages.map((m) => (m.type === 'contribution' ? m.id : ''))).toEqual(['evt-meu']);
+    ws.close();
+  });
+
+  it('AC4 — heartbeat ping chega ao cliente conectado', async () => {
+    const fast = new BoardGateway(exec, { port: 0, heartbeatMs: 30, now: () => 999 });
+    const { ws } = await connect(fast.port, `consultationId=${consultationId}&token=${token}`);
+    const message = await nextMessage(ws);
+    expect(message).toMatchObject({ v: 1, type: 'ping', at: 999 });
+    ws.close();
+    await fast.close();
+  });
+});

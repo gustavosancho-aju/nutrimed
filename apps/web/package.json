@@ -16,13 +16,14 @@
     "@nutrimed/crypto": "workspace:*",
     "@nutrimed/db": "workspace:*",
     "@nutrimed/domain": "workspace:*",
+    "@nutrimed/providers": "workspace:*",
+    "@nutrimed/session": "workspace:*",
     "@nutrimed/shared-types": "workspace:*",
     "next": "^16.2.0",
     "pg": "^8.21.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "@nutrimed/session": "workspace:*",
-    "@nutrimed/providers": "workspace:*"
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",
