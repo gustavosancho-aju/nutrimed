@@ -1,6 +1,11 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  resolve: {
+    // espelha o alias "@/*" do tsconfig do apps/web p/ os testes de UI
+    alias: { '@': fileURLToPath(new URL('./apps/web', import.meta.url)) },
+  },
   esbuild: { jsx: 'automatic' }, // JSX runtime do React 19 (testes .tsx sem import React)
   test: {
     include: ['packages/**/src/**/*.test.ts', 'apps/web/**/*.test.{ts,tsx}'],

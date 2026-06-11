@@ -32,7 +32,7 @@ Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build`
 | 1.7 | Disclaimers persistentes (FR19) | ✅ Done | (ver git log) |
 | 1.8 | ADR residência BR + checklist jurídico | ✅ Done | (ver git log) |
 
-Testes acumulados: **88/88 PASS** (+1 E2E skipif) (inclui testes de UI — jsdom + Testing Library). CodeRabbit pre-commit **diferido p/ pre-PR** em todas (CLI exige `auth login` interativo via WSL).
+Testes acumulados: **104/104 PASS** (+1 E2E skipif) (inclui testes de UI — jsdom + Testing Library). CodeRabbit pre-commit **diferido p/ pre-PR** em todas (CLI exige `auth login` interativo via WSL).
 
 ### Destaques de implementação
 - **1.4 Consent:** servidor é fonte de verdade; default NEGA. Gate `isCaptureAuthorized`/`assertCaptureAuthorized` + rota `GET /api/consultations/[id]/capture-authorization` (401/403/200). `CONSENT` 1:1 `CONSULTATION`; auditável (`granted_by`+`granted_at`).
@@ -45,11 +45,11 @@ Testes acumulados: **88/88 PASS** (+1 E2E skipif) (inclui testes de UI — jsdom
 | Story | Tema | Executor | Status |
 |-------|------|----------|--------|
 | 2.1 | ISttProvider real (streaming PT-BR, parciais/finais) | @dev | ✅ Ready for Review |
-| 2.2 | Captura de áudio + mic check no lobby (gate 1.4) | @dev | Ready |
+| 2.2 | Captura de áudio + mic check no lobby (gate 1.4) | @dev | ✅ Ready for Review |
 | 2.3 | Consultation Session Service (transcript em memória) | @dev | ✅ Ready for Review |
 | 2.4 | `<TranscriptPanel>` auto-follow + estados | @ux-design-expert | ✅ Ready for Review |
 | 2.5 | POC STT: ≥2 candidatos, latência NFR5 + precisão T4 | @analyst | Ready |
-| 2.6 | Degradação graciosa + boost de vocabulário | @dev | Ready |
+| 2.6 | Degradação graciosa + boost de vocabulário | @dev | ✅ Ready for Review |
 
 Ordem sugerida: 2.3 (só fakes, sem vendor) → 2.4 → 2.1 (exige credencial de vendor) → 2.2 → 2.6 → 2.5 (POC, exige áudio + 2 vendors).
 

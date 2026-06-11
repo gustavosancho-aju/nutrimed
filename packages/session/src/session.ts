@@ -1,6 +1,11 @@
 import type { SqlExecutor } from '@nutrimed/db';
 import { assertCaptureAuthorized } from '@nutrimed/consent';
-import type { ISttProvider, SttSession, TranscriptSegment } from '@nutrimed/providers';
+import type {
+  ISttProvider,
+  SttOpenOptions,
+  SttSession,
+  TranscriptSegment,
+} from '@nutrimed/providers';
 
 /**
  * Consultation Session Service (Story 2.3) — estado canônico da transcrição
@@ -38,6 +43,18 @@ export type SessionEvent =
 
 export type SessionListener = (event: SessionEvent) => void;
 
+/** Opções de resiliência (Story 2.6) — retry limitado com backoff exponencial. */
+export interface SessionRetryOptions {
+  /** Reaberturas do stream após falha (default 3). */
+  readonly maxRetries?: number;
+  /** Base do backoff exponencial em ms (default 500: 500/1000/2000). */
+  readonly backoffBaseMs?: number;
+  /** Delay injetável (testes usam delay zero). */
+  readonly delay?: (ms: number) => Promise<void>;
+}
+
+const defaultDelay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 export class ConsultationSession {
   private status: SessionStatus = 'live';
   private readonly finals: TranscriptSegment[] = [];
@@ -45,11 +62,22 @@ export class ConsultationSession {
   private error: Error | null = null;
   private readonly listeners = new Set<SessionListener>();
   private readonly consumeLoop: Promise<void>;
+  private stream: SttSession;
+  private stopped = false;
+  private readonly maxRetries: number;
+  private readonly backoffBaseMs: number;
+  private readonly delay: (ms: number) => Promise<void>;
 
   constructor(
     readonly consultationId: string,
-    private readonly stream: SttSession,
+    initialStream: SttSession,
+    private readonly reopen: () => SttSession,
+    retry: SessionRetryOptions = {},
   ) {
+    this.stream = initialStream;
+    this.maxRetries = retry.maxRetries ?? 3;
+    this.backoffBaseMs = retry.backoffBaseMs ?? 500;
+    this.delay = retry.delay ?? defaultDelay;
     this.consumeLoop = this.consume();
   }
 
@@ -78,29 +106,51 @@ export class ConsultationSession {
    */
   async stop(): Promise<void> {
     if (this.status === 'ended') return;
+    this.stopped = true;
     await this.stream.close();
     await this.consumeLoop;
     this.setStatus('ended');
     this.listeners.clear();
   }
 
+  /**
+   * Loop consumidor com recuperação (Story 2.6): erro do STT degrada (AC6 da
+   * 2.3), tenta reabrir o stream com backoff exponencial limitado; ao voltar a
+   * receber segmentos, retorna a `live` SEM duplicar finais (o acumulado nunca
+   * é descartado). Esgotadas as tentativas, permanece `degraded` — a consulta
+   * não trava (frontend-spec §3.1).
+   */
   private async consume(): Promise<void> {
-    try {
-      for await (const segment of this.stream) {
-        if (segment.isFinal) {
-          // final consolida a ponta: acrescenta e limpa o parcial (AC2)
-          this.finals.push(segment);
-          this.partial = null;
-        } else {
-          this.partial = segment;
+    let attempt = 0;
+    for (;;) {
+      try {
+        for await (const segment of this.stream) {
+          attempt = 0; // stream saudável zera o orçamento de retries
+          if (this.status === 'degraded') this.setStatus('live'); // recuperou
+          if (segment.isFinal) {
+            // final consolida a ponta: acrescenta e limpa o parcial (AC2)
+            this.finals.push(segment);
+            this.partial = null;
+          } else {
+            this.partial = segment;
+          }
+          this.emit({ type: 'segment', segment });
         }
-        this.emit({ type: 'segment', segment });
+        return; // fim natural (ex.: close()) — status final é decidido por stop()
+      } catch (err) {
+        this.error = err instanceof Error ? err : new Error(String(err));
+        this.setStatus('degraded', this.error);
+        if (this.stopped || attempt >= this.maxRetries) return;
+        attempt += 1;
+        await this.delay(this.backoffBaseMs * 2 ** (attempt - 1));
+        if (this.stopped) return;
+        try {
+          this.stream = this.reopen();
+        } catch (reopenErr) {
+          this.error = reopenErr instanceof Error ? reopenErr : new Error(String(reopenErr));
+          return; // reabertura falhou de vez — permanece degraded
+        }
       }
-      // stream terminou naturalmente (ex.: close()) — status final é decidido por stop()
-    } catch (err) {
-      // erro do STT degrada, não derruba (AC6) — Story 2.6 consome este estado
-      this.error = err instanceof Error ? err : new Error(String(err));
-      this.setStatus('degraded', this.error);
     }
   }
 
@@ -120,12 +170,21 @@ export class ConsultationSession {
  * (Story 1.4 — lança `ConsentRequiredError` se não autorizado) e só então abre
  * o stream PT-BR do provider (AC4).
  */
+export interface StartSessionOptions extends SessionRetryOptions {
+  /** Fonte de áudio do navegador (Story 2.2). */
+  readonly audio?: SttOpenOptions['audio'];
+  /** Termos clínicos a reforçar no STT (Story 2.6 / T4). */
+  readonly vocabularyBoost?: SttOpenOptions['vocabularyBoost'];
+}
+
 export async function startConsultationSession(
   db: SqlExecutor,
   consultationId: string,
   stt: ISttProvider,
+  opts: StartSessionOptions = {},
 ): Promise<ConsultationSession> {
   await assertCaptureAuthorized(db, consultationId);
-  const stream = stt.openStream({ lang: 'pt-BR' });
-  return new ConsultationSession(consultationId, stream);
+  const open = () =>
+    stt.openStream({ lang: 'pt-BR', audio: opts.audio, vocabularyBoost: opts.vocabularyBoost });
+  return new ConsultationSession(consultationId, open(), open, opts);
 }
