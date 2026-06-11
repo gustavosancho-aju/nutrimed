@@ -132,6 +132,34 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
+  packages/board:
+    dependencies:
+      '@nutrimed/audit':
+        specifier: workspace:*
+        version: link:../audit
+      '@nutrimed/consent':
+        specifier: workspace:*
+        version: link:../consent
+      '@nutrimed/db':
+        specifier: workspace:*
+        version: link:../db
+      '@nutrimed/providers':
+        specifier: workspace:*
+        version: link:../providers
+      '@nutrimed/session':
+        specifier: workspace:*
+        version: link:../session
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.5.0
+        version: 0.5.1
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.21
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
   packages/consent:
     dependencies:
       '@nutrimed/crypto':
@@ -188,6 +216,19 @@ importers:
         specifier: workspace:*
         version: link:../shared-types
     devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
+  packages/llm-anthropic:
+    dependencies:
+      '@nutrimed/providers':
+        specifier: workspace:*
+        version: link:../providers
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.21
       typescript:
         specifier: ^5.6.0
         version: 5.9.3

@@ -57,6 +57,8 @@ export interface PersonaContribution {
   readonly triggeredBy?: string;
   /** Ids dos KbChunk usados como base (proveniência para auditoria). */
   readonly kbSources?: readonly string[];
+  /** Versão do modelo que gerou (proveniência NFR10 — Story 1.5). */
+  readonly modelVersion?: string;
 }
 
 /** Referência a um clipe pré-renderizado do catálogo de vídeo (ADR-007). */

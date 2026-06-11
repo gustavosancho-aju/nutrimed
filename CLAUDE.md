@@ -32,7 +32,7 @@ Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build`
 | 1.7 | Disclaimers persistentes (FR19) | ✅ Done | (ver git log) |
 | 1.8 | ADR residência BR + checklist jurídico | ✅ Done | (ver git log) |
 
-Testes acumulados: **110/110 PASS** (+1 E2E skipif). Candidatos STT prontos p/ POC 2.5: `@nutrimed/stt-deepgram` (keywords boost) e `@nutrimed/stt-openai` (Realtime, prompt hint) (inclui testes de UI — jsdom + Testing Library). CodeRabbit pre-commit **diferido p/ pre-PR** em todas (CLI exige `auth login` interativo via WSL).
+Testes acumulados: **121/121 PASS** (+1 E2E skipif). Candidatos STT prontos p/ POC 2.5: `@nutrimed/stt-deepgram` (keywords boost) e `@nutrimed/stt-openai` (Realtime, prompt hint) (inclui testes de UI — jsdom + Testing Library). CodeRabbit pre-commit **diferido p/ pre-PR** em todas (CLI exige `auth login` interativo via WSL).
 
 ### Destaques de implementação
 - **1.4 Consent:** servidor é fonte de verdade; default NEGA. Gate `isCaptureAuthorized`/`assertCaptureAuthorized` + rota `GET /api/consultations/[id]/capture-authorization` (401/403/200). `CONSENT` 1:1 `CONSULTATION`; auditável (`granted_by`+`granted_at`).
@@ -52,6 +52,18 @@ Testes acumulados: **110/110 PASS** (+1 E2E skipif). Candidatos STT prontos p/ P
 | 2.6 | Degradação graciosa + boost de vocabulário | @dev | ✅ Ready for Review |
 
 Ordem sugerida: 2.3 (só fakes, sem vendor) → 2.4 → 2.1 (exige credencial de vendor) → 2.2 → 2.6 → 2.5 (POC, exige áudio + 2 vendors).
+
+## Épico 3 — Walking Skeleton do Board (em andamento)
+
+| Story | Tema | Executor | Status |
+|-------|------|----------|--------|
+| 3.1 | Board Orchestrator mínimo (1 persona, 1 gatilho) | @dev | ✅ Ready for Review |
+| 3.2 | WebSocket Gateway (ADR-003) | @dev | Ready |
+| 3.3 | useBoardStream + useBoardStore + 1 card | @dev | Ready |
+| 3.4 | POC LLM ≥2 candidatos (bloqueada em API keys) | @analyst | Ready |
+| 3.5 | Validar ADR-005 + ADR-010 runtime | @architect | Ready |
+
+LLM adapters: `@nutrimed/llm-anthropic` (Claude Haiku default) pronto; 2º candidato na 3.4.
 
 ## Pendências
 
