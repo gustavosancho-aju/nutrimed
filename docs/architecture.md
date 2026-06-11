@@ -282,6 +282,7 @@ erDiagram
 | **ADR-006** | Compliance-by-design: cripto, auditoria, consentimento, residência BR desde o dia 1 | Aceito (NFR9, NFR10) |
 | **ADR-007** | Vídeo das personas = catálogo pré-renderizado (não avatar em tempo real no MVP) | Aceito (NFR7) |
 | **ADR-008** | Guarda-corpos: lógica (score/rate/dedup) no servidor; apresentação (decaimento/fila/pausa) no cliente | Aceito |
+| **ADR-009** | [Residência de dados de saúde no Brasil](architecture/project-decisions/adr-009-residencia-dados-br.md) — repouso em região BR; processamento externo minimizado via art. 33 LGPD; ver [checklist jurídico](architecture/project-decisions/checklist-consultoria-juridica.md) | Aceito (direção) — confirmação pela consultoria jurídica (Story 1.8, NFR9, R2) |
 
 ---
 

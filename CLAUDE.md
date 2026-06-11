@@ -19,7 +19,7 @@ packages/providers       4 interfaces de fornecedor (NFR8) + fakes determinísti
 
 Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build` (todos PASS).
 
-## Épico 1 — Fundação & Compliance (em andamento)
+## Épico 1 — Fundação & Compliance (TODAS as 8 stories implementadas)
 
 | Story | Tema | Status | Commit local |
 |-------|------|--------|--------------|
@@ -30,7 +30,7 @@ Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build`
 | 1.6 | Provider Abstraction Layer (NFR8) | ✅ Ready for Review | `aa0ce03` |
 | 1.5 | Audit Service — proveniência (NFR10) | ✅ Ready for Review | (ver git log) |
 | 1.7 | Disclaimers persistentes (FR19) | ✅ Ready for Review | (ver git log) |
-| 1.8 | ADR residência BR + checklist jurídico | ⬜ Ready (a implementar) | — |
+| 1.8 | ADR residência BR + checklist jurídico | ✅ Ready for Review | (ver git log) |
 
 Testes acumulados: **65/65 PASS** (inclui testes de UI — jsdom + Testing Library). CodeRabbit pre-commit **diferido p/ pre-PR** em todas (CLI exige `auth login` interativo via WSL).
 
@@ -46,7 +46,7 @@ Testes acumulados: **65/65 PASS** (inclui testes de UI — jsdom + Testing Libra
    Push é **exclusivo do @devops**; `gh auth login -h github.com` ainda pendente (bootstrap do repo).
 2. **Quality gates formais** das stories em Ready for Review (1.2/1.3/1.4/1.6) — rodar @qa/@architect conforme `quality_gate` de cada story.
 3. **CodeRabbit pre-PR** — autenticar a CLI e rodar antes do PR.
-4. **Story restante do E1:** 1.8 (jurídico/ADR residência BR — executor @architect).
+4. **E1 completo em implementação** — falta QA gates + consultoria jurídica externa (CJ-1…CJ-6 do checklist bloqueiam o piloto E10, não o dev).
 5. **Caminho crítico do produto:** E1 → E2 (pipeline transcrição) → E3 (POC latência/custo). Os fakes da 1.6 destravam E3 antes da escolha de vendor.
 
 ## Regras de fronteira (resumo)

@@ -100,7 +100,7 @@ flowchart TD
 Herdadas do PRD §11. Acontecem em paralelo, fora da sequência E1→E10:
 
 - **Base de conhecimento curada (o fosso):** curadoria clínica por especialidade — trabalho de conteúdo, não de engenharia. A engenharia (E5) entrega o pipeline; o conteúdo curado **substitui a semente por re-ingestão** (`ADR-004`, `R8`). `[O1]`
-- **Compliance & regulatório:** consultoria CFM/LGPD contínua desde E1. `[R1][R2]`
+- **Compliance & regulatório:** consultoria CFM/LGPD contínua desde E1. `[R1][R2]` — ver [ADR-009 Residência de Dados BR](../architecture/project-decisions/adr-009-residencia-dados-br.md) e o [Checklist de Consultoria Jurídica](../architecture/project-decisions/checklist-consultoria-juridica.md) (itens CJ-1…CJ-6 **bloqueantes para o piloto real**, Story 1.8).
 - **Calibração de ruído:** ajustar limiar de relevância e rate-limit com dados reais — alimentada por E10. `[O2][O3]`
 
 ---
