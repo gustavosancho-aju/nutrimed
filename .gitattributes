@@ -1,0 +1,11 @@
+# Normaliza fim de linha — evita ruído CRLF↔LF no Windows
+* text=auto eol=lf
+
+# Arquivos binários (não normalizar)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
