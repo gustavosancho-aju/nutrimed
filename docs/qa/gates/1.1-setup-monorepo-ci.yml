@@ -1,0 +1,52 @@
+storyId: "1.1"
+storyTitle: "Setup do Monorepo TypeScript + CI"
+gate: CONCERNS
+reviewer: "Quinn (@qa)"
+date: "2026-06-10"
+commit: "cc27a7a"
+
+# 7 quality checks (story-lifecycle.md)
+checks:
+  code_review:      PASS   # estrutura limpa, imports absolutos, tipos compartilhados; esqueleto mínimo coerente
+  unit_tests:       PASS   # 2 testes smoke (packages/domain) verdes; AC4 atendido
+  acceptance_criteria: PASS # AC1–AC7 mapeados a evidência (ver abaixo)
+  no_regressions:   PASS   # greenfield — sem funcionalidade prévia; gates locais verdes
+  performance:      PASS   # esqueleto; build Next 16 ~3s, sem hotspots
+  security:         PASS   # sem segredos hardcoded; .env ignorado; sem superfície de auth ainda
+  documentation:    PASS   # README cobre instalação + cada comando (AC6)
+
+# Requirements traceability (AC → evidência)
+traceability:
+  AC1: "lint/typecheck/test/build PASS local + workflow CI — re-verificado pelo QA"
+  AC2: "apps/web e packages/{domain,shared-types}; page.tsx consome @nutrimed/domain tipado por @nutrimed/shared-types"
+  AC3: ".github/workflows/ci.yml roda lint→typecheck→test→build em push e pull_request"
+  AC4: "packages/domain/src/health.test.ts — 2 testes smoke passando"
+  AC5: "imports via @nutrimed/* e @/*; grep confirma ausência de ../../.."
+  AC6: "README.md documenta install + dev/lint/typecheck/test/build/format"
+  AC7: ".env ignorado (verificado), .env.example presente, .gitignore cobre build/node_modules"
+
+issues:
+  - severity: medium
+    category: process
+    description: "CodeRabbit pre-commit/pre-PR não executado — CLI presente no WSL (v0.3.6) mas exige 'coderabbit auth login' interativo."
+    recommendation: "Rodar o scan CodeRabbit no gate pre-PR (@devops) após autenticação, antes de abrir o PR/merge."
+  - severity: low
+    category: tech-debt
+    description: "packages/{domain,shared-types} expõem main/exports apontando para src/*.ts, mas o script build emite dist/ não consumido — leve inconsistência."
+    recommendation: "Decidir uma estratégia única (consumir src via transpile OU consumir dist) quando os pacotes ganharem consumidores externos."
+  - severity: low
+    category: tests
+    description: "apps/web sem teste de componente (apenas smoke em domain)."
+    recommendation: "Aceitável para o esqueleto (AC4 pede ≥1 smoke). Adicionar teste de UI quando houver componentes reais (E7/1.7)."
+
+waiver:
+  active: false
+
+decision_rationale: >
+  Todos os 7 checks passam e os 4 quality gates (lint/typecheck/test/build) foram
+  re-verificados de forma independente. Veredito CONCERNS (não FAIL) por uma pendência
+  de processo não-bloqueante: o scan CodeRabbit não pôde rodar por exigir auth interativa.
+  Nenhum defeito de código ou risco de segurança identificado. Story aprovada para Done;
+  o gate CodeRabbit deve ser cumprido por @devops no pre-PR.
+
+next: "Story → Done. @devops: cumprir gate CodeRabbit pre-PR e executar push (gh auth login pendente)."
