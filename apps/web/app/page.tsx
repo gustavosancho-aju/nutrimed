@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth';
 import { logoutAction } from '@/lib/auth-actions';
+import { startConsultationAction } from '@/lib/consent-actions';
 import { DisclaimerNote } from '@/components/disclaimer-note';
 
 export default async function DashboardPage() {
@@ -35,12 +36,25 @@ export default async function DashboardPage() {
         </p>
       </section>
 
-      <section className="mt-8 rounded-lg border border-dashed border-gray-300 p-6">
-        <h3 className="text-sm font-semibold text-gray-700">Consultas</h3>
+      <section className="mt-8 rounded-lg border border-gray-200 p-6">
+        <h3 className="text-sm font-semibold text-gray-700">Nova consulta</h3>
         <p className="mt-1 text-sm text-gray-500">
-          Em breve: iniciar consulta, capturar consentimento de gravação e abrir o board.
-          (Stories 1.4 e seguintes.)
+          Abra uma consulta para registrar o consentimento de gravação antes de iniciar o board.
         </p>
+        <form action={startConsultationAction} className="mt-4 flex gap-2">
+          <input
+            name="patientLabel"
+            type="text"
+            placeholder="Rótulo do paciente (cifrado em repouso)"
+            className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none"
+          />
+          <button
+            type="submit"
+            className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+          >
+            Iniciar consulta
+          </button>
+        </form>
       </section>
 
       <footer className="mt-10 border-t border-gray-200 pt-4">

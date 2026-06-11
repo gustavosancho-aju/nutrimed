@@ -35,6 +35,9 @@ importers:
       '@nutrimed/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@nutrimed/consent':
+        specifier: workspace:*
+        version: link:../../packages/consent
       '@nutrimed/crypto':
         specifier: workspace:*
         version: link:../../packages/crypto
@@ -84,6 +87,25 @@ importers:
 
   packages/auth:
     dependencies:
+      '@nutrimed/db':
+        specifier: workspace:*
+        version: link:../db
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.5.0
+        version: 0.5.1
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.21
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
+  packages/consent:
+    dependencies:
+      '@nutrimed/crypto':
+        specifier: workspace:*
+        version: link:../crypto
       '@nutrimed/db':
         specifier: workspace:*
         version: link:../db

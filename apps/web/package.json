@@ -12,6 +12,7 @@
   "dependencies": {
     "@electric-sql/pglite": "^0.5.0",
     "@nutrimed/auth": "workspace:*",
+    "@nutrimed/consent": "workspace:*",
     "@nutrimed/crypto": "workspace:*",
     "@nutrimed/db": "workspace:*",
     "@nutrimed/domain": "workspace:*",
