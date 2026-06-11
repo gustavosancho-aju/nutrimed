@@ -43,6 +43,15 @@ out/
 # Package managers
 .pnpm-store/
 
+# Banco local de desenvolvimento (PGlite file-backed)
+.pgdata/
+**/.pgdata/
+
+# Artefatos de browser/screenshots (Playwright MCP)
+.playwright-mcp/
+/login.png
+/dashboard.png
+
 # Testing
 coverage/
 .nyc_output/

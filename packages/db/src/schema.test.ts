@@ -41,8 +41,8 @@ afterAll(async () => {
 });
 
 describe('Migrations 0001 — schema base (AC1, AC3)', () => {
-  it('aplica a migration inicial do zero', () => {
-    expect(firstRun).toEqual(['0001_init.sql']);
+  it('aplica as migrations do zero', () => {
+    expect(firstRun).toEqual(['0001_init', '0002_auth_session']);
   });
 
   it('é idempotente — reexecutar não reaplica nada (AC3)', async () => {
