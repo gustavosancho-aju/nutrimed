@@ -32,7 +32,7 @@ Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build`
 | 1.7 | Disclaimers persistentes (FR19) | ✅ Done | (ver git log) |
 | 1.8 | ADR residência BR + checklist jurídico | ✅ Done | (ver git log) |
 
-Testes acumulados: **130/130 PASS** (+1 E2E skipif). ANTHROPIC_API_KEY no .env — smoke real do Haiku OK (1.79s, contribuição clínica em tom de sugestão). Candidatos STT prontos p/ POC 2.5: `@nutrimed/stt-deepgram` (keywords boost) e `@nutrimed/stt-openai` (Realtime, prompt hint) (inclui testes de UI — jsdom + Testing Library). CodeRabbit pre-commit **diferido p/ pre-PR** em todas (CLI exige `auth login` interativo via WSL).
+Testes acumulados: **162/162 PASS** (+1 E2E skipif). ANTHROPIC_API_KEY no .env — smoke real do Haiku OK (1.79s, contribuição clínica em tom de sugestão). Candidatos STT prontos p/ POC 2.5: `@nutrimed/stt-deepgram` (keywords boost) e `@nutrimed/stt-openai` (Realtime, prompt hint) (inclui testes de UI — jsdom + Testing Library). CodeRabbit pre-commit **diferido p/ pre-PR** em todas (CLI exige `auth login` interativo via WSL).
 
 ### Destaques de implementação
 - **1.4 Consent:** servidor é fonte de verdade; default NEGA. Gate `isCaptureAuthorized`/`assertCaptureAuthorized` + rota `GET /api/consultations/[id]/capture-authorization` (401/403/200). `CONSENT` 1:1 `CONSULTATION`; auditável (`granted_by`+`granted_at`).
@@ -66,6 +66,14 @@ Ordem sugerida: 2.3 (só fakes, sem vendor) → 2.4 → 2.1 (exige credencial de
 LLM adapters: `@nutrimed/llm-anthropic` (Claude Haiku default) pronto; 2º candidato na 3.4.
 
 **DEMO FIM-A-FIM FUNCIONANDO** (2026-06-11, verificada via browser): login → consulta → consentimento → "▶ Iniciar consulta simulada" → card real do Dr. Paulo gerado pelo claude-haiku-4-5 chega via WS em ~3s. Rota: `/consultations/[id]`. STT roteirizado (mic real = wiring E3 final); gateway WS in-process do Next (PGlite single-process; `apps/web/lib/board-runtime.ts`). Keys em `apps/web/.env.local` (gitignored — Next não lê o .env da raiz).
+
+## Épicos 4 e 5 — Motores + RAG (núcleo implementado)
+
+**E4 (`@nutrimed/engines`)** — 4.1–4.5 ✅ Ready for Review: TriggerDetector por persona (FR3/4/5, zero LLM — T2), scoreMatch+RelevanceGate (NFR1, limiar menor p/ críticos), DoctorRateLimiter+PriorityQueue (NFR2, ⚠️ fura-fila sem consumir cota), Deduplicator com consolidação multi-persona (FR11), PauseGate ≥2,5s (FR12) e **BoardGatekeeper** (pipeline composto: score→dedup→pausa→rate-limit; só 'deliver' chega ao LLM).
+
+**E5 (`@nutrimed/kb`)** — 5.1–5.3 ✅ Ready for Review: NamespacedKnowledgeStore (IKnowledgeRetriever real, FR21 — isolamento testado + rejeição de chunk estrangeiro), pipeline de ingestão versionado com proveniência fonte@versão por chunk (R8: re-ingestão substitui namespace sem código), PersonaReasoner com PERSONA_PROFILES e prompts anti-extrapolação (T6, verificado por teste).
+
+Integração dos motores+RAG no orchestrator (3 personas + síntese do Aurélio) = **E6**.
 
 ## Pendências
 

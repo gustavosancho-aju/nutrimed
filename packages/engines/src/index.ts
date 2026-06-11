@@ -1,0 +1,26 @@
+export {
+  TriggerDetector,
+  PAULO_TRIGGERS,
+  YARA_TRIGGERS,
+  AURELIO_TRIGGERS,
+  ALL_TRIGGERS,
+  type PersonaTriggerDef,
+  type TriggerMatch,
+} from './triggers';
+export {
+  scoreMatch,
+  RelevanceGate,
+  DoctorRateLimiter,
+  PriorityQueue,
+  Deduplicator,
+  PauseGate,
+  BoardGatekeeper,
+  type Candidate,
+  type ScorerConfig,
+  type RateLimiterConfig,
+  type DedupConfig,
+  type PauseGateConfig,
+  type GatekeeperConfig,
+  type GateDecision,
+  type DedupResult,
+} from './gate';
