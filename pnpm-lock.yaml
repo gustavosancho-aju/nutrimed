@@ -53,6 +53,12 @@ importers:
       '@nutrimed/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@nutrimed/engines':
+        specifier: workspace:^
+        version: link:../../packages/engines
+      '@nutrimed/kb':
+        specifier: workspace:^
+        version: link:../../packages/kb
       '@nutrimed/llm-anthropic':
         specifier: workspace:^
         version: link:../../packages/llm-anthropic
@@ -158,6 +164,12 @@ importers:
       '@nutrimed/db':
         specifier: workspace:*
         version: link:../db
+      '@nutrimed/engines':
+        specifier: workspace:*
+        version: link:../engines
+      '@nutrimed/kb':
+        specifier: workspace:*
+        version: link:../kb
       '@nutrimed/providers':
         specifier: workspace:*
         version: link:../providers

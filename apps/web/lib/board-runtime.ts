@@ -1,8 +1,11 @@
 import 'server-only';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { BoardGateway } from '@nutrimed/board-gateway';
-import { BoardOrchestrator } from '@nutrimed/board';
+import { FullBoardOrchestrator } from '@nutrimed/board';
 import { startConsultationSession, type ConsultationSession } from '@nutrimed/session';
 import { AnthropicLlmProvider } from '@nutrimed/llm-anthropic';
+import { NamespacedKnowledgeStore, ingest, seedSources } from '@nutrimed/kb';
 import { FakeLlmProvider, type ISttProvider, type SttSession, type TranscriptSegment, type ILlmProvider } from '@nutrimed/providers';
 import { CLINICAL_VOCABULARY } from '@nutrimed/domain';
 import { getDb } from './db';
@@ -23,7 +26,8 @@ import { getDb } from './db';
 
 interface BoardRuntime {
   gateway: BoardGateway;
-  active: Map<string, { session: ConsultationSession; orchestrator: BoardOrchestrator }>;
+  kb: NamespacedKnowledgeStore;
+  active: Map<string, { session: ConsultationSession; orchestrator: FullBoardOrchestrator }>;
 }
 
 const globalForBoard = globalThis as unknown as { __nutrimedBoard?: Promise<BoardRuntime> };
@@ -33,7 +37,11 @@ export const BOARD_WS_PORT = Number(process.env.BOARD_WS_PORT ?? 3001);
 async function init(): Promise<BoardRuntime> {
   const db = await getDb();
   const gateway = new BoardGateway(db, { port: BOARD_WS_PORT });
-  return { gateway, active: new Map() };
+  // E5: ingere a SEED real por persona (R8 — trocar pela curadoria = re-ingestão)
+  const kb = new NamespacedKnowledgeStore();
+  const seedPath = join(process.cwd(), '..', '..', 'docs', 'personas-knowledge-base-seed.md');
+  ingest(kb, seedSources(readFileSync(seedPath, 'utf8')), 'seed-v1');
+  return { gateway, kb, active: new Map() };
 }
 
 export function getBoardRuntime(): Promise<BoardRuntime> {
@@ -43,18 +51,25 @@ export function getBoardRuntime(): Promise<BoardRuntime> {
   return globalForBoard.__nutrimedBoard;
 }
 
-/** Roteiro da consulta simulada (PT-BR) — o 3º segmento dispara o gatilho CV do Paulo. */
+/** Roteiro da consulta simulada (PT-BR) — dispara Paulo (CV crítico), Yara
+ * (tireoide/platô) e deixa pausa p/ a síntese automática do Aurélio (E6). */
 const DEMO_SCRIPT: ReadonlyArray<{ segment: TranscriptSegment; delayMs: number }> = [
   { segment: { text: 'Bom dia! Vamos retomar seu acompanhamento.', isFinal: true }, delayMs: 1500 },
-  { segment: { text: 'Vi que o peso estabilizou nas últimas quatro semanas.', isFinal: true }, delayMs: 3500 },
+  {
+    segment: {
+      text: 'Você relata muito cansaço, sente frio e notou queda de cabelo, com platô no peso há dois meses.',
+      isFinal: true,
+    },
+    delayMs: 4000,
+  },
   {
     segment: {
       text: 'Estou pensando em iniciar semaglutida semanal, mas você mencionou palpitação nas escadas, certo?',
       isFinal: true,
     },
-    delayMs: 6000,
+    delayMs: 8000,
   },
-  { segment: { text: 'Vamos também revisar a rotina de sono e o treino de força.', isFinal: true }, delayMs: 9000 },
+  { segment: { text: 'Vamos revisar também a rotina alimentar e o sono.', isFinal: true }, delayMs: 11_000 },
 ];
 
 /** STT roteirizado: emite o script com timing realista (demo sem microfone). */
@@ -83,7 +98,7 @@ function makeLlm(): { llm: ILlmProvider; label: string } {
     return {
       llm: new AnthropicLlmProvider({
         apiKey: process.env.ANTHROPIC_API_KEY,
-        personaId: 'paulo',
+        personaId: 'aurelio', // fallback — o Reasoner define a persona por contribuição
       }),
       label: 'claude-haiku-4-5 (real)',
     };
@@ -91,7 +106,7 @@ function makeLlm(): { llm: ILlmProvider; label: string } {
   return { llm: new FakeLlmProvider('paulo', 'atencao'), label: 'fake (sem ANTHROPIC_API_KEY)' };
 }
 
-/** Inicia a demo do board para a consulta (gate de consentimento incluso — 1.4). */
+/** Inicia a demo do BOARD COMPLETO (E6) — gate de consentimento incluso (1.4). */
 export async function startDemoBoard(consultationId: string): Promise<{ llmLabel: string }> {
   const db = await getDb();
   const runtime = await getBoardRuntime();
@@ -107,9 +122,20 @@ export async function startDemoBoard(consultationId: string): Promise<{ llmLabel
     vocabularyBoost: CLINICAL_VOCABULARY,
   });
   const { llm, label } = makeLlm();
-  const orchestrator = new BoardOrchestrator(db, session, llm, { cooldownMs: 30_000 });
+  const orchestrator = new FullBoardOrchestrator(db, session, llm, runtime.kb, {
+    pauseMs: 2500,
+    tickMs: 1000,
+    synthesisQuietMs: 10_000,
+    maxPerMinutePerDoctor: 2,
+  });
   runtime.gateway.bind(consultationId, orchestrator);
   orchestrator.start();
   runtime.active.set(consultationId, { session, orchestrator });
   return { llmLabel: label };
+}
+
+/** Síntese sob demanda (FR18). */
+export async function requestSynthesis(consultationId: string): Promise<void> {
+  const runtime = await getBoardRuntime();
+  await runtime.active.get(consultationId)?.orchestrator.synthesizeNow();
 }

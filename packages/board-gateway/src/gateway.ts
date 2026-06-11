@@ -2,7 +2,12 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { Server as HttpServer } from 'node:http';
 import type { SqlExecutor } from '@nutrimed/db';
 import { validateSession } from '@nutrimed/auth';
-import type { BoardOrchestrator, BoardContributionEvent } from '@nutrimed/board';
+import type { BoardContributionEvent } from '@nutrimed/board';
+
+/** Fonte de eventos do board (3.1 BoardOrchestrator ou E6 FullBoardOrchestrator). */
+export interface BoardEventSource {
+  subscribe(listener: (event: BoardContributionEvent) => void): () => void;
+}
 import {
   BOARD_PROTOCOL_VERSION,
   type BoardServerMessage,
@@ -66,7 +71,7 @@ export class BoardGateway {
    * Conecta um orchestrator (3.1) ao canal da consulta: toda contribuição
    * publicada vira mensagem `contribution` para os clientes conectados.
    */
-  bind(consultationId: string, orchestrator: BoardOrchestrator): void {
+  bind(consultationId: string, orchestrator: BoardEventSource): void {
     this.unbinders.get(consultationId)?.();
     const unbind = orchestrator.subscribe((event) => this.broadcast(event));
     this.unbinders.set(consultationId, unbind);
@@ -132,6 +137,8 @@ export class BoardGateway {
         text: event.contribution.text,
         relevanceScore: event.contribution.relevanceScore,
       },
+      personaIds: (event as { personaIds?: readonly string[] }).personaIds,
+      divergent: (event as { divergent?: boolean }).divergent,
     };
     const payload = JSON.stringify(message);
     for (const socket of this.clients.get(event.consultationId) ?? []) {

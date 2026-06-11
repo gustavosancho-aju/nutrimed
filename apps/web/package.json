@@ -18,6 +18,8 @@
     "@nutrimed/crypto": "workspace:*",
     "@nutrimed/db": "workspace:*",
     "@nutrimed/domain": "workspace:*",
+    "@nutrimed/engines": "workspace:^",
+    "@nutrimed/kb": "workspace:^",
     "@nutrimed/llm-anthropic": "workspace:^",
     "@nutrimed/providers": "workspace:*",
     "@nutrimed/session": "workspace:*",

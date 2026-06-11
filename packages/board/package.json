@@ -20,7 +20,9 @@
     "@nutrimed/consent": "workspace:*",
     "@nutrimed/db": "workspace:*",
     "@nutrimed/providers": "workspace:*",
-    "@nutrimed/session": "workspace:*"
+    "@nutrimed/session": "workspace:*",
+    "@nutrimed/engines": "workspace:*",
+    "@nutrimed/kb": "workspace:*"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.0",

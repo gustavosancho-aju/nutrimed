@@ -5,7 +5,7 @@ import { getConsentStatus } from '@nutrimed/consent';
 import { getCurrentUser, SESSION_COOKIE } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { grantConsentAction, revokeConsentAction } from '@/lib/consent-actions';
-import { startDemoBoardAction } from '@/lib/board-actions';
+import { startDemoBoardAction, requestSynthesisAction } from '@/lib/board-actions';
 import { getBoardRuntime, BOARD_WS_PORT } from '@/lib/board-runtime';
 import { DisclaimerNote } from '@/components/disclaimer-note';
 import { BoardFeed } from '@/components/board-feed';
@@ -110,15 +110,26 @@ export default async function ConsultationPage({
                 Claude Haiku → auditoria → WebSocket → feed.
               </p>
             </div>
-            <form action={startDemoBoardAction}>
-              <input type="hidden" name="consultationId" value={id} />
-              <button
-                type="submit"
-                className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
-              >
-                ▶ Iniciar consulta simulada
-              </button>
-            </form>
+            <div className="flex gap-2">
+              <form action={startDemoBoardAction}>
+                <input type="hidden" name="consultationId" value={id} />
+                <button
+                  type="submit"
+                  className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+                >
+                  ▶ Iniciar consulta simulada
+                </button>
+              </form>
+              <form action={requestSynthesisAction}>
+                <input type="hidden" name="consultationId" value={id} />
+                <button
+                  type="submit"
+                  className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  📋 Pedir síntese
+                </button>
+              </form>
+            </div>
           </div>
           <BoardFeed consultationId={id} token={sessionToken} wsBaseUrl={wsBaseUrl} />
         </section>

@@ -1,1 +1,1 @@
-export { BoardGateway, type BoardGatewayOptions } from './gateway';
+export { BoardGateway, type BoardGatewayOptions, type BoardEventSource } from './gateway';

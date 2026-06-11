@@ -41,6 +41,10 @@ export type BoardServerMessage =
       readonly triggeredBy: string;
       readonly at: number;
       readonly contribution: WireContribution;
+      /** Personas do card (>1 = consolidado — FR11). Aditivo (E6). */
+      readonly personaIds?: readonly string[];
+      /** Divergência transparente (FR7). Aditivo (E6). */
+      readonly divergent?: boolean;
     }
   | { readonly v: typeof BOARD_PROTOCOL_VERSION; readonly type: 'ping'; readonly at: number };
 
