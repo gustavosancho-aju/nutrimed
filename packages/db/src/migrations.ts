@@ -73,4 +73,31 @@ CREATE TABLE IF NOT EXISTS session (
 CREATE INDEX IF NOT EXISTS idx_session_user_id ON session(user_id);
 `,
   },
+  {
+    name: '0003_audit_provenance',
+    sql: `
+-- Audit Service (Story 1.5 / NFR10): proveniência completa + imutabilidade.
+-- A tabela está vazia em todos os ambientes (nenhuma escrita de auditoria antes
+-- desta story), então SET NOT NULL é seguro.
+
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS triggered_by text;
+
+ALTER TABLE audit_log ALTER COLUMN triggered_by SET NOT NULL;
+ALTER TABLE audit_log ALTER COLUMN kb_sources SET NOT NULL;
+ALTER TABLE audit_log ALTER COLUMN model_version SET NOT NULL;
+
+-- Append-only (defesa CFM): qualquer UPDATE/DELETE pela aplicação é rejeitado
+-- no banco, independente de bug ou bypass na camada de serviço.
+CREATE OR REPLACE FUNCTION audit_log_immutable() RETURNS trigger AS $fn$
+BEGIN
+  RAISE EXCEPTION 'audit_log é append-only (NFR10): % proibido', TG_OP;
+END;
+$fn$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_audit_log_immutable ON audit_log;
+CREATE TRIGGER trg_audit_log_immutable
+  BEFORE UPDATE OR DELETE ON audit_log
+  FOR EACH ROW EXECUTE FUNCTION audit_log_immutable();
+`,
+  },
 ];

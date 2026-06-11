@@ -31,7 +31,10 @@ export interface ConsentRow {
 export interface AuditLogRow {
   id: string;
   contribution_id: string | null;
+  /** Gatilho que disparou a contribuição (Trigger Detector — E4). */
+  triggered_by: string;
+  /** Fontes de KB usadas (Persona Reasoner/RAG — E5). Proveniência CFM (NFR10). */
   kb_sources: unknown;
-  model_version: string | null;
+  model_version: string;
   created_at: Date;
 }
