@@ -1,0 +1,35 @@
+storyId: "1.7"
+storyTitle: "Disclaimers Persistentes — IA Assiste, Médico Decide (FR19)"
+gate: CONCERNS
+reviewer: "Dex (@dev) — quality_gate da story"
+date: "2026-06-11"
+commit: "d85c092"
+
+checks:
+  code_review:      PASS   # Atom com fonte única DISCLAIMER_TEXT (AC6); AppChrome no layout raiz cobre toda rota
+  unit_tests:       PASS   # 9 testes de UI (primeiro uso de jsdom+Testing Library no repo); 65/65 total
+  acceptance_criteria: PASS # persistente e não-dispensável (footer fixo, sem botão de fechar); texto fiel ao frontend-spec §11.1
+  no_regressions:   PASS   # 65/65; build Next OK com AppChrome
+  performance:      PASS   # componente estático, zero JS de cliente adicional
+  security:         PASS   # n/a — UI estática; contribui p/ defesa CFM (R1)
+  documentation:    PASS   # JSDoc referencia frontend-spec §4/§6/§11.1
+
+a11y_check:
+  semantics:        PASS   # role=note + aria-label; ícone ⓘ aria-hidden (decorativo)
+  contrast:         PASS   # gray-600 sobre branco ≥ 7:1 (AA p/ texto pequeno)
+  reduced_motion:   PASS   # zero animação — verificado por teste (sem classes animate-/transition)
+  screen_reader:    PASS   # nome acessível verificado via Testing Library
+
+issues:
+  - severity: medium
+    category: process
+    description: "CodeRabbit diferido p/ pre-PR (auth interativa)."
+    recommendation: "@devops roda no pre-PR."
+  - severity: low
+    category: tests
+    description: "Auditoria axe-core/lighthouse completa não executada (verificação foi semântica via Testing Library + escolha de tokens)."
+    recommendation: "Incluir axe-core no E7 quando o board completo existir (mais superfície de UI)."
+
+verdict_rationale: >
+  FR19 entregue com a11y verificada por teste; resolve também o débito 'apps/web
+  sem teste de componente' do gate da 1.1. CONCERNS → Done.

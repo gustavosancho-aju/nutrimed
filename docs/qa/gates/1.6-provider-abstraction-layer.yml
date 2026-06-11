@@ -1,0 +1,29 @@
+storyId: "1.6"
+storyTitle: "Provider Abstraction Layer (NFR8)"
+gate: CONCERNS
+reviewer: "Dex (@dev) — quality_gate da story"
+date: "2026-06-11"
+commit: "aa0ce03"
+
+checks:
+  code_review:      PASS   # 4 interfaces fiéis a architecture §5; package sem NENHUMA dependência de vendor (só @types/node dev)
+  unit_tests:       PASS   # 9 testes de contrato sobre os fakes determinísticos; 65/65 total
+  acceptance_criteria: PASS # ISttProvider (streaming), ILlmProvider, IKnowledgeRetriever (escopo por persona FR21), IVideoAssetProvider (catálogo ADR-007)
+  no_regressions:   PASS   # 65/65
+  performance:      PASS   # interfaces puras; fakes síncronos determinísticos
+  security:         PASS   # tipos carregam kbSources/triggeredBy p/ proveniência (alimenta NFR10/1.5); sem segredos
+  documentation:    PASS   # JSDoc por interface; alinhado a CONTRIBUTION §8
+
+issues:
+  - severity: medium
+    category: process
+    description: "CodeRabbit diferido p/ pre-PR (auth interativa)."
+    recommendation: "@devops roda no pre-PR."
+  - severity: low
+    category: process
+    description: "Executor nominal era @architect; implementado por @dev (registrado na memória do projeto). Entregável é código, aceito."
+    recommendation: "Nenhuma ação — boundary respeitado no conteúdo."
+
+verdict_rationale: >
+  O seguro contra lock-in (NFR8/ADR-002) está no lugar; fakes destravam E2–E8 e a
+  POC E3 antes da escolha de vendor. CONCERNS → Done.

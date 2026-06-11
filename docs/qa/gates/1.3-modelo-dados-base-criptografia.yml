@@ -1,0 +1,29 @@
+storyId: "1.3"
+storyTitle: "Modelo de Dados Base + Criptografia (NFR9)"
+gate: CONCERNS
+reviewer: "Dex (@dev) — quality_gate da story"
+date: "2026-06-11"
+commit: "5d38cd7"
+
+checks:
+  code_review:      PASS   # migrations SQL inline idempotentes c/ tracking _migrations; SqlExecutor abstrai pg/PGlite; AES-256-GCM app-level
+  unit_tests:       PASS   # schema + cripto-at-rest verificados via PGlite; suíte 65/65 PASS (2026-06-11)
+  acceptance_criteria: PASS # 4 entidades base, FKs, 1:1 consent, dado cifrado ilegível em claro e recuperável só com a chave
+  no_regressions:   PASS   # migrations 0002/0003 (stories 1.2/1.5) aplicam sobre 0001 sem conflito — migration-check OK
+  performance:      PASS   # índices em FKs; sem N+1
+  security:         PASS   # NFR9: cifra em repouso (GCM, nonce único) + TLS obrigatório p/ host remoto (sslmode=disable rejeitado)
+  documentation:    PASS   # comentários de compliance no schema e JSDoc
+
+issues:
+  - severity: medium
+    category: process
+    description: "CodeRabbit diferido p/ pre-PR (auth interativa)."
+    recommendation: "@devops roda no pre-PR."
+  - severity: low
+    category: requirements
+    description: "AC4 (recusa de conexão sem TLS ao-vivo) verificado por equivalência de config — teste ao-vivo exige servidor real."
+    recommendation: "Validar contra Postgres real no ambiente da POC/deploy (E3)."
+
+verdict_rationale: >
+  Fundação de dados sólida; cripto verificável por teste. Pendências processuais
+  e uma verificação diferida ao deploy. CONCERNS → Done.

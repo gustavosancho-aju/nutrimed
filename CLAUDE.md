@@ -19,18 +19,18 @@ packages/providers       4 interfaces de fornecedor (NFR8) + fakes determinísti
 
 Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build` (todos PASS).
 
-## Épico 1 — Fundação & Compliance (TODAS as 8 stories implementadas)
+## Épico 1 — Fundação & Compliance ✅ COMPLETO (8/8 Done)
 
 | Story | Tema | Status | Commit local |
 |-------|------|--------|--------------|
 | 1.1 | Monorepo TS + CI | ✅ Done | `cc27a7a` |
-| 1.2 | Autenticação do nutrólogo | ✅ Ready for Review | `88cd3db` |
-| 1.3 | Modelo de dados base + cripto (NFR9) | ✅ Ready for Review | `5d38cd7` |
-| 1.4 | Consent Service — gate de gravação (FR20) | ✅ Ready for Review | `8ca9679` |
-| 1.6 | Provider Abstraction Layer (NFR8) | ✅ Ready for Review | `aa0ce03` |
-| 1.5 | Audit Service — proveniência (NFR10) | ✅ Ready for Review | (ver git log) |
-| 1.7 | Disclaimers persistentes (FR19) | ✅ Ready for Review | (ver git log) |
-| 1.8 | ADR residência BR + checklist jurídico | ✅ Ready for Review | (ver git log) |
+| 1.2 | Autenticação do nutrólogo | ✅ Done | `88cd3db` |
+| 1.3 | Modelo de dados base + cripto (NFR9) | ✅ Done | `5d38cd7` |
+| 1.4 | Consent Service — gate de gravação (FR20) | ✅ Done | `8ca9679` |
+| 1.6 | Provider Abstraction Layer (NFR8) | ✅ Done | `aa0ce03` |
+| 1.5 | Audit Service — proveniência (NFR10) | ✅ Done | (ver git log) |
+| 1.7 | Disclaimers persistentes (FR19) | ✅ Done | (ver git log) |
+| 1.8 | ADR residência BR + checklist jurídico | ✅ Done | (ver git log) |
 
 Testes acumulados: **65/65 PASS** (inclui testes de UI — jsdom + Testing Library). CodeRabbit pre-commit **diferido p/ pre-PR** em todas (CLI exige `auth login` interativo via WSL).
 
@@ -42,12 +42,11 @@ Testes acumulados: **65/65 PASS** (inclui testes de UI — jsdom + Testing Libra
 
 ## Pendências
 
-1. **Push / PR bloqueado** — 5 commits locais não-pushados (`cc27a7a 5d38cd7 88cd3db 8ca9679 aa0ce03`).
+1. **Push / PR bloqueado** — 9 commits locais não-pushados.
    Push é **exclusivo do @devops**; `gh auth login -h github.com` ainda pendente (bootstrap do repo).
-2. **Quality gates formais** das stories em Ready for Review (1.2/1.3/1.4/1.6) — rodar @qa/@architect conforme `quality_gate` de cada story.
-3. **CodeRabbit pre-PR** — autenticar a CLI e rodar antes do PR.
-4. **E1 completo em implementação** — falta QA gates + consultoria jurídica externa (CJ-1…CJ-6 do checklist bloqueiam o piloto E10, não o dev).
-5. **Caminho crítico do produto:** E1 → E2 (pipeline transcrição) → E3 (POC latência/custo). Os fakes da 1.6 destravam E3 antes da escolha de vendor.
+2. **CodeRabbit pre-PR** — autenticar a CLI e rodar antes do PR.
+3. **Consultoria jurídica externa** — CJ-1…CJ-6 do checklist (`docs/architecture/project-decisions/checklist-consultoria-juridica.md`) bloqueiam o piloto E10, não o dev. Gates de QA do E1 todos emitidos (`docs/qa/gates/1.*.yml` — 1.8 PASS, demais CONCERNS→Done).
+4. **Caminho crítico do produto:** E1 → E2 (pipeline transcrição) → E3 (POC latência/custo). Os fakes da 1.6 destravam E3 antes da escolha de vendor.
 
 ## Regras de fronteira (resumo)
 - `git push` / `gh pr create` / MCP = **@devops exclusivo**.

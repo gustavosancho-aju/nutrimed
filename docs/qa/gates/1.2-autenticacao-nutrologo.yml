@@ -1,0 +1,29 @@
+storyId: "1.2"
+storyTitle: "Autenticação do Nutrólogo + Shell Navegável"
+gate: CONCERNS
+reviewer: "Aria (@architect) — quality_gate da story"
+date: "2026-06-11"
+commit: "88cd3db"
+
+checks:
+  code_review:      PASS   # scrypt c/ salt 16B + timingSafeEqual; sessões DB-backed (token opaco, banco só guarda SHA-256); separação packages/auth vs apps/web
+  unit_tests:       PASS   # suíte total 65/65 PASS re-verificada em 2026-06-11
+  acceptance_criteria: PASS # login/logout, sessão persistida, rotas protegidas redirecionam p/ /login
+  no_regressions:   PASS   # 65/65 — nenhuma quebra nas stories 1.1/1.3+
+  performance:      PASS   # scryptSync no fluxo de login apenas; sem hotspots
+  security:         PASS   # cookie httpOnly + secure(prod) + sameSite=lax; vazamento de banco não expõe tokens; senha nunca em claro
+  documentation:    PASS   # JSDoc nos módulos; CLAUDE.md atualizado
+
+issues:
+  - severity: medium
+    category: process
+    description: "CodeRabbit pre-commit não executado (CLI exige auth interativa via WSL) — diferido p/ pre-PR, consistente com o épico."
+    recommendation: "@devops roda CodeRabbit pre-PR antes de abrir o pull request."
+  - severity: low
+    category: code
+    description: "scryptSync é síncrono (bloqueia o event loop durante o login)."
+    recommendation: "Trocar por scrypt assíncrono se o volume de logins crescer (pós-piloto)."
+
+verdict_rationale: >
+  Implementação correta e segura por design. Único pendente é processual
+  (CodeRabbit pre-PR), não funcional. CONCERNS → Done (lifecycle).

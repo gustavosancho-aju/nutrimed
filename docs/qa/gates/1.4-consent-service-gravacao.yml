@@ -1,0 +1,29 @@
+storyId: "1.4"
+storyTitle: "Consent Service — Gate de Gravação (FR20)"
+gate: CONCERNS
+reviewer: "Aria (@architect) — quality_gate da story"
+date: "2026-06-11"
+commit: "8ca9679"
+
+checks:
+  code_review:      PASS   # servidor como única fonte de verdade; default NEGA (granted=false na criação); gate imperativo assertCaptureAuthorized
+  unit_tests:       PASS   # 9 testes (default nega, grant autoriza, revogação interrompe, NFR9 cifrado); 65/65 total (2026-06-11)
+  acceptance_criteria: PASS # AC1–AC6; rota GET capture-authorization responde 401/403(consent_required)/200
+  no_regressions:   PASS   # 65/65
+  performance:      PASS   # 1 query por checagem de gate; índice/UNIQUE em consultation_id
+  security:         PASS   # cliente nunca decide; consulta inexistente nega; auditável (granted_by FK + granted_at); rótulo do paciente cifrado
+  documentation:    PASS   # JSDoc define o contrato que o E2 consome (nenhuma captura sem passar pelo gate)
+
+issues:
+  - severity: medium
+    category: process
+    description: "CodeRabbit diferido p/ pre-PR (auth interativa)."
+    recommendation: "@devops roda no pre-PR."
+  - severity: low
+    category: architecture
+    description: "O enforcement fim-a-fim (nenhum caminho de captura liga sem o gate) só é observável quando E2 existir — hoje é contrato."
+    recommendation: "No E2, teste de integração obrigatório: pipeline de captura consulta o gate antes de abrir stream."
+
+verdict_rationale: >
+  Validação arquitetural central confirmada: o servidor é fonte de verdade e o
+  default nega. CONCERNS → Done.

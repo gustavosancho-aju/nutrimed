@@ -1,0 +1,23 @@
+storyId: "1.8"
+storyTitle: "ADR Residência de Dados BR + Checklist de Consultoria Jurídica (R1/R2)"
+gate: PASS
+reviewer: "Morgan (@pm) — quality_gate da story (doc-review + traceability-check)"
+date: "2026-06-11"
+commit: "b5a01c0"
+
+checks:
+  doc_review:       PASS   # ADR segue o estilo §10; status explícito 'Aceito (direção)' com dependências (consultoria + POC/ADR-005)
+  traceability:     PASS   # 10/10 itens CJ-* rastreiam a FR/NFR/Rxx/ADR (Article IV); ADR cita NFR9, R2, §8/§11, ADR-002/005/006
+  acceptance_criteria: PASS # AC1–AC6; bloqueante-vs-evolutivo explícito (CJ-1..CJ-6 🔴 / CJ-7..CJ-10 🟡) c/ critério de saída do piloto
+  visibility:       PASS   # referenciado em docs/epics/README.md (trilha compliance) e architecture.md §10 — não órfão
+  scope:            PASS   # não emite parecer jurídico nem muda infra (fronteiras respeitadas)
+
+issues:
+  - severity: low
+    category: process
+    description: "A consultoria jurídica em si é externa e pendente — CJ-1..CJ-6 bloqueiam o piloto E10 (não o desenvolvimento)."
+    recommendation: "Agendar consultoria antes do fim do E9; revisitar ADR-009 com o parecer."
+
+verdict_rationale: >
+  Story de documentação completa, rastreável e visível. A pendência é o trabalho
+  externo que a própria story define como próximo passo. PASS → Done.

@@ -1,0 +1,33 @@
+storyId: "1.5"
+storyTitle: "Audit Service — Trilha de Auditoria com Proveniência (NFR10)"
+gate: CONCERNS
+reviewer: "Dex (@dev) — quality_gate da story"
+date: "2026-06-11"
+commit: "dcb3817"
+
+checks:
+  code_review:      PASS   # writeAudit valida proveniência ANTES do banco; auditedClinicalWrite = BEGIN/COMMIT/ROLLBACK; trigger append-only no banco
+  unit_tests:       PASS   # 8 testes (atomicidade nos 2 sentidos, UPDATE/DELETE rejeitados, proveniência recuperável); 65/65 total
+  acceptance_criteria: PASS # AC1–AC6; AC6 (T7) cumprido por teste automatizado, não inspeção
+  no_regressions:   PASS   # 65/65; migration 0003 aplica sobre 0001/0002 (migration-check OK)
+  performance:      PASS   # 1 INSERT extra por escrita clínica; índice em contribution_id
+  security:         PASS   # imutabilidade no banco (trigger), não só na app; NOT NULL na proveniência; sem janela de escrita não auditada
+  documentation:    PASS   # JSDoc explicita contrato e a restrição de sessão única
+
+issues:
+  - severity: medium
+    category: process
+    description: "CodeRabbit diferido p/ pre-PR (auth interativa)."
+    recommendation: "@devops roda no pre-PR."
+  - severity: medium
+    category: architecture
+    description: "auditedClinicalWrite exige SqlExecutor de sessão única (PGlite/PoolClient) — usar Pool compartilhado quebraria a atomicidade silenciosamente."
+    recommendation: "Quando E4/E5 integrarem escritas reais: helper withTransaction(pool) que faz checkout de PoolClient; teste de integração com pg real. Documentado no JSDoc."
+  - severity: low
+    category: requirements
+    description: "Imutabilidade por trigger protege a aplicação, não um superuser do banco."
+    recommendation: "Em produção: usuário da app sem privilégio de DROP/ALTER em audit_log (provisão de infra, pós-POC)."
+
+verdict_rationale: >
+  Coração de compliance do NFR10 entregue e provado por teste. A restrição de
+  sessão única está documentada e tem caminho claro na integração E4+. CONCERNS → Done.
