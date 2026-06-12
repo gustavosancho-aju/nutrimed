@@ -79,10 +79,10 @@ export function ConsultationRoom({
       {/* painel lateral fixo — BOARD */}
       <aside
         aria-label="Painel do board"
-        className="flex min-h-[480px] flex-col gap-3 rounded-xl border border-gray-200 bg-surface-muted p-4"
+        className="card-premium gold-hairline flex min-h-[480px] flex-col gap-3 p-4"
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-ink">Board</h2>
+          <h2 className="font-display text-base font-semibold text-ink">Board</h2>
           <span
             title="⚠️ atenção · 💡 sugestão · 🔍 hipótese · 📋 síntese"
             className="cursor-help text-xs text-ink-muted"
@@ -92,18 +92,18 @@ export function ConsultationRoom({
         </div>
 
         <DoctorStrip />
-        <div className="border-t border-gray-200" />
+        <div className="border-t border-ink/10" />
         <SuggestionFeed />
 
-        <div className="flex items-center justify-between gap-2 border-t border-gray-200 pt-3">
+        <div className="flex items-center justify-between gap-2 border-t border-ink/10 pt-3">
           <button
             type="button"
             aria-pressed={focusMode}
             onClick={toggleFocusMode}
             className={`rounded-md px-3 py-2 text-xs font-semibold ${
               focusMode
-                ? 'bg-ink text-white'
-                : 'border border-gray-300 text-ink hover:bg-white'
+                ? 'bg-surface-deep text-white'
+                : 'border border-ink/15 text-ink hover:bg-surface-muted'
             }`}
           >
             🔇 Modo Foco <kbd className="ml-1 rounded bg-black/10 px-1">F</kbd>

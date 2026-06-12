@@ -74,7 +74,7 @@ export function SuggestionCard({ item }: { item: BoardContributionItem }) {
       aria-label={`${config.label} de ${persona.name}`}
       data-type={contribution.type}
       data-severity={contribution.severity}
-      className={`board-entry rounded-xl border border-gray-200 bg-surface p-4 ${config.border} ${
+      className={`board-entry rounded-xl border border-ink/10 bg-surface p-4 shadow-[0_1px_2px_hsl(var(--text)/0.04),0_6px_16px_hsl(var(--text)/0.04)] ${config.border} ${
         critical ? 'board-pulse' : config.decay ? 'board-decay' : ''
       }`}
     >
@@ -82,7 +82,7 @@ export function SuggestionCard({ item }: { item: BoardContributionItem }) {
         <div className="flex items-center gap-2">
           <span aria-hidden="true" className="text-lg">{persona.emoji}</span>
           <div>
-            <p className={`text-[15px] leading-tight ${critical ? 'font-bold' : 'font-semibold'} text-ink`}>
+            <p className={`font-display text-[15px] leading-tight ${critical ? 'font-bold' : 'font-semibold'} text-ink`}>
               {persona.name}
               <span className={`ml-1 text-xs font-medium ${persona.accent}`}>· {persona.specialty}</span>
             </p>
@@ -117,7 +117,7 @@ export function SuggestionCard({ item }: { item: BoardContributionItem }) {
           : `${contribution.text.slice(0, 180)}…`}
       </p>
 
-      <footer className="mt-3 flex items-center justify-between border-t border-gray-200/60 pt-2">
+      <footer className="mt-3 flex items-center justify-between border-t border-ink/8 pt-2">
         <div className="flex gap-1">
           {contribution.text.length > 180 ? (
             <button

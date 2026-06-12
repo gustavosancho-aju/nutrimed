@@ -40,7 +40,7 @@ export function DoctorStrip() {
             key={doctor.id}
             data-testid={`doctor-${doctor.id}`}
             data-state={isSilenced ? 'silenciado' : signaling ? 'sinalizando' : 'ouvindo'}
-            className={`flex flex-col items-center gap-1 rounded-[10px] border border-gray-200 bg-surface-muted p-2 ring-2 ${
+            className={`flex flex-col items-center gap-1 rounded-[10px] border border-ink/10 bg-surface-muted p-2 ring-2 ${
               signaling ? 'ring-attn' : 'ring-transparent'
             } ${isSilenced ? 'opacity-50' : ''}`}
           >
@@ -50,11 +50,12 @@ export function DoctorStrip() {
               alt={`${doctor.name} — ${doctor.specialty}`}
               width={104}
               height={104}
-              className={`aspect-square w-full max-w-[104px] rounded-[10px] object-cover ${
-                isSilenced ? 'grayscale' : ''
-              }`}
+              priority
+              className={`aspect-square w-full max-w-[104px] rounded-[10px] object-cover ring-1 ${
+                signaling ? 'ring-attn' : 'ring-accent-gold/60'
+              } ${isSilenced ? 'grayscale' : ''}`}
             />
-            <span className="text-xs font-semibold text-ink">{doctor.name}</span>
+            <span className="font-display text-xs font-semibold text-ink">{doctor.name}</span>
             <span className="text-[10px] text-ink-muted">
               {isSilenced ? '🔇 silenciado' : signaling ? '▲ sinalizando' : '● ouvindo'}
             </span>

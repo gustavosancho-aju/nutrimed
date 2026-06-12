@@ -40,10 +40,16 @@ export default async function ConsultationPage({
 
   return (
     <main className="mx-auto min-h-screen max-w-7xl p-6">
-      <header className="flex items-center justify-between border-b border-gray-200 pb-3">
+      <header className="sticky top-0 z-10 -mx-6 flex items-center justify-between border-b border-ink/10 bg-surface/85 px-6 py-3 backdrop-blur-md">
         <div className="flex items-baseline gap-3">
-          <h1 className="text-xl font-bold text-ink">NutriMed · Consulta</h1>
-          <span className="text-xs text-ink-muted">
+          <h1 className="font-display text-xl font-semibold tracking-tight text-ink">NutriMed · Consulta</h1>
+          <span
+            className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${
+              authorized
+                ? 'border-brand/25 bg-brand/10 text-brand'
+                : 'border-ink/15 bg-surface-muted text-ink-muted'
+            }`}
+          >
             {authorized ? '🟢 gravação autorizada' : '🔒 gravação bloqueada'}
           </span>
         </div>
@@ -63,9 +69,11 @@ export default async function ConsultationPage({
       </header>
 
       {!authorized ? (
-        <section className="mx-auto mt-12 max-w-md rounded-xl border border-amber-300 bg-amber-50 p-6">
-          <h2 className="text-lg font-semibold text-ink">🔒 Consentimento de gravação</h2>
-          <p className="mt-1 text-sm text-gray-700">
+        <section className="card-premium gold-hairline mx-auto mt-14 max-w-md p-7">
+          <h2 className="font-display text-lg font-semibold text-ink">
+            🔒 Consentimento de gravação
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-ink-muted">
             Sem consentimento, nenhum áudio é capturado, transmitido ou persistido (FR20/LGPD). O
             servidor é a fonte de verdade da autorização.
           </p>
@@ -73,7 +81,7 @@ export default async function ConsultationPage({
             <input type="hidden" name="consultationId" value={id} />
             <button
               type="submit"
-              className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+              className="w-full rounded-[10px] bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
             >
               Registrar consentimento de gravação
             </button>
@@ -90,7 +98,7 @@ export default async function ConsultationPage({
                 <input type="hidden" name="consultationId" value={id} />
                 <button
                   type="submit"
-                  className="rounded-md bg-brand px-3 py-2 text-xs font-semibold text-white hover:opacity-90"
+                  className="rounded-[10px] bg-brand px-3 py-2 text-xs font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
                 >
                   ▶ Consulta simulada
                 </button>
@@ -101,7 +109,7 @@ export default async function ConsultationPage({
                 <input type="hidden" name="consultationId" value={id} />
                 <button
                   type="submit"
-                  className="rounded-md border border-gray-300 px-3 py-2 text-xs font-semibold text-ink hover:bg-white"
+                  className="rounded-[10px] border border-ink/15 bg-surface px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-white"
                 >
                   📋 Síntese
                 </button>
@@ -112,11 +120,11 @@ export default async function ConsultationPage({
           {/* E9 — Nota clínica (FR17/A1): rascunho gerado por IA, editável pelo médico */}
           <section
             aria-label="Nota clínica"
-            className="mt-6 rounded-xl border border-gray-200 bg-surface p-5"
+            className="card-premium mt-6 p-6"
           >
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-sm font-bold uppercase tracking-wider text-ink">
+                <h2 className="font-display text-base font-semibold text-ink">
                   Nota clínica
                 </h2>
                 <p className="text-xs text-ink-muted">
@@ -128,7 +136,7 @@ export default async function ConsultationPage({
                 <input type="hidden" name="consultationId" value={id} />
                 <button
                   type="submit"
-                  className="rounded-md border border-gray-300 px-3 py-2 text-xs font-semibold text-ink hover:bg-surface-muted"
+                  className="rounded-[10px] border border-ink/15 px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-surface-muted"
                 >
                   ✨ {note ? 'Regenerar rascunho' : 'Gerar nota da consulta'}
                 </button>
@@ -144,7 +152,7 @@ export default async function ConsultationPage({
                   defaultValue={note.content}
                   rows={14}
                   aria-label="Conteúdo da nota clínica"
-                  className="w-full rounded-md border border-gray-300 p-3 font-mono text-sm leading-relaxed text-ink focus:border-brand focus:outline-none"
+                  className="font-mono-data w-full rounded-[10px] border border-ink/15 bg-white p-4 text-sm leading-relaxed text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                 />
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-ink-muted">
@@ -152,14 +160,14 @@ export default async function ConsultationPage({
                   </p>
                   <button
                     type="submit"
-                    className="rounded-md bg-brand px-4 py-2 text-xs font-semibold text-white hover:opacity-90"
+                    className="rounded-[10px] bg-brand px-4 py-2 text-xs font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
                   >
                     💾 Salvar nota
                   </button>
                 </div>
               </form>
             ) : (
-              <p className="mt-4 rounded-md border border-dashed border-gray-300 p-4 text-sm text-ink-muted">
+              <p className="mt-4 rounded-[10px] border border-dashed border-ink/15 p-4 text-sm text-ink-muted">
                 Nenhuma nota ainda — rode a consulta e clique em “Gerar nota da consulta”.
               </p>
             )}

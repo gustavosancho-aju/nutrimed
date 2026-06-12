@@ -39,7 +39,7 @@ export function SuggestionFeed() {
       {focusMode ? (
         <div
           data-testid="focus-banner"
-          className="rounded-md border border-gray-300 bg-surface-muted px-3 py-2 text-xs text-ink-muted"
+          className="rounded-[10px] border border-ink/15 bg-surface-muted px-3 py-2 text-xs text-ink-muted"
         >
           🔇 Modo Foco ativo — só pontos de atenção aparecem.
           {heldByFocus > 0 ? ` ${heldByFocus} sugestão(ões) aguardando.` : ''}
@@ -61,13 +61,13 @@ export function SuggestionFeed() {
       </div>
 
       {critical.length === 0 && regular.length === 0 && !focusMode ? (
-        <p className="rounded-md border border-dashed border-gray-300 p-4 text-sm text-ink-muted">
+        <p className="rounded-[10px] border border-dashed border-ink/15 p-4 text-sm text-ink-muted">
           Os especialistas estão ouvindo… nada urgente agora.
         </p>
       ) : null}
 
       {undoVisible && lastDismissed ? (
-        <div className="sticky bottom-0 flex items-center justify-between rounded-md bg-ink px-3 py-2 text-xs text-white">
+        <div className="sticky bottom-0 flex items-center justify-between rounded-[10px] bg-surface-deep px-3 py-2 text-xs text-white shadow-lg">
           Sugestão dispensada.
           <button
             type="button"

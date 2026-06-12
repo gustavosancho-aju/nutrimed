@@ -72,9 +72,9 @@ export function TranscriptPanel({ source }: { source: TranscriptSource }) {
   const state = panelState(snapshot);
 
   return (
-    <section aria-label="Transcrição da consulta" className="flex h-full flex-col rounded-lg border border-gray-200">
-      <header className="flex items-center justify-between border-b border-gray-200 px-4 py-2">
-        <h2 className="text-sm font-semibold text-gray-700">Transcrição</h2>
+    <section aria-label="Transcrição da consulta" className="card-premium flex h-full flex-col">
+      <header className="flex items-center justify-between border-b border-ink/10 px-5 py-3">
+        <h2 className="font-display text-base font-semibold text-ink">Transcrição</h2>
         <span
           data-testid="panel-state"
           data-state={state}
@@ -94,19 +94,19 @@ export function TranscriptPanel({ source }: { source: TranscriptSource }) {
         ref={scrollRef}
         onScroll={onScroll}
         role="log"
-        className="flex-1 space-y-2 overflow-y-auto p-4"
+        className="flex-1 space-y-2 overflow-y-auto p-5"
       >
         {/* finais: imutáveis, anunciados ao leitor de tela */}
         <div aria-live="polite">
           {snapshot.finalSegments.map((segment, i) => (
-            <p key={i} className="text-sm text-gray-900">
+            <p key={i} className="text-[15px] leading-relaxed text-ink">
               {segment.text}
             </p>
           ))}
         </div>
         {/* parcial corrente: provisório, visualmente distinto, NÃO anunciado */}
         {snapshot.partial ? (
-          <p data-testid="partial-segment" aria-hidden="true" className="text-sm italic text-gray-400">
+          <p data-testid="partial-segment" aria-hidden="true" className="text-[15px] italic leading-relaxed text-ink-muted/70">
             {snapshot.partial.text}
           </p>
         ) : null}
@@ -116,7 +116,7 @@ export function TranscriptPanel({ source }: { source: TranscriptSource }) {
         <button
           type="button"
           onClick={resumeFollow}
-          className="border-t border-gray-200 bg-gray-50 px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100"
+          className="border-t border-ink/10 bg-surface-muted px-4 py-2 text-xs font-medium text-ink transition-colors hover:bg-white"
         >
           ↓ Voltar ao vivo
         </button>

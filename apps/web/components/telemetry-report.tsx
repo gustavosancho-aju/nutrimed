@@ -14,13 +14,13 @@ export function TelemetryReport({
 }) {
   const usd = (v: number) => `US$ ${v.toFixed(4)}`;
   return (
-    <section aria-label="Telemetria da consulta" className="mt-6 rounded-xl border border-gray-200 bg-surface p-5">
-      <h2 className="text-sm font-bold uppercase tracking-wider text-ink">📊 Telemetria (piloto)</h2>
+    <section aria-label="Telemetria da consulta" className="card-premium mt-6 p-6">
+      <h2 className="font-display text-base font-semibold text-ink">📊 Telemetria (piloto)</h2>
 
       <div className="mt-3 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
         <div data-testid="tm-cost">
           <h3 className="text-xs font-semibold uppercase text-ink-muted">Custo (NFR7)</h3>
-          <p className="mt-1 text-lg font-bold text-ink">{usd(report.cost.totalUsd)}</p>
+          <p className="font-mono-data mt-1 text-lg font-medium text-ink">{usd(report.cost.totalUsd)}</p>
           <p className="text-xs text-ink-muted">
             LLM {usd(report.cost.llmUsd)} ({report.cost.llmCalls} chamadas,{' '}
             {report.cost.llmInputTokens + report.cost.llmOutputTokens} tokens) · STT{' '}
@@ -30,7 +30,7 @@ export function TelemetryReport({
 
         <div data-testid="tm-gate">
           <h3 className="text-xs font-semibold uppercase text-ink-muted">Gate (calibração O2/O3)</h3>
-          <p className="mt-1 text-xs text-ink">
+          <p className="font-mono-data mt-1 text-xs text-ink">
             ✅ {report.gate.deliver} entregues · 🚫 {report.gate['rejected-score']} score baixo ·{' '}
             ♻️ {report.gate.duplicate} dedup · ⏸ {report.gate['held-for-pause']} pausa · 🧯{' '}
             {report.gate['rate-limited']} rate-limit
@@ -39,7 +39,7 @@ export function TelemetryReport({
 
         <div data-testid="tm-latency">
           <h3 className="text-xs font-semibold uppercase text-ink-muted">Latência (§11)</h3>
-          <p className="mt-1 text-xs text-ink">
+          <p className="font-mono-data mt-1 text-xs text-ink">
             {report.latency.samples > 0
               ? `p50 ${(report.latency.p50Ms! / 1000).toFixed(1)}s · p95 ${(report.latency.p95Ms! / 1000).toFixed(1)}s (${report.latency.samples} amostras)`
               : 'sem amostras ainda'}
@@ -48,7 +48,7 @@ export function TelemetryReport({
 
         <div data-testid="tm-noise">
           <h3 className="text-xs font-semibold uppercase text-ink-muted">Ruído (R3) & aceite (§9)</h3>
-          <p className="mt-1 text-xs text-ink">
+          <p className="font-mono-data mt-1 text-xs text-ink">
             foco {report.ui['focus-on']}× · silenciar {report.ui.silence}× · dispensas líquidas{' '}
             {report.acceptance.dismissed} · 📌 {report.acceptance.pinned}
             {report.acceptance.rate !== null

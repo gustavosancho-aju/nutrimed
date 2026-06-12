@@ -1,12 +1,16 @@
 @import 'tailwindcss';
 
-/* Design tokens do board (frontend-spec §6 — A1: cor-marca provisória) */
+/* Design tokens do board (frontend-spec §6 — direção "Clinical Quiet Luxury"):
+   jade profundo (nutrição) + papel quente (conforto em consultas longas) +
+   filete champagne (acento de luxo, uso restrito a micro-detalhes). */
 :root {
-  --brand: 178 52% 32%;
-  --surface: 0 0% 100%;
-  --surface-muted: 210 20% 98%;
+  --brand: 172 45% 26%;
+  --surface: 40 20% 98%;
+  --surface-muted: 40 15% 95%;
+  --surface-deep: 200 25% 12%;
+  --accent-gold: 40 35% 62%;
   --text: 222 20% 16%;
-  --text-muted: 222 10% 45%;
+  --text-muted: 222 10% 42%;
   --attn: 30 95% 48%;
   --attn-critical: 4 80% 50%;
   --attn-bg: 30 95% 96%;
@@ -15,16 +19,21 @@
   --synthesis: 222 10% 55%;
   --success: 152 60% 40%;
   --focus-ring: 214 90% 52%;
-  --doctor-aurelio: 178 40% 40%;
-  --doctor-paulo: 4 65% 50%;
-  --doctor-yara: 265 50% 55%;
-  --radius: 12px;
+  --doctor-aurelio: 178 36% 38%;
+  --doctor-paulo: 4 58% 48%;
+  --doctor-yara: 265 44% 53%;
+  --radius: 14px;
 }
 
 @theme inline {
   --color-brand: hsl(var(--brand));
   --color-surface: hsl(var(--surface));
   --color-surface-muted: hsl(var(--surface-muted));
+  --color-surface-deep: hsl(var(--surface-deep));
+  --color-accent-gold: hsl(var(--accent-gold));
+  --font-display: var(--font-display), ui-serif, Georgia, serif;
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  --font-mono-data: var(--font-mono-data), ui-monospace, monospace;
   --color-ink: hsl(var(--text));
   --color-ink-muted: hsl(var(--text-muted));
   --color-attn: hsl(var(--attn));
@@ -36,6 +45,62 @@
   --color-doctor-aurelio: hsl(var(--doctor-aurelio));
   --color-doctor-paulo: hsl(var(--doctor-paulo));
   --color-doctor-yara: hsl(var(--doctor-yara));
+}
+
+/* Base tipográfica: corpo legível (≥15px, line-height 1.6) e títulos serifados.
+   Headings herdam Fraunces via classe utilitária `font-display` no JSX. */
+body {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.6;
+  color: hsl(var(--text));
+  background-color: hsl(var(--surface));
+}
+
+/* Degradê ambiente "jade → petróleo" — fixo, sutil, nunca animado e nunca
+   atrás de texto denso (legibilidade clínica primeiro). */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 50% at 15% 0%, hsl(168 45% 90% / 0.5), transparent 70%),
+    radial-gradient(50% 40% at 90% 100%, hsl(200 50% 92% / 0.4), transparent 70%),
+    hsl(var(--surface));
+}
+
+/* Materialidade premium: superfície + borda fantasma + sombra dupla
+   (profundidade sem peso). Aplicar a todo container de primeiro nível. */
+.card-premium {
+  background-color: hsl(var(--surface));
+  border: 1px solid hsl(var(--text) / 0.07);
+  border-radius: var(--radius);
+  box-shadow:
+    0 1px 2px hsl(var(--text) / 0.04),
+    0 8px 24px hsl(var(--text) / 0.05);
+}
+
+/* Filete champagne — o único dourado da interface, em divisor de 1px. */
+.gold-hairline {
+  position: relative;
+}
+.gold-hairline::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, hsl(var(--accent-gold) / 0.75), transparent);
+}
+
+/* Chrome escuro (header/login hero): petróleo profundo com véu jade. */
+.surface-deep-gradient {
+  background:
+    radial-gradient(80% 120% at 80% -20%, hsl(172 40% 22% / 0.55), transparent 60%),
+    hsl(var(--surface-deep));
 }
 
 /* Decaimento visual do destaque (NFR3/A6 ~8s): o realce some, o card fica. */
