@@ -39,34 +39,42 @@ export default async function ConsultationPage({
   const telemetry = authorized ? await getTelemetryReport(id) : null;
 
   return (
-    <main className="mx-auto min-h-screen max-w-7xl p-6">
-      <header className="sticky top-0 z-10 -mx-6 flex items-center justify-between border-b border-ink/10 bg-surface/85 px-6 py-3 backdrop-blur-md">
-        <div className="flex items-baseline gap-3">
-          <h1 className="font-display text-xl font-semibold tracking-tight text-ink">NutriMed · Consulta</h1>
-          <span
-            className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${
-              authorized
-                ? 'border-brand/25 bg-brand/10 text-brand'
-                : 'border-ink/15 bg-surface-muted text-ink-muted'
-            }`}
-          >
-            {authorized ? '🟢 gravação autorizada' : '🔒 gravação bloqueada'}
-          </span>
+    <main className="min-h-screen">
+      <header className="surface-deep-gradient sticky top-0 z-10 border-b border-white/10">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+          <div className="flex items-baseline gap-4">
+            <h1 className="font-display text-2xl font-semibold tracking-tight text-white">
+              NutriMed
+              <span className="ml-2 text-sm font-normal text-white/50">· Consulta</span>
+            </h1>
+            <span
+              className={`rounded-full border px-3 py-1 text-[11px] font-medium tracking-wide ${
+                authorized
+                  ? 'border-emerald-300/30 bg-emerald-400/10 text-emerald-200'
+                  : 'border-white/20 bg-white/5 text-white/60'
+              }`}
+            >
+              {authorized ? '🟢 gravação autorizada' : '🔒 gravação bloqueada'}
+            </span>
+          </div>
+          <div className="flex items-center gap-4">
+            {authorized ? (
+              <form action={revokeConsentAction}>
+                <input type="hidden" name="consultationId" value={id} />
+                <button type="submit" className="text-xs text-red-300/90 hover:text-red-200 hover:underline">
+                  Revogar consentimento
+                </button>
+              </form>
+            ) : null}
+            <Link href="/" className="text-sm text-white/60 transition-colors hover:text-white">
+              ← Painel
+            </Link>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          {authorized ? (
-            <form action={revokeConsentAction}>
-              <input type="hidden" name="consultationId" value={id} />
-              <button type="submit" className="text-xs text-red-700 hover:underline">
-                Revogar consentimento
-              </button>
-            </form>
-          ) : null}
-          <Link href="/" className="text-sm text-ink-muted hover:underline">
-            ← Painel
-          </Link>
-        </div>
+        <div className="gold-hairline absolute inset-x-0 bottom-0" />
       </header>
+
+      <div className="mx-auto max-w-7xl p-6">
 
       {!authorized ? (
         <section className="card-premium gold-hairline mx-auto mt-14 max-w-md p-7">
@@ -98,7 +106,7 @@ export default async function ConsultationPage({
                 <input type="hidden" name="consultationId" value={id} />
                 <button
                   type="submit"
-                  className="rounded-[10px] bg-brand px-3 py-2 text-xs font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+                  className="rounded-[10px] bg-white px-3 py-2 text-xs font-semibold text-surface-deep shadow-sm transition-colors hover:bg-white/90"
                 >
                   ▶ Consulta simulada
                 </button>
@@ -109,7 +117,7 @@ export default async function ConsultationPage({
                 <input type="hidden" name="consultationId" value={id} />
                 <button
                   type="submit"
-                  className="rounded-[10px] border border-ink/15 bg-surface px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-white"
+                  className="rounded-[10px] border border-white/25 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/10"
                 >
                   📋 Síntese
                 </button>
@@ -178,6 +186,7 @@ export default async function ConsultationPage({
           ) : null}
         </div>
       )}
+      </div>
     </main>
   );
 }

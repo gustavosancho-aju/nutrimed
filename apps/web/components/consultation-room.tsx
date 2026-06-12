@@ -79,34 +79,34 @@ export function ConsultationRoom({
       {/* painel lateral fixo — BOARD */}
       <aside
         aria-label="Painel do board"
-        className="card-premium gold-hairline flex min-h-[480px] flex-col gap-3 p-4"
+        className="surface-deep-gradient gold-hairline flex min-h-[480px] flex-col gap-3 rounded-(--radius) border border-white/10 p-4 shadow-[0_2px_4px_hsl(var(--text)/0.08),0_16px_40px_hsl(var(--text)/0.18)]"
       >
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-base font-semibold text-ink">Board</h2>
+          <h2 className="font-display text-lg font-semibold tracking-tight text-white">Board</h2>
           <span
             title="⚠️ atenção · 💡 sugestão · 🔍 hipótese · 📋 síntese"
-            className="cursor-help text-xs text-ink-muted"
+            className="cursor-help text-xs text-white/50"
           >
             ⓘ 4 tipos
           </span>
         </div>
 
         <DoctorStrip />
-        <div className="border-t border-ink/10" />
+        <div className="border-t border-white/10" />
         <SuggestionFeed />
 
-        <div className="flex items-center justify-between gap-2 border-t border-ink/10 pt-3">
+        <div className="flex items-center justify-between gap-2 border-t border-white/10 pt-3">
           <button
             type="button"
             aria-pressed={focusMode}
             onClick={toggleFocusMode}
-            className={`rounded-md px-3 py-2 text-xs font-semibold ${
+            className={`rounded-md px-3 py-2 text-xs font-semibold transition-colors ${
               focusMode
-                ? 'bg-surface-deep text-white'
-                : 'border border-ink/15 text-ink hover:bg-surface-muted'
+                ? 'bg-white text-surface-deep'
+                : 'border border-white/25 text-white hover:bg-white/10'
             }`}
           >
-            🔇 Modo Foco <kbd className="ml-1 rounded bg-black/10 px-1">F</kbd>
+            🔇 Modo Foco <kbd className="ml-1 rounded bg-black/20 px-1">F</kbd>
           </button>
           <div className="flex items-start gap-2">{synthesisForm}{startForm}<LiveMicButton consultationId={consultationId} token={token} wsBaseUrl={wsBaseUrl} /></div>
         </div>

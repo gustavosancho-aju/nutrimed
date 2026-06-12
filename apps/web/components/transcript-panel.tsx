@@ -73,18 +73,18 @@ export function TranscriptPanel({ source }: { source: TranscriptSource }) {
 
   return (
     <section aria-label="Transcrição da consulta" className="card-premium flex h-full flex-col">
-      <header className="flex items-center justify-between border-b border-ink/10 px-5 py-3">
+      <header className="flex items-center justify-between rounded-t-(--radius) border-b border-ink/10 bg-surface-muted/60 px-5 py-3">
         <h2 className="font-display text-base font-semibold text-ink">Transcrição</h2>
         <span
           data-testid="panel-state"
           data-state={state}
-          className={
+          className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${
             state === 'erro-transcricao'
-              ? 'text-xs font-medium text-amber-700'
+              ? 'border-attn/30 bg-attn-bg text-attn-critical'
               : state === 'pausado'
-                ? 'text-xs text-gray-500'
-                : 'text-xs text-green-700'
-          }
+                ? 'border-ink/15 bg-surface text-ink-muted'
+                : 'border-emerald-600/25 bg-emerald-50 text-emerald-700'
+          }`}
         >
           {STATE_LABEL[state]}
         </span>

@@ -32,14 +32,14 @@ export function SuggestionFeed() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
-      <h2 className="text-[13px] font-semibold uppercase tracking-wider text-ink-muted">
+      <h2 className="text-[13px] font-semibold uppercase tracking-wider text-white/50">
         Feed de sugestões
       </h2>
 
       {focusMode ? (
         <div
           data-testid="focus-banner"
-          className="rounded-[10px] border border-ink/15 bg-surface-muted px-3 py-2 text-xs text-ink-muted"
+          className="rounded-[10px] border border-white/15 bg-white/5 px-3 py-2 text-xs text-white/70"
         >
           🔇 Modo Foco ativo — só pontos de atenção aparecem.
           {heldByFocus > 0 ? ` ${heldByFocus} sugestão(ões) aguardando.` : ''}
@@ -61,13 +61,13 @@ export function SuggestionFeed() {
       </div>
 
       {critical.length === 0 && regular.length === 0 && !focusMode ? (
-        <p className="rounded-[10px] border border-dashed border-ink/15 p-4 text-sm text-ink-muted">
+        <p className="rounded-[10px] border border-dashed border-white/20 p-4 text-sm text-white/60">
           Os especialistas estão ouvindo… nada urgente agora.
         </p>
       ) : null}
 
       {undoVisible && lastDismissed ? (
-        <div className="sticky bottom-0 flex items-center justify-between rounded-[10px] bg-surface-deep px-3 py-2 text-xs text-white shadow-lg">
+        <div className="sticky bottom-0 flex items-center justify-between rounded-[10px] bg-white px-3 py-2 text-xs font-medium text-ink shadow-lg">
           Sugestão dispensada.
           <button
             type="button"

@@ -40,7 +40,7 @@ export function DoctorStrip() {
             key={doctor.id}
             data-testid={`doctor-${doctor.id}`}
             data-state={isSilenced ? 'silenciado' : signaling ? 'sinalizando' : 'ouvindo'}
-            className={`flex flex-col items-center gap-1 rounded-[10px] border border-ink/10 bg-surface-muted p-2 ring-2 ${
+            className={`flex flex-col items-center gap-1 rounded-[10px] border border-white/10 bg-white/5 p-2 ring-2 ${
               signaling ? 'ring-attn' : 'ring-transparent'
             } ${isSilenced ? 'opacity-50' : ''}`}
           >
@@ -55,15 +55,15 @@ export function DoctorStrip() {
                 signaling ? 'ring-attn' : 'ring-accent-gold/60'
               } ${isSilenced ? 'grayscale' : ''}`}
             />
-            <span className="font-display text-xs font-semibold text-ink">{doctor.name}</span>
-            <span className="text-[10px] text-ink-muted">
+            <span className="font-display text-xs font-semibold text-white">{doctor.name}</span>
+            <span className="text-[10px] text-white/55">
               {isSilenced ? '🔇 silenciado' : signaling ? '▲ sinalizando' : '● ouvindo'}
             </span>
             <button
               type="button"
               aria-pressed={isSilenced}
               onClick={() => toggleSilence(doctor.id)}
-              className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-ink-muted hover:bg-white"
+              className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white/60 transition-colors hover:bg-white/10 hover:text-white"
             >
               {isSilenced ? 'reativar' : 'silenciar'}
             </button>
