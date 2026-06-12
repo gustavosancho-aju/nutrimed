@@ -32,7 +32,7 @@ Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build`
 | 1.7 | Disclaimers persistentes (FR19) | ✅ Done | (ver git log) |
 | 1.8 | ADR residência BR + checklist jurídico | ✅ Done | (ver git log) |
 
-Testes acumulados: **167/167 PASS** (+1 E2E skipif). ANTHROPIC_API_KEY no .env — smoke real do Haiku OK (1.79s, contribuição clínica em tom de sugestão). Candidatos STT prontos p/ POC 2.5: `@nutrimed/stt-deepgram` (keywords boost) e `@nutrimed/stt-openai` (Realtime, prompt hint) (inclui testes de UI — jsdom + Testing Library). CodeRabbit pre-commit **diferido p/ pre-PR** em todas (CLI exige `auth login` interativo via WSL).
+Testes acumulados: **177/177 PASS** (+1 E2E skipif). ANTHROPIC_API_KEY no .env — smoke real do Haiku OK (1.79s, contribuição clínica em tom de sugestão). Candidatos STT prontos p/ POC 2.5: `@nutrimed/stt-deepgram` (keywords boost) e `@nutrimed/stt-openai` (Realtime, prompt hint) (inclui testes de UI — jsdom + Testing Library). CodeRabbit pre-commit **diferido p/ pre-PR** em todas (CLI exige `auth login` interativo via WSL).
 
 ### Destaques de implementação
 - **1.4 Consent:** servidor é fonte de verdade; default NEGA. Gate `isCaptureAuthorized`/`assertCaptureAuthorized` + rota `GET /api/consultations/[id]/capture-authorization` (401/403/200). `CONSENT` 1:1 `CONSULTATION`; auditável (`granted_by`+`granted_at`).
@@ -74,6 +74,10 @@ LLM adapters: `@nutrimed/llm-anthropic` (Claude Haiku default) pronto; 2º candi
 **E5 (`@nutrimed/kb`)** — 5.1–5.3 ✅ Ready for Review: NamespacedKnowledgeStore (IKnowledgeRetriever real, FR21 — isolamento testado + rejeição de chunk estrangeiro), pipeline de ingestão versionado com proveniência fonte@versão por chunk (R8: re-ingestão substitui namespace sem código), PersonaReasoner com PERSONA_PROFILES e prompts anti-extrapolação (T6, verificado por teste).
 
 **E6 ✅ NÚCLEO (6.1–6.3 Ready for Review):** `FullBoardOrchestrator` integra tudo — 3 personas simultâneas (FR2), síntese do Aurélio automática+sob demanda (FR6/FR18, auditada), divergência transparente no protocolo (FR7). **Demo do board completo verificada AO VIVO**: Yara (TSH/T4) + Paulo (⚠️ GLP-1+palpitação) + síntese do Aurélio fechando com "A conduta é sua" — claude-haiku real, seed real ingerida (R8).
+
+## Épico 7 — UI do Board (núcleo implementado, 7.1–7.4 Ready for Review)
+
+Tela de Consulta final: grid 2 colunas (transcrição AO VIVO via WS + painel lateral do board), design tokens §6 (4 tipos semânticos + acentos por doutor + motion), `<SuggestionCard>` com hierarquia de segurança NFR4 (⚠️ borda 4px/pulso 2x/topo fixo; 💡🔍 decaem 8s — NFR3), `<SuggestionFeed>` com 2 regiões ARIA-live (assertive/polite), `<DoctorStrip>` (estados ouvindo/sinalizando + silenciar FR13; vídeo = E8), fixar/dispensar com undo 5s (FR15), Modo Foco tecla F com represadas (FR16), render de consolidado/divergência (E6). Verificada ao vivo (produto-final-e7.png).
 
 ## Pendências
 

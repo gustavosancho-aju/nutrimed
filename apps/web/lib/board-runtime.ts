@@ -129,6 +129,12 @@ export async function startDemoBoard(consultationId: string): Promise<{ llmLabel
     maxPerMinutePerDoctor: 2,
   });
   runtime.gateway.bind(consultationId, orchestrator);
+  // transcrição ao vivo p/ o painel (texto via WS — áudio nunca passa aqui, §7)
+  session.subscribe((event) => {
+    if (event.type === 'segment') {
+      runtime.gateway.broadcastTranscript(consultationId, event.segment.text, event.segment.isFinal);
+    }
+  });
   orchestrator.start();
   runtime.active.set(consultationId, { session, orchestrator });
   return { llmLabel: label };

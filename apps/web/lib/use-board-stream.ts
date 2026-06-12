@@ -30,6 +30,7 @@ export interface UseBoardStreamOptions {
 
 export function useBoardStream(consultationId: string, opts: UseBoardStreamOptions = {}) {
   const addContribution = useBoardStore((s) => s.addContribution);
+  const addTranscript = useBoardStore((s) => s.addTranscript);
 
   useEffect(() => {
     const factory: BrowserSocketFactory =
@@ -56,6 +57,10 @@ export function useBoardStream(consultationId: string, opts: UseBoardStreamOptio
         if (typeof event.data !== 'string') return;
         try {
           const message = JSON.parse(event.data) as BoardServerMessage;
+          if (message.v === 1 && message.type === 'transcript') {
+            addTranscript(message.text, message.isFinal); // transcrição ao vivo (E7)
+            return;
+          }
           const item = toContributionItem(message);
           if (item) addContribution(item);
         } catch {
@@ -78,6 +83,7 @@ export function useBoardStream(consultationId: string, opts: UseBoardStreamOptio
   }, [
     consultationId,
     addContribution,
+    addTranscript,
     opts.baseUrl,
     opts.token,
     opts.socketFactory,

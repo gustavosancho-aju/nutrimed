@@ -1,1 +1,81 @@
 @import 'tailwindcss';
+
+/* Design tokens do board (frontend-spec §6 — A1: cor-marca provisória) */
+:root {
+  --brand: 178 52% 32%;
+  --surface: 0 0% 100%;
+  --surface-muted: 210 20% 98%;
+  --text: 222 20% 16%;
+  --text-muted: 222 10% 45%;
+  --attn: 30 95% 48%;
+  --attn-critical: 4 80% 50%;
+  --attn-bg: 30 95% 96%;
+  --suggest: 214 80% 52%;
+  --hypothesis: 265 60% 56%;
+  --synthesis: 222 10% 55%;
+  --success: 152 60% 40%;
+  --focus-ring: 214 90% 52%;
+  --doctor-aurelio: 178 40% 40%;
+  --doctor-paulo: 4 65% 50%;
+  --doctor-yara: 265 50% 55%;
+  --radius: 12px;
+}
+
+@theme inline {
+  --color-brand: hsl(var(--brand));
+  --color-surface: hsl(var(--surface));
+  --color-surface-muted: hsl(var(--surface-muted));
+  --color-ink: hsl(var(--text));
+  --color-ink-muted: hsl(var(--text-muted));
+  --color-attn: hsl(var(--attn));
+  --color-attn-critical: hsl(var(--attn-critical));
+  --color-attn-bg: hsl(var(--attn-bg));
+  --color-suggest: hsl(var(--suggest));
+  --color-hypothesis: hsl(var(--hypothesis));
+  --color-synthesis: hsl(var(--synthesis));
+  --color-doctor-aurelio: hsl(var(--doctor-aurelio));
+  --color-doctor-paulo: hsl(var(--doctor-paulo));
+  --color-doctor-yara: hsl(var(--doctor-yara));
+}
+
+/* Decaimento visual do destaque (NFR3/A6 ~8s): o realce some, o card fica. */
+@keyframes board-decay {
+  from {
+    background-color: hsl(var(--surface-muted));
+    box-shadow: 0 0 0 1px hsl(var(--suggest) / 0.35);
+  }
+  to {
+    background-color: hsl(var(--surface));
+    box-shadow: none;
+  }
+}
+.board-decay {
+  animation: board-decay 8000ms linear forwards;
+}
+
+/* Pulso do ⚠️ — 2 ciclos, nunca infinito (frontend-spec §6.4) */
+@keyframes board-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(var(--attn) / 0.4); }
+  50% { box-shadow: 0 0 0 6px hsl(var(--attn) / 0); }
+}
+.board-pulse {
+  animation: board-pulse 700ms ease-out 2;
+}
+
+/* Entrada de card (slide+fade 220ms) */
+@keyframes board-entry {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.board-entry {
+  animation: board-entry 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Reduced motion: zero animação, sem perda de informação (§6.4/§9) */
+@media (prefers-reduced-motion: reduce) {
+  .board-decay,
+  .board-pulse,
+  .board-entry {
+    animation: none;
+  }
+}

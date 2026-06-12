@@ -46,7 +46,15 @@ export type BoardServerMessage =
       /** Divergência transparente (FR7). Aditivo (E6). */
       readonly divergent?: boolean;
     }
-  | { readonly v: typeof BOARD_PROTOCOL_VERSION; readonly type: 'ping'; readonly at: number };
+  | { readonly v: typeof BOARD_PROTOCOL_VERSION; readonly type: 'ping'; readonly at: number }
+  | {
+      /** Transcrição ao vivo p/ o painel (aditivo — E7). NÃO é áudio (§7). */
+      readonly v: typeof BOARD_PROTOCOL_VERSION;
+      readonly type: 'transcript';
+      readonly text: string;
+      readonly isFinal: boolean;
+      readonly at: number;
+    };
 
 /** Mensagens cliente→servidor (skeleton: só pong; comandos silenciar/foco são E7). */
 export type BoardClientMessage = {

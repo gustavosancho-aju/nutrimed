@@ -90,6 +90,20 @@ export class BoardGateway {
     );
   }
 
+  /** Transcrição ao vivo p/ o TranscriptPanel (E7) — texto, nunca áudio (§7). */
+  broadcastTranscript(consultationId: string, text: string, isFinal: boolean): void {
+    const payload = JSON.stringify({
+      v: BOARD_PROTOCOL_VERSION,
+      type: 'transcript',
+      text,
+      isFinal,
+      at: this.now(),
+    } satisfies BoardServerMessage);
+    for (const socket of this.clients.get(consultationId) ?? []) {
+      if (socket.readyState === WebSocket.OPEN) socket.send(payload);
+    }
+  }
+
   private async onConnection(socket: WebSocket, url: string): Promise<void> {
     const params = new URL(url, 'http://localhost').searchParams;
     const consultationId = params.get('consultationId');

@@ -7,9 +7,12 @@ import { getDb } from '@/lib/db';
 import { grantConsentAction, revokeConsentAction } from '@/lib/consent-actions';
 import { startDemoBoardAction, requestSynthesisAction } from '@/lib/board-actions';
 import { getBoardRuntime, BOARD_WS_PORT } from '@/lib/board-runtime';
-import { DisclaimerNote } from '@/components/disclaimer-note';
-import { BoardFeed } from '@/components/board-feed';
+import { ConsultationRoom } from '@/components/consultation-room';
 
+/**
+ * Tela de Consulta (E7 — frontend-spec §4): header fino, gate de consentimento
+ * (1.4) e o board completo (transcrição + painel lateral).
+ */
 export default async function ConsultationPage({
   params,
 }: {
@@ -25,115 +28,82 @@ export default async function ConsultationPage({
 
   const authorized = consent.granted;
 
-  // demo do board (E3): garante o gateway WS de pé e passa o token p/ o cliente
   await getBoardRuntime();
   const sessionToken = (await cookies()).get(SESSION_COOKIE)?.value ?? '';
   const wsBaseUrl = process.env.NEXT_PUBLIC_BOARD_WS_URL ?? `ws://localhost:${BOARD_WS_PORT}`;
 
   return (
-    <main className="mx-auto min-h-screen max-w-3xl p-8">
-      <header className="flex items-center justify-between border-b border-gray-200 pb-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Consulta</h1>
-          <p className="text-sm text-gray-500">Consentimento de gravação</p>
+    <main className="mx-auto min-h-screen max-w-7xl p-6">
+      <header className="flex items-center justify-between border-b border-gray-200 pb-3">
+        <div className="flex items-baseline gap-3">
+          <h1 className="text-xl font-bold text-ink">NutriMed · Consulta</h1>
+          <span className="text-xs text-ink-muted">
+            {authorized ? '🟢 gravação autorizada' : '🔒 gravação bloqueada'}
+          </span>
         </div>
-        <Link href="/" className="text-sm text-gray-600 hover:underline">
-          ← Painel
-        </Link>
-      </header>
-
-      {/* Estado da captura — reflexo do veredito do SERVIDOR (AC3) */}
-      <section
-        className={`mt-8 rounded-lg border p-6 ${
-          authorized ? 'border-green-300 bg-green-50' : 'border-amber-300 bg-amber-50'
-        }`}
-      >
-        <h2 className="text-lg font-semibold text-gray-900">
-          {authorized ? '🟢 Gravação autorizada' : '🔒 Gravação bloqueada'}
-        </h2>
-        <p className="mt-1 text-sm text-gray-700">
-          {authorized
-            ? 'Há consentimento vigente. A captura de áudio do board pode ser iniciada.'
-            : 'Sem consentimento de gravação, nenhum áudio é capturado, transmitido ou persistido (FR20/LGPD).'}
-        </p>
-
-        {authorized && consent.grantedAt ? (
-          <p className="mt-3 text-xs text-gray-500">
-            Consentido por <strong>{user.displayName}</strong> em{' '}
-            {consent.grantedAt.toLocaleString('pt-BR')}.
-          </p>
-        ) : null}
-
-        <div className="mt-5">
+        <div className="flex items-center gap-3">
           {authorized ? (
             <form action={revokeConsentAction}>
               <input type="hidden" name="consultationId" value={id} />
-              <button
-                type="submit"
-                className="rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
-              >
-                Revogar consentimento (interrompe a captura)
+              <button type="submit" className="text-xs text-red-700 hover:underline">
+                Revogar consentimento
               </button>
             </form>
-          ) : (
-            <form action={grantConsentAction}>
-              <input type="hidden" name="consultationId" value={id} />
-              <button
-                type="submit"
-                className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
-              >
-                Registrar consentimento de gravação
-              </button>
-            </form>
-          )}
+          ) : null}
+          <Link href="/" className="text-sm text-ink-muted hover:underline">
+            ← Painel
+          </Link>
         </div>
+      </header>
 
-        {/* Disclaimer no contexto do card (frontend-spec §6) — mesmo Atom do chrome (AC6) */}
-        <div className="mt-4 border-t border-gray-200/70 pt-3">
-          <DisclaimerNote variant="card" />
-        </div>
-      </section>
-
-      <p className="mt-4 text-xs text-gray-500">
-        A decisão de autorização é do servidor: a captura do board (E2) só liga após consultar o
-        gate <code>/api/consultations/{id}/capture-authorization</code>.
-      </p>
-
-      {/* Walking skeleton do board (E3): consulta simulada → Dr. Paulo ao vivo */}
-      {authorized ? (
-        <section className="mt-8 space-y-4 rounded-lg border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Demo do board (E3)</h2>
-              <p className="text-sm text-gray-500">
-                Consulta simulada (STT roteirizado) — o restante do caminho é real: gatilho →
-                Claude Haiku → auditoria → WebSocket → feed.
-              </p>
-            </div>
-            <div className="flex gap-2">
+      {!authorized ? (
+        <section className="mx-auto mt-12 max-w-md rounded-xl border border-amber-300 bg-amber-50 p-6">
+          <h2 className="text-lg font-semibold text-ink">🔒 Consentimento de gravação</h2>
+          <p className="mt-1 text-sm text-gray-700">
+            Sem consentimento, nenhum áudio é capturado, transmitido ou persistido (FR20/LGPD). O
+            servidor é a fonte de verdade da autorização.
+          </p>
+          <form action={grantConsentAction} className="mt-4">
+            <input type="hidden" name="consultationId" value={id} />
+            <button
+              type="submit"
+              className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+            >
+              Registrar consentimento de gravação
+            </button>
+          </form>
+        </section>
+      ) : (
+        <div className="mt-4">
+          <ConsultationRoom
+            consultationId={id}
+            token={sessionToken}
+            wsBaseUrl={wsBaseUrl}
+            startForm={
               <form action={startDemoBoardAction}>
                 <input type="hidden" name="consultationId" value={id} />
                 <button
                   type="submit"
-                  className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+                  className="rounded-md bg-brand px-3 py-2 text-xs font-semibold text-white hover:opacity-90"
                 >
-                  ▶ Iniciar consulta simulada
+                  ▶ Consulta simulada
                 </button>
               </form>
+            }
+            synthesisForm={
               <form action={requestSynthesisAction}>
                 <input type="hidden" name="consultationId" value={id} />
                 <button
                   type="submit"
-                  className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className="rounded-md border border-gray-300 px-3 py-2 text-xs font-semibold text-ink hover:bg-white"
                 >
-                  📋 Pedir síntese
+                  📋 Síntese
                 </button>
               </form>
-            </div>
-          </div>
-          <BoardFeed consultationId={id} token={sessionToken} wsBaseUrl={wsBaseUrl} />
-        </section>
-      ) : null}
+            }
+          />
+        </div>
+      )}
     </main>
   );
 }
