@@ -8,6 +8,7 @@ import { useBoardStore } from '@/lib/board-store';
 import { TranscriptPanel, type TranscriptSource } from './transcript-panel';
 import { SuggestionFeed } from './suggestion-feed';
 import { DoctorStrip } from './doctor-strip';
+import { ContributionPopup } from './contribution-popup';
 import { LiveMicButton } from './live-mic-button';
 
 /**
@@ -70,7 +71,9 @@ export function ConsultationRoom({
   }, [transcript, consultationId]);
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_clamp(360px,32vw,460px)]">
+    <div className="grid gap-4 lg:grid-cols-[1fr_clamp(380px,34vw,500px)]">
+      {/* aceno da persona ao contribuir — o card definitivo vive no feed */}
+      <ContributionPopup />
       {/* área principal — transcrição ao vivo */}
       <div className="flex min-h-[480px] flex-col gap-3">
         <TranscriptPanel source={transcriptSource} />
