@@ -7,6 +7,7 @@ import { useBoardStore } from '@/lib/board-store';
 import { TranscriptPanel, type TranscriptSource } from './transcript-panel';
 import { SuggestionFeed } from './suggestion-feed';
 import { DoctorStrip } from './doctor-strip';
+import { LiveMicButton } from './live-mic-button';
 
 /**
  * Tela de Consulta (E7 — frontend-spec §4): grid 2 colunas — área principal
@@ -105,7 +106,7 @@ export function ConsultationRoom({
           >
             🔇 Modo Foco <kbd className="ml-1 rounded bg-black/10 px-1">F</kbd>
           </button>
-          <div className="flex gap-2">{synthesisForm}{startForm}</div>
+          <div className="flex items-start gap-2">{synthesisForm}{startForm}<LiveMicButton consultationId={consultationId} token={token} wsBaseUrl={wsBaseUrl} /></div>
         </div>
       </aside>
     </div>

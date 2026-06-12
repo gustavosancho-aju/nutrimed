@@ -39,6 +39,8 @@ export interface BoardGatewayOptions {
 export class BoardGateway {
   private readonly wss: WebSocketServer;
   private readonly clients = new Map<string, Set<WebSocket>>();
+  /** Sinks de áudio por consulta (mic real — canal /audio, separado do board §7). */
+  private readonly audioSinks = new Map<string, { push(chunk: Uint8Array): void; end(): void }>();
   private readonly unbinders = new Map<string, () => void>();
   private readonly heartbeat: ReturnType<typeof setInterval>;
   private readonly now: () => number;
@@ -49,8 +51,8 @@ export class BoardGateway {
   ) {
     this.now = opts.now ?? Date.now;
     this.wss = opts.server
-      ? new WebSocketServer({ server: opts.server, path: '/board' })
-      : new WebSocketServer({ port: opts.port ?? 0, path: '/board' });
+      ? new WebSocketServer({ server: opts.server })
+      : new WebSocketServer({ port: opts.port ?? 0 });
 
     this.wss.on('connection', (socket, request) => {
       void this.onConnection(socket, request.url ?? '');
@@ -104,8 +106,28 @@ export class BoardGateway {
     }
   }
 
+  /** Registra o destino do áudio do mic real (runtime conecta ao STT). */
+  registerAudioSink(
+    consultationId: string,
+    sink: { push(chunk: Uint8Array): void; end(): void },
+  ): void {
+    this.audioSinks.get(consultationId)?.end();
+    this.audioSinks.set(consultationId, sink);
+  }
+
+  unregisterAudioSink(consultationId: string): void {
+    this.audioSinks.get(consultationId)?.end();
+    this.audioSinks.delete(consultationId);
+  }
+
   private async onConnection(socket: WebSocket, url: string): Promise<void> {
-    const params = new URL(url, 'http://localhost').searchParams;
+    const parsed = new URL(url, 'http://localhost');
+    const pathname = parsed.pathname;
+    if (pathname !== '/board' && pathname !== '/audio') {
+      socket.close(4404, 'path desconhecido');
+      return;
+    }
+    const params = parsed.searchParams;
     const consultationId = params.get('consultationId');
     const token = params.get('token');
 
@@ -125,6 +147,21 @@ export class BoardGateway {
     );
     if (res.rows.length === 0) {
       socket.close(4403, 'consulta não encontrada para este usuário');
+      return;
+    }
+
+    if (pathname === '/audio') {
+      // mic real: frames binários → sink registrado (runtime → STT). O gate de
+      // consentimento já foi exigido ao criar a sessão (1.4); sem sink = sem destino.
+      const sink = this.audioSinks.get(consultationId);
+      if (!sink) {
+        socket.close(4409, 'sessão de áudio não iniciada — inicie a consulta ao vivo primeiro');
+        return;
+      }
+      socket.on('message', (data: Buffer, isBinary: boolean) => {
+        if (isBinary) sink.push(new Uint8Array(data));
+      });
+      socket.on('close', () => sink.end());
       return;
     }
 

@@ -6,6 +6,7 @@ import { FullBoardOrchestrator, type FullBoardEvent } from '@nutrimed/board';
 import { startConsultationSession, type ConsultationSession } from '@nutrimed/session';
 import { AnthropicLlmProvider } from '@nutrimed/llm-anthropic';
 import { NamespacedKnowledgeStore, ingest, seedSources } from '@nutrimed/kb';
+import { DeepgramSttProvider } from '@nutrimed/stt-deepgram';
 import { FakeLlmProvider, type ISttProvider, type SttSession, type TranscriptSegment, type ILlmProvider } from '@nutrimed/providers';
 import { CLINICAL_VOCABULARY } from '@nutrimed/domain';
 import { getDb } from './db';
@@ -161,4 +162,91 @@ export async function getNoteInputs(consultationId: string): Promise<{
     finals: active.session.getSnapshot().finalSegments.map((s) => s.text),
     contributions: active.events.map((e) => e.contribution),
   };
+}
+
+/** Fila de áudio: o WS /audio empurra; o adapter STT consome (AsyncIterable). */
+function createAudioQueue() {
+  const queue: Array<Uint8Array | null> = [];
+  let wake: (() => void) | null = null;
+  const push = (item: Uint8Array | null) => {
+    queue.push(item);
+    wake?.();
+    wake = null;
+  };
+  const iterable: AsyncIterable<Uint8Array> = {
+    async *[Symbol.asyncIterator]() {
+      for (;;) {
+        const item = queue.shift();
+        if (item === undefined) {
+          await new Promise<void>((resolve) => {
+            wake = resolve;
+          });
+          continue;
+        }
+        if (item === null) return;
+        yield item;
+      }
+    },
+  };
+  return {
+    iterable,
+    sink: { push: (chunk: Uint8Array) => push(chunk), end: () => push(null) },
+  };
+}
+
+/**
+ * CONSULTA AO VIVO (mic real): áudio do navegador chega pelo WS /audio do
+ * gateway → fila → DeepgramSttProvider (streaming PT-BR + boost clínico) →
+ * sessão (2.3) → board completo (E6). A key do vendor NUNCA vai ao browser.
+ */
+export async function startLiveBoard(consultationId: string): Promise<void> {
+  if (!process.env.DEEPGRAM_API_KEY) {
+    throw new Error('DEEPGRAM_API_KEY ausente — configure o STT para a consulta ao vivo.');
+  }
+  const db = await getDb();
+  const runtime = await getBoardRuntime();
+
+  const previous = runtime.active.get(consultationId);
+  if (previous) {
+    previous.orchestrator.stop();
+    await previous.session.stop();
+    runtime.gateway.unregisterAudioSink(consultationId);
+  }
+
+  const audio = createAudioQueue();
+  runtime.gateway.registerAudioSink(consultationId, audio.sink);
+
+  const stt = new DeepgramSttProvider({ apiKey: process.env.DEEPGRAM_API_KEY });
+  const session = await startConsultationSession(db, consultationId, stt, {
+    audio: audio.iterable,
+    vocabularyBoost: CLINICAL_VOCABULARY,
+  });
+  const { llm } = makeLlm();
+  const orchestrator = new FullBoardOrchestrator(db, session, llm, runtime.kb, {
+    pauseMs: 2500,
+    tickMs: 1000,
+    synthesisQuietMs: 20_000,
+    maxPerMinutePerDoctor: 2,
+  });
+  runtime.gateway.bind(consultationId, orchestrator);
+  session.subscribe((event) => {
+    if (event.type === 'segment') {
+      runtime.gateway.broadcastTranscript(consultationId, event.segment.text, event.segment.isFinal);
+    }
+  });
+  const events: FullBoardEvent[] = [];
+  orchestrator.subscribe((event) => events.push(event));
+  orchestrator.start();
+  runtime.active.set(consultationId, { session, orchestrator, events });
+}
+
+/** Encerra a consulta ao vivo (para STT e board; preserva transcript p/ a nota). */
+export async function stopLiveBoard(consultationId: string): Promise<void> {
+  const runtime = await getBoardRuntime();
+  runtime.gateway.unregisterAudioSink(consultationId);
+  const active = runtime.active.get(consultationId);
+  if (active) {
+    active.orchestrator.stop();
+    await active.session.stop();
+  }
 }

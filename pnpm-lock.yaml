@@ -74,6 +74,9 @@ importers:
       '@nutrimed/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
+      '@nutrimed/stt-deepgram':
+        specifier: workspace:*
+        version: link:../../packages/stt-deepgram
       next:
         specifier: ^16.2.0
         version: 16.2.9(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
