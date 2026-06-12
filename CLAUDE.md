@@ -81,7 +81,7 @@ Tela de Consulta final: grid 2 colunas (transcrição AO VIVO via WS + painel la
 
 ## Épico 9 — Documentação Clínica ✅ núcleo (9.1–9.3 Ready for Review)
 
-Documentation Service (): nota clínica simples gerada da transcrição + contribuições do board (prompt fiel, rodapé de validação médica), persistida CIFRADA (migration 0004, AES-256-GCM) e AUDITADA (generate c/ modelVersion; edit como human-edit). Tela na consulta: gerar/regenerar + textarea editável + salvar. Adapter Anthropic ganhou . Nota completa verificada ao vivo (nota-clinica-e9.png). SOAP/EHR = fora (A1/O7).
+Documentation Service (`@nutrimed/clinical-notes`): nota clínica simples gerada da transcrição + contribuições do board (prompt fiel, rodapé de validação médica), persistida CIFRADA (migration 0004, AES-256-GCM) e AUDITADA (generate c/ modelVersion; edit como human-edit). Tela na consulta: gerar/regenerar + textarea editável + salvar. Adapter Anthropic ganhou `longForm`. Nota completa verificada ao vivo (nota-clinica-e9.png). SOAP/EHR = fora (A1/O7).
 
 ## Pendências
 
