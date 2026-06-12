@@ -57,18 +57,16 @@ body {
   background-color: hsl(var(--surface));
 }
 
-/* Degradê ambiente "jade → petróleo" — fixo, sutil, nunca animado e nunca
-   atrás de texto denso (legibilidade clínica primeiro). */
+/* Fundo ambiente: arte vetorial "células conectadas" (bg-cells.svg — rede de
+   células em jade sobre bege, ref. estética Einstein) — fixa, sutil, nunca
+   animada e nunca atrás de texto denso (legibilidade clínica primeiro). */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background:
-    radial-gradient(60% 50% at 15% 0%, hsl(168 45% 90% / 0.5), transparent 70%),
-    radial-gradient(50% 40% at 90% 100%, hsl(200 50% 92% / 0.4), transparent 70%),
-    hsl(var(--surface));
+  background: url('/bg-cells.svg') center / cover no-repeat hsl(var(--surface));
 }
 
 /* Materialidade premium: superfície + borda fantasma + sombra dupla
