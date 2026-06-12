@@ -4,97 +4,79 @@
 > clínica curada por persona, não o avatar. Postura regulatória: "IA assiste, médico decide".
 > Stack: pnpm workspaces · Next.js 16 + React 19 + Tailwind 4 · TypeScript · PGlite (dev) / Postgres (prod).
 
-## Monorepo
+**📋 Registro completo do que foi construído: [`docs/IMPLEMENTATION-RECORD.md`](docs/IMPLEMENTATION-RECORD.md)**
+(rastreabilidade FR/NFR/ADR, evidências ao vivo, decisões e pendências — fonte de verdade do status).
+
+## Estado: MVP funcional fim-a-fim (2026-06-11)
+
+**9 de 10 épicos com núcleo implementado e verificado ao vivo no browser** (falta E8 — vídeos).
+Suíte: **187/187 PASS** (+1 E2E skipif) · gates `lint`/`typecheck`/`test`/`build` todos PASS (19 pacotes).
+
+| Épico | Status | Épico | Status |
+|---|---|---|---|
+| E1 Fundação & Compliance | ✅ 100% Done + QA gates | E6 Board completo + Synthesizer | ✅ núcleo |
+| E2 Pipeline de Transcrição | ✅ 5/6 (falta POC 2.5) | E7 UI do Board (+retratos Gemini) | ✅ núcleo |
+| E3 Walking Skeleton + mic real | ✅ (faltam 3.4/3.5) | E8 Vídeo das Personas | ⬜ pendente |
+| E4 Motores (gate/dedup/pausa) | ✅ núcleo | E9 Documentação Clínica | ✅ |
+| E5 RAG namespaces + Reasoner | ✅ núcleo | E10 Observabilidade & Piloto | ✅ núcleo |
+
+**Fluxo vivo:** login (`demo@nutrimed.test`/`nutrimed123`) → consulta → consentimento (default NEGA)
+→ `/consultations/[id]`: transcrição AO VIVO + board (3 personas com retratos, feed com hierarquia
+de segurança, Modo Foco tecla F) → "▶ Consulta simulada" (STT roteirizado) ou "🎙️ Consulta ao vivo"
+(mic real → WS `/audio` → Deepgram) → contribuições reais do **claude-haiku-4-5** auditadas →
+síntese do Aurélio → nota clínica gerada/editável (cifrada+auditada) → telemetria (custo/gate/latência/ruído).
+
+## Monorepo (19 pacotes)
 
 ```
-apps/web                 Next.js (shell, login, painel, consulta, rota-gate de captura)
-packages/shared-types    Tipos compartilhados (ADR-001)
-packages/domain          Health/domínio
-packages/crypto          AES-256-GCM em repouso (NFR9)
-packages/db              Schema + migrations (SQL inline) + runner PGlite/pg
-packages/auth            Senha (scrypt) + sessões DB-backed
-packages/consent         Consent Service FR20 — gate de servidor de gravação
-packages/providers       4 interfaces de fornecedor (NFR8) + fakes determinísticos
+apps/web                 Tela de consulta completa + gateway WS in-process + retratos
+packages/shared-types    Protocolo WS v1 (contribution/ping/transcript)
+packages/domain          CLINICAL_VOCABULARY (boost STT)
+packages/crypto          AES-256-GCM (NFR9)
+packages/db              Migrations 0001–0004 · PGlite dev / pg prod (TLS)
+packages/auth            scrypt + sessões DB-backed
+packages/consent         Gate de gravação FR20 (servidor, default NEGA)
+packages/audit           Trilha append-only com proveniência (NFR10)
+packages/providers       4 interfaces NFR8 + fakes
+packages/stt-deepgram    Adapter Deepgram (WS nativo, keywords)
+packages/stt-openai      Adapter OpenAI Realtime (candidato B)
+packages/llm-anthropic   Adapter Claude (Haiku default, longForm, onUsage)
+packages/session         ConsultationSession (retry/backoff, gate 1.4)
+packages/engines         E4: triggers + score/gate + rate-limit + dedup + pausa
+packages/kb              E5: namespaces isolados + ingestão versionada + Reasoner
+packages/board           E6: FullBoardOrchestrator (3 personas, síntese, divergência)
+packages/board-gateway   WS autenticado /board + /audio
+packages/clinical-notes  E9: nota cifrada+auditada
+packages/telemetry       E10: custo/gate/latência/ruído + Quiet Board trigger
 ```
 
-Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build` (todos PASS).
+Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build` · `npm run dev`.
 
-## Épico 1 — Fundação & Compliance ✅ COMPLETO (8/8 Done)
+## Pendências (ordem sugerida)
 
-| Story | Tema | Status | Commit local |
-|-------|------|--------|--------------|
-| 1.1 | Monorepo TS + CI | ✅ Done | `cc27a7a` |
-| 1.2 | Autenticação do nutrólogo | ✅ Done | `88cd3db` |
-| 1.3 | Modelo de dados base + cripto (NFR9) | ✅ Done | `5d38cd7` |
-| 1.4 | Consent Service — gate de gravação (FR20) | ✅ Done | `8ca9679` |
-| 1.6 | Provider Abstraction Layer (NFR8) | ✅ Done | `aa0ce03` |
-| 1.5 | Audit Service — proveniência (NFR10) | ✅ Done | (ver git log) |
-| 1.7 | Disclaimers persistentes (FR19) | ✅ Done | (ver git log) |
-| 1.8 | ADR residência BR + checklist jurídico | ✅ Done | (ver git log) |
+1. **Teste de voz real do usuário** — plumbing pronto (falar e ver o board reagir).
+2. **E8** — clipes ouvindo/pensando/sinalizando a partir de `apps/web/public/personas/*.png`
+   (regenerar retratos: `node --env-file=.env scripts/gen-personas.mjs`).
+3. **POCs formais** 2.5 (STT) e 3.4 (LLM) — keys já no `.env`; e **3.5/ADR-010** (runtime).
+4. **QA gates formais** E2–E10 (E1 ✅ em `docs/qa/gates/`).
+5. `AskDoctorInput` (FR14 completo) · dedup semântico · CodeRabbit pre-PR.
+6. **Consultoria jurídica** CJ-1..CJ-6 (`docs/architecture/project-decisions/checklist-consultoria-juridica.md`)
+   — bloqueia o piloto com pacientes reais, não o dev.
+7. 🔐 **Rotacionar TODAS as keys** (Anthropic/Deepgram/Gemini — passaram pelo chat) antes de
+   qualquer ambiente compartilhado.
 
-Testes acumulados: **187/187 PASS** (+1 E2E skipif). ANTHROPIC_API_KEY no .env — smoke real do Haiku OK (1.79s, contribuição clínica em tom de sugestão). Candidatos STT prontos p/ POC 2.5: `@nutrimed/stt-deepgram` (keywords boost) e `@nutrimed/stt-openai` (Realtime, prompt hint) (inclui testes de UI — jsdom + Testing Library). CodeRabbit pre-commit **diferido p/ pre-PR** em todas (CLI exige `auth login` interativo via WSL).
+## Avisos operacionais (lições pagas)
 
-### Destaques de implementação
-- **1.4 Consent:** servidor é fonte de verdade; default NEGA. Gate `isCaptureAuthorized`/`assertCaptureAuthorized` + rota `GET /api/consultations/[id]/capture-authorization` (401/403/200). `CONSENT` 1:1 `CONSULTATION`; auditável (`granted_by`+`granted_at`).
-- **1.5 Audit:** package `@nutrimed/audit` — `writeAudit` (valida proveniência: gatilho+kb_sources+model_version), `auditedClinicalWrite` (transação atômica; exige sessão única, não Pool), `getAuditTrail`. Migration `0003` torna `audit_log` append-only via trigger plpgsql.
-- **1.7 Disclaimers:** `<DisclaimerNote>` Atom (fonte única `DISCLAIMER_TEXT`, variants chrome/card, a11y) + `<AppChrome>` no layout raiz — disclaimer persistente em toda rota (FR19). Vitest agora roda testes de UI (`apps/web`, jsdom).
-- **1.6 Providers:** `ISttProvider`, `ILlmProvider`, `IKnowledgeRetriever` (escopo por persona — FR21), `IVideoAssetProvider` (catálogo pré-renderizado — ADR-007). Package sem deps de vendor. Fakes = ativo REUSE p/ E2–E8.
-
-## Épico 2 — Pipeline de Transcrição (em andamento)
-
-| Story | Tema | Executor | Status |
-|-------|------|----------|--------|
-| 2.1 | ISttProvider real (streaming PT-BR, parciais/finais) | @dev | ✅ Ready for Review |
-| 2.2 | Captura de áudio + mic check no lobby (gate 1.4) | @dev | ✅ Ready for Review |
-| 2.3 | Consultation Session Service (transcript em memória) | @dev | ✅ Ready for Review |
-| 2.4 | `<TranscriptPanel>` auto-follow + estados | @ux-design-expert | ✅ Ready for Review |
-| 2.5 | POC STT: ≥2 candidatos, latência NFR5 + precisão T4 | @analyst | Ready |
-| 2.6 | Degradação graciosa + boost de vocabulário | @dev | ✅ Ready for Review |
-
-Ordem sugerida: 2.3 (só fakes, sem vendor) → 2.4 → 2.1 (exige credencial de vendor) → 2.2 → 2.6 → 2.5 (POC, exige áudio + 2 vendors).
-
-## Épico 3 — Walking Skeleton do Board (em andamento)
-
-| Story | Tema | Executor | Status |
-|-------|------|----------|--------|
-| 3.1 | Board Orchestrator mínimo (1 persona, 1 gatilho) | @dev | ✅ Ready for Review |
-| 3.2 | WebSocket Gateway (ADR-003) | @dev | ✅ Ready for Review |
-| 3.3 | useBoardStream + useBoardStore + 1 card | @dev | ✅ Ready for Review |
-| 3.4 | POC LLM ≥2 candidatos (bloqueada em API keys) | @analyst | Ready |
-| 3.5 | Validar ADR-005 + ADR-010 runtime | @architect | Ready |
-
-LLM adapters: `@nutrimed/llm-anthropic` (Claude Haiku default) pronto; 2º candidato na 3.4.
-
-**DEMO FIM-A-FIM FUNCIONANDO** (2026-06-11, verificada via browser): login → consulta → consentimento → "▶ Iniciar consulta simulada" → card real do Dr. Paulo gerado pelo claude-haiku-4-5 chega via WS em ~3s. Rota: `/consultations/[id]`. STT roteirizado (mic real = wiring E3 final); gateway WS in-process do Next (PGlite single-process; `apps/web/lib/board-runtime.ts`). Keys em `apps/web/.env.local` (gitignored — Next não lê o .env da raiz).
-
-## Épicos 4 e 5 — Motores + RAG (núcleo implementado)
-
-**E4 (`@nutrimed/engines`)** — 4.1–4.5 ✅ Ready for Review: TriggerDetector por persona (FR3/4/5, zero LLM — T2), scoreMatch+RelevanceGate (NFR1, limiar menor p/ críticos), DoctorRateLimiter+PriorityQueue (NFR2, ⚠️ fura-fila sem consumir cota), Deduplicator com consolidação multi-persona (FR11), PauseGate ≥2,5s (FR12) e **BoardGatekeeper** (pipeline composto: score→dedup→pausa→rate-limit; só 'deliver' chega ao LLM).
-
-**E5 (`@nutrimed/kb`)** — 5.1–5.3 ✅ Ready for Review: NamespacedKnowledgeStore (IKnowledgeRetriever real, FR21 — isolamento testado + rejeição de chunk estrangeiro), pipeline de ingestão versionado com proveniência fonte@versão por chunk (R8: re-ingestão substitui namespace sem código), PersonaReasoner com PERSONA_PROFILES e prompts anti-extrapolação (T6, verificado por teste).
-
-**E6 ✅ NÚCLEO (6.1–6.3 Ready for Review):** `FullBoardOrchestrator` integra tudo — 3 personas simultâneas (FR2), síntese do Aurélio automática+sob demanda (FR6/FR18, auditada), divergência transparente no protocolo (FR7). **Demo do board completo verificada AO VIVO**: Yara (TSH/T4) + Paulo (⚠️ GLP-1+palpitação) + síntese do Aurélio fechando com "A conduta é sua" — claude-haiku real, seed real ingerida (R8).
-
-## Épico 7 — UI do Board (núcleo implementado, 7.1–7.4 Ready for Review)
-
-Tela de Consulta final: grid 2 colunas (transcrição AO VIVO via WS + painel lateral do board), design tokens §6 (4 tipos semânticos + acentos por doutor + motion), `<SuggestionCard>` com hierarquia de segurança NFR4 (⚠️ borda 4px/pulso 2x/topo fixo; 💡🔍 decaem 8s — NFR3), `<SuggestionFeed>` com 2 regiões ARIA-live (assertive/polite), `<DoctorStrip>` (estados ouvindo/sinalizando + silenciar FR13; vídeo = E8), fixar/dispensar com undo 5s (FR15), Modo Foco tecla F com represadas (FR16), render de consolidado/divergência (E6). Verificada ao vivo (produto-final-e7.png). **Identidade visual das personas** (Gemini 2.5 Flash Image): retratos fotorrealistas em apps/web/public/personas/{aurelio,paulo,yara}.png — cada um à mesa do consultório, acentos verde-petróleo; script scripts/gen-personas.mjs (GEMINI_API_KEY no .env) p/ regenerar. DoctorStrip usa os retratos (grayscale quando silenciado); slot vira vídeo no E8.
-
-## Épico 9 — Documentação Clínica ✅ núcleo (9.1–9.3 Ready for Review)
-
-Documentation Service (`@nutrimed/clinical-notes`): nota clínica simples gerada da transcrição + contribuições do board (prompt fiel, rodapé de validação médica), persistida CIFRADA (migration 0004, AES-256-GCM) e AUDITADA (generate c/ modelVersion; edit como human-edit). Tela na consulta: gerar/regenerar + textarea editável + salvar. Adapter Anthropic ganhou `longForm`. Nota completa verificada ao vivo (nota-clinica-e9.png). SOAP/EHR = fora (A1/O7).
-
-## Épico 10 — Observabilidade & Piloto ✅ núcleo (10.1–10.5 Ready for Review)
-
-Telemetria em memória por consulta (ADR-005): custo NFR7 (LLM por tokens reais via onUsage do adapter + STT por minuto; PRICING central), decisões do gate por tipo (calibração O2/O3 via onDecision), latência p50/p95 (onContributionLatency), eventos de UI (silenciar/foco/dispensar/fixar via use-ui-telemetry → POST /ui-telemetry), taxa de aceite e gatilho Quiet Board >20% (§13.7). Relatório na tela da consulta. AO VIVO: US$0,0108/consulta · gate 4✅/3🚫/3⏸ · p50 5,7s (inclui retenção do PauseGate — separar na POC) · Quiet Board disparando (telemetria-e10.png).
-
-## Pendências
-
-1. ~~Push bloqueado~~ → **RESOLVIDO (2026-06-11):** remote `git@github.com:gustavosancho-aju/nutrimed.git` via **SSH porta 443** (`~/.ssh/config` → ssh.github.com:443), pois `api.github.com` é **bloqueado na rede** (gh CLI/API indisponíveis — github.com e codeload funcionam). main sincronizada.
-2. **CodeRabbit pre-PR** — autenticar a CLI e rodar antes do próximo PR. `gh pr create` indisponível enquanto a API estiver bloqueada (usar web UI se preciso).
-3. **Consultoria jurídica externa** — CJ-1…CJ-6 do checklist (`docs/architecture/project-decisions/checklist-consultoria-juridica.md`) bloqueiam o piloto E10, não o dev. Gates de QA do E1 todos emitidos (`docs/qa/gates/1.*.yml` — 1.8 PASS, demais CONCERNS→Done).
-4. **Caminho crítico do produto:** E1 → E2 (pipeline transcrição) → E3 (POC latência/custo). Os fakes da 1.6 destravam E3 antes da escolha de vendor.
+- **Next NÃO lê o `.env` da raiz** — keys de runtime em `apps/web/.env.local` (ambos gitignored).
+- **Mudou gateway/runtime/migrations? REINICIE o `npm run dev`** — singletons globais ignoram HMR;
+  PGlite só aplica migration nova no boot.
+- **Nunca usar heredoc bash com backticks/template literals** — escrever script `.cjs` e executar.
+- `api.github.com` é **bloqueado nesta rede** → `gh` CLI não funciona; push via SSH porta 443
+  (`~/.ssh/config` → `ssh.github.com:443`). PRs só pela web UI.
+- Push exige `AIOX_ACTIVE_AGENT=github-devops git push` (hook de fronteira).
 
 ## Regras de fronteira (resumo)
-- `git push` / `gh pr create` / MCP = **@devops exclusivo**.
-- @dev faz commit local, nunca push. Story status segue lifecycle `Draft→Ready→InProgress→Ready for Review→Done`.
-- Docs de framework (`devLoadAlwaysFiles`: coding-standards/tech-stack/source-tree) **ainda não existem** — seguir padrões do código existente.
+
+- `git push` / PR / MCP = **@devops exclusivo**. @dev commita local, nunca push.
+- Story lifecycle: `Draft→Ready→InProgress→Ready for Review→Done` (stories em `docs/stories/`).
+- Decisões de arquitetura: ADR-001..009 (`docs/architecture.md` §10 + `docs/architecture/project-decisions/`).
