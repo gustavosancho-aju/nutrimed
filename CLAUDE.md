@@ -32,7 +32,7 @@ Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build`
 | 1.7 | Disclaimers persistentes (FR19) | ✅ Done | (ver git log) |
 | 1.8 | ADR residência BR + checklist jurídico | ✅ Done | (ver git log) |
 
-Testes acumulados: **181/181 PASS** (+1 E2E skipif). ANTHROPIC_API_KEY no .env — smoke real do Haiku OK (1.79s, contribuição clínica em tom de sugestão). Candidatos STT prontos p/ POC 2.5: `@nutrimed/stt-deepgram` (keywords boost) e `@nutrimed/stt-openai` (Realtime, prompt hint) (inclui testes de UI — jsdom + Testing Library). CodeRabbit pre-commit **diferido p/ pre-PR** em todas (CLI exige `auth login` interativo via WSL).
+Testes acumulados: **187/187 PASS** (+1 E2E skipif). ANTHROPIC_API_KEY no .env — smoke real do Haiku OK (1.79s, contribuição clínica em tom de sugestão). Candidatos STT prontos p/ POC 2.5: `@nutrimed/stt-deepgram` (keywords boost) e `@nutrimed/stt-openai` (Realtime, prompt hint) (inclui testes de UI — jsdom + Testing Library). CodeRabbit pre-commit **diferido p/ pre-PR** em todas (CLI exige `auth login` interativo via WSL).
 
 ### Destaques de implementação
 - **1.4 Consent:** servidor é fonte de verdade; default NEGA. Gate `isCaptureAuthorized`/`assertCaptureAuthorized` + rota `GET /api/consultations/[id]/capture-authorization` (401/403/200). `CONSENT` 1:1 `CONSULTATION`; auditável (`granted_by`+`granted_at`).
@@ -82,6 +82,10 @@ Tela de Consulta final: grid 2 colunas (transcrição AO VIVO via WS + painel la
 ## Épico 9 — Documentação Clínica ✅ núcleo (9.1–9.3 Ready for Review)
 
 Documentation Service (`@nutrimed/clinical-notes`): nota clínica simples gerada da transcrição + contribuições do board (prompt fiel, rodapé de validação médica), persistida CIFRADA (migration 0004, AES-256-GCM) e AUDITADA (generate c/ modelVersion; edit como human-edit). Tela na consulta: gerar/regenerar + textarea editável + salvar. Adapter Anthropic ganhou `longForm`. Nota completa verificada ao vivo (nota-clinica-e9.png). SOAP/EHR = fora (A1/O7).
+
+## Épico 10 — Observabilidade & Piloto ✅ núcleo (10.1–10.5 Ready for Review)
+
+Telemetria em memória por consulta (ADR-005): custo NFR7 (LLM por tokens reais via onUsage do adapter + STT por minuto; PRICING central), decisões do gate por tipo (calibração O2/O3 via onDecision), latência p50/p95 (onContributionLatency), eventos de UI (silenciar/foco/dispensar/fixar via use-ui-telemetry → POST /ui-telemetry), taxa de aceite e gatilho Quiet Board >20% (§13.7). Relatório na tela da consulta. AO VIVO: US$0,0108/consulta · gate 4✅/3🚫/3⏸ · p50 5,7s (inclui retenção do PauseGate — separar na POC) · Quiet Board disparando (telemetria-e10.png).
 
 ## Pendências
 

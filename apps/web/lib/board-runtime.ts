@@ -9,6 +9,7 @@ import { NamespacedKnowledgeStore, ingest, seedSources } from '@nutrimed/kb';
 import { DeepgramSttProvider } from '@nutrimed/stt-deepgram';
 import { FakeLlmProvider, type ISttProvider, type SttSession, type TranscriptSegment, type ILlmProvider } from '@nutrimed/providers';
 import { CLINICAL_VOCABULARY } from '@nutrimed/domain';
+import { TelemetryRegistry, type GateDecisionKind, type UiEventKind } from '@nutrimed/telemetry';
 import { getDb } from './db';
 
 /**
@@ -28,6 +29,7 @@ import { getDb } from './db';
 interface BoardRuntime {
   gateway: BoardGateway;
   kb: NamespacedKnowledgeStore;
+  telemetry: TelemetryRegistry;
   active: Map<string, { session: ConsultationSession; orchestrator: FullBoardOrchestrator; events: FullBoardEvent[] }>;
 }
 
@@ -42,7 +44,7 @@ async function init(): Promise<BoardRuntime> {
   const kb = new NamespacedKnowledgeStore();
   const seedPath = join(process.cwd(), '..', '..', 'docs', 'personas-knowledge-base-seed.md');
   ingest(kb, seedSources(readFileSync(seedPath, 'utf8')), 'seed-v1');
-  return { gateway, kb, active: new Map() };
+  return { gateway, kb, telemetry: new TelemetryRegistry(), active: new Map() };
 }
 
 export function getBoardRuntime(): Promise<BoardRuntime> {
@@ -94,17 +96,32 @@ class ScriptedDemoStt implements ISttProvider {
   }
 }
 
-function makeLlm(): { llm: ILlmProvider; label: string } {
+function makeLlm(onUsage?: (u: { inputTokens: number; outputTokens: number }) => void): {
+  llm: ILlmProvider;
+  label: string;
+} {
   if (process.env.ANTHROPIC_API_KEY) {
     return {
       llm: new AnthropicLlmProvider({
         apiKey: process.env.ANTHROPIC_API_KEY,
         personaId: 'aurelio', // fallback — o Reasoner define a persona por contribuição
+        onUsage, // telemetria de custo (E10/NFR7)
       }),
       label: 'claude-haiku-4-5 (real)',
     };
   }
   return { llm: new FakeLlmProvider('paulo', 'atencao'), label: 'fake (sem ANTHROPIC_API_KEY)' };
+}
+
+/** Wiring comum de telemetria por consulta (E10). */
+function telemetryHooks(runtime: BoardRuntime, consultationId: string) {
+  const t = runtime.telemetry;
+  return {
+    onUsage: (u: { inputTokens: number; outputTokens: number }) =>
+      t.llmUsage(consultationId, u.inputTokens, u.outputTokens),
+    onDecision: (kind: string) => t.gateDecision(consultationId, kind as GateDecisionKind),
+    onContributionLatency: (ms: number) => t.contributionLatency(consultationId, ms),
+  };
 }
 
 /** Inicia a demo do BOARD COMPLETO (E6) — gate de consentimento incluso (1.4). */
@@ -122,17 +139,22 @@ export async function startDemoBoard(consultationId: string): Promise<{ llmLabel
   const session = await startConsultationSession(db, consultationId, new ScriptedDemoStt(), {
     vocabularyBoost: CLINICAL_VOCABULARY,
   });
-  const { llm, label } = makeLlm();
+  const hooks = telemetryHooks(runtime, consultationId);
+  runtime.telemetry.sessionStarted(consultationId);
+  const { llm, label } = makeLlm(hooks.onUsage);
   const orchestrator = new FullBoardOrchestrator(db, session, llm, runtime.kb, {
     pauseMs: 2500,
     tickMs: 1000,
     synthesisQuietMs: 10_000,
     maxPerMinutePerDoctor: 2,
+    onDecision: hooks.onDecision,
+    onContributionLatency: hooks.onContributionLatency,
   });
   runtime.gateway.bind(consultationId, orchestrator);
   // transcrição ao vivo p/ o painel (texto via WS — áudio nunca passa aqui, §7)
   session.subscribe((event) => {
     if (event.type === 'segment') {
+      if (event.segment.isFinal) runtime.telemetry.sttSegment(consultationId);
       runtime.gateway.broadcastTranscript(consultationId, event.segment.text, event.segment.isFinal);
     }
   });
@@ -221,16 +243,21 @@ export async function startLiveBoard(consultationId: string): Promise<void> {
     audio: audio.iterable,
     vocabularyBoost: CLINICAL_VOCABULARY,
   });
-  const { llm } = makeLlm();
+  const hooks = telemetryHooks(runtime, consultationId);
+  runtime.telemetry.sessionStarted(consultationId);
+  const { llm } = makeLlm(hooks.onUsage);
   const orchestrator = new FullBoardOrchestrator(db, session, llm, runtime.kb, {
     pauseMs: 2500,
     tickMs: 1000,
     synthesisQuietMs: 20_000,
     maxPerMinutePerDoctor: 2,
+    onDecision: hooks.onDecision,
+    onContributionLatency: hooks.onContributionLatency,
   });
   runtime.gateway.bind(consultationId, orchestrator);
   session.subscribe((event) => {
     if (event.type === 'segment') {
+      if (event.segment.isFinal) runtime.telemetry.sttSegment(consultationId);
       runtime.gateway.broadcastTranscript(consultationId, event.segment.text, event.segment.isFinal);
     }
   });
@@ -249,4 +276,16 @@ export async function stopLiveBoard(consultationId: string): Promise<void> {
     active.orchestrator.stop();
     await active.session.stop();
   }
+  runtime.telemetry.sessionEnded(consultationId);
+}
+
+/** Relatório de telemetria da consulta + sumário da instância (E10). */
+export async function getTelemetryReport(consultationId: string) {
+  const runtime = await getBoardRuntime();
+  return { report: runtime.telemetry.report(consultationId), summary: runtime.telemetry.summary() };
+}
+
+export async function recordUiEvent(consultationId: string, kind: UiEventKind): Promise<void> {
+  const runtime = await getBoardRuntime();
+  runtime.telemetry.uiEvent(consultationId, kind);
 }

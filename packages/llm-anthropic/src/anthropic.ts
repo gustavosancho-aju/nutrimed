@@ -28,6 +28,8 @@ export interface AnthropicLlmConfig {
   readonly maxTokens?: number;
   /** Documentos longos (ex.: nota clínica): remove o limite de 1-3 frases. */
   readonly longForm?: boolean;
+  /** Telemetria (E10): tokens consumidos por chamada (custo NFR7). */
+  readonly onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void;
   readonly fetchImpl?: typeof fetch;
 }
 
@@ -71,6 +73,7 @@ function outputInstructions(longForm: boolean): string {
 interface AnthropicResponse {
   model?: string;
   content?: Array<{ type: string; text?: string }>;
+  usage?: { input_tokens?: number; output_tokens?: number };
   error?: { message?: string };
 }
 
@@ -118,6 +121,11 @@ export class AnthropicLlmProvider implements ILlmProvider {
         'api',
       );
     }
+
+    this.config.onUsage?.({
+      inputTokens: data.usage?.input_tokens ?? 0,
+      outputTokens: data.usage?.output_tokens ?? 0,
+    });
 
     const text = data.content?.find((b) => b.type === 'text')?.text;
     if (!text) throw new AnthropicLlmError('Resposta sem bloco de texto.', 'parse');

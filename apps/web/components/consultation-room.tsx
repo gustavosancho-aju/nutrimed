@@ -3,6 +3,7 @@
 import { useEffect, useMemo } from 'react';
 import type { SessionSnapshot } from '@nutrimed/session';
 import { useBoardStream } from '@/lib/use-board-stream';
+import { useUiTelemetry } from '@/lib/use-ui-telemetry';
 import { useBoardStore } from '@/lib/board-store';
 import { TranscriptPanel, type TranscriptSource } from './transcript-panel';
 import { SuggestionFeed } from './suggestion-feed';
@@ -29,6 +30,7 @@ export function ConsultationRoom({
   synthesisForm: React.ReactNode;
 }) {
   useBoardStream(consultationId, { baseUrl: wsBaseUrl, token });
+  useUiTelemetry(consultationId); // E10 — ruído/aceite (R3/§9)
   const transcript = useBoardStore((s) => s.transcript);
   const focusMode = useBoardStore((s) => s.focusMode);
   const toggleFocusMode = useBoardStore((s) => s.toggleFocusMode);

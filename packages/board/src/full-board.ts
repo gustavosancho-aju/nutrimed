@@ -47,6 +47,10 @@ export interface FullBoardConfig extends GatekeeperConfig {
   /** Silêncio p/ síntese automática (default 12s). */
   readonly synthesisQuietMs?: number;
   readonly now?: () => number;
+  /** Telemetria (E10): decisão do gate por candidato (calibração O2/O3). */
+  readonly onDecision?: (kind: string) => void;
+  /** Telemetria (E10): latência gatilho→publicação por contribuição (§11). */
+  readonly onContributionLatency?: (latencyMs: number) => void;
 }
 
 interface RoundEntry {
@@ -70,6 +74,7 @@ export class FullBoardOrchestrator {
   private pending: Promise<void> = Promise.resolve();
   private readonly now: () => number;
   private readonly config: Required<Pick<FullBoardConfig, 'tickMs' | 'synthesisMinPersonas' | 'synthesisQuietMs'>>;
+  private readonly config2: Pick<FullBoardConfig, 'onDecision' | 'onContributionLatency'>;
 
   constructor(
     private readonly db: SqlExecutor,
@@ -86,6 +91,7 @@ export class FullBoardOrchestrator {
       synthesisMinPersonas: config.synthesisMinPersonas ?? 2,
       synthesisQuietMs: config.synthesisQuietMs ?? 12_000,
     };
+    this.config2 = { onDecision: config.onDecision, onContributionLatency: config.onContributionLatency };
   }
 
   /** Liga as 3 personas sobre o stream (FR2) + tick de release/síntese. */
@@ -137,6 +143,7 @@ export class FullBoardOrchestrator {
     for (const match of this.detector.detect(text, at)) {
       const candidate = toCandidate(match);
       const decision = this.gate.submit(candidate, at);
+      this.config2.onDecision?.(decision.kind);
       if (decision.kind === 'deliver') await this.produce(decision.candidate);
     }
   }
@@ -144,6 +151,7 @@ export class FullBoardOrchestrator {
   private async tick(): Promise<void> {
     const now = this.now();
     for (const candidate of this.gate.release(now)) {
+      this.config2.onDecision?.('deliver'); // liberado da pausa/fila (E10)
       await this.produce(candidate);
     }
     // síntese automática ao fim da rodada (FR6): atividade + silêncio prolongado
@@ -185,6 +193,7 @@ export class FullBoardOrchestrator {
         triggeredBy: candidate.triggerId,
         at: this.now(),
       });
+      this.config2.onContributionLatency?.(this.now() - candidate.at);
     } catch {
       // falha de LLM/auditoria não derruba a consulta (§3.1) — candidato é perdido
     }

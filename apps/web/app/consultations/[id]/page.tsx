@@ -7,10 +7,11 @@ import { getDb } from '@/lib/db';
 import { grantConsentAction, revokeConsentAction } from '@/lib/consent-actions';
 import { startDemoBoardAction, requestSynthesisAction } from '@/lib/board-actions';
 import { generateNoteAction, saveNoteAction } from '@/lib/note-actions';
-import { getBoardRuntime, BOARD_WS_PORT } from '@/lib/board-runtime';
+import { getBoardRuntime, getTelemetryReport, BOARD_WS_PORT } from '@/lib/board-runtime';
 import { getEncryptionKey } from '@/lib/crypto-key';
 import { loadNote } from '@nutrimed/clinical-notes';
 import { ConsultationRoom } from '@/components/consultation-room';
+import { TelemetryReport } from '@/components/telemetry-report';
 
 /**
  * Tela de Consulta (E7 — frontend-spec §4): header fino, gate de consentimento
@@ -35,6 +36,7 @@ export default async function ConsultationPage({
   const sessionToken = (await cookies()).get(SESSION_COOKIE)?.value ?? '';
   const wsBaseUrl = process.env.NEXT_PUBLIC_BOARD_WS_URL ?? `ws://localhost:${BOARD_WS_PORT}`;
   const note = authorized ? await loadNote(db, id, getEncryptionKey()) : null;
+  const telemetry = authorized ? await getTelemetryReport(id) : null;
 
   return (
     <main className="mx-auto min-h-screen max-w-7xl p-6">
@@ -162,6 +164,10 @@ export default async function ConsultationPage({
               </p>
             )}
           </section>
+
+          {telemetry ? (
+            <TelemetryReport report={telemetry.report} summary={telemetry.summary} />
+          ) : null}
         </div>
       )}
     </main>

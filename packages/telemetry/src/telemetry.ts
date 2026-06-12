@@ -1,0 +1,202 @@
+/**
+ * Telemetria do board (E10 — NFR7/NFR12, R3, O2/O3).
+ *
+ * Registro EM MEMÓRIA por consulta (runtime stateful — ADR-005): custo
+ * (LLM/STT), decisões do gate (calibração de limiar/rate/pausa), latência
+ * fim-a-fim e eventos de UI (silenciar/Modo Foco/dispensar/fixar).
+ * Persistência/agregação histórica entra com o runtime de produção; o piloto
+ * opera com o relatório por consulta + sumário da instância.
+ *
+ * Conteúdo clínico NUNCA entra aqui — só contadores e durações (NFR9).
+ */
+
+export type GateDecisionKind =
+  | 'deliver'
+  | 'rejected-score'
+  | 'duplicate'
+  | 'held-for-pause'
+  | 'rate-limited';
+
+export type UiEventKind = 'focus-on' | 'focus-off' | 'silence' | 'unsilence' | 'dismiss' | 'pin' | 'undo-dismiss';
+
+/** Preços de referência (USD) — atualizar junto com a POC 3.4/2.5. */
+export const PRICING = {
+  llmInputPerMTok: 1.0, // claude-haiku-4-5
+  llmOutputPerMTok: 5.0,
+  sttPerMinute: 0.0059, // deepgram nova-2 streaming
+  videoPerConsultation: 0, // catálogo pré-renderizado (ADR-007)
+} as const;
+
+interface ConsultationRecord {
+  startedAt: number | null;
+  endedAt: number | null;
+  llmCalls: number;
+  llmInputTokens: number;
+  llmOutputTokens: number;
+  sttSegments: number;
+  decisions: Map<GateDecisionKind, number>;
+  latenciesMs: number[];
+  uiEvents: Map<UiEventKind, number>;
+  contributionsDelivered: number;
+}
+
+export interface ConsultationReport {
+  readonly consultationId: string;
+  readonly durationMinutes: number;
+  readonly cost: {
+    readonly llmUsd: number;
+    readonly sttUsd: number;
+    readonly videoUsd: number;
+    readonly totalUsd: number;
+    readonly llmCalls: number;
+    readonly llmInputTokens: number;
+    readonly llmOutputTokens: number;
+  };
+  /** Decisões do gate — base de calibração (O2/O3). */
+  readonly gate: Readonly<Record<GateDecisionKind, number>>;
+  readonly latency: { readonly samples: number; readonly p50Ms: number | null; readonly p95Ms: number | null };
+  readonly ui: Readonly<Record<UiEventKind, number>>;
+  /** R3: a consulta usou controles anti-ruído? */
+  readonly noiseControlsUsed: boolean;
+  readonly acceptance: { readonly delivered: number; readonly dismissed: number; readonly pinned: number; readonly rate: number | null };
+}
+
+export interface InstanceSummary {
+  readonly consultations: number;
+  readonly consultationsWithNoiseControls: number;
+  readonly noiseRate: number | null;
+  /** frontend-spec §13.7: ruído > 20% ⇒ recomendar default Quiet Board. */
+  readonly recommendQuietBoard: boolean;
+  readonly avgCostUsd: number | null;
+}
+
+function percentile(sorted: number[], p: number): number | null {
+  if (sorted.length === 0) return null;
+  const idx = Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1);
+  return sorted[Math.max(0, idx)]!;
+}
+
+export class TelemetryRegistry {
+  private readonly records = new Map<string, ConsultationRecord>();
+
+  private record(consultationId: string): ConsultationRecord {
+    let rec = this.records.get(consultationId);
+    if (!rec) {
+      rec = {
+        startedAt: null,
+        endedAt: null,
+        llmCalls: 0,
+        llmInputTokens: 0,
+        llmOutputTokens: 0,
+        sttSegments: 0,
+        decisions: new Map(),
+        latenciesMs: [],
+        uiEvents: new Map(),
+        contributionsDelivered: 0,
+      };
+      this.records.set(consultationId, rec);
+    }
+    return rec;
+  }
+
+  sessionStarted(consultationId: string, at = Date.now()): void {
+    const rec = this.record(consultationId);
+    rec.startedAt = rec.startedAt ?? at;
+    rec.endedAt = null;
+  }
+
+  sessionEnded(consultationId: string, at = Date.now()): void {
+    this.record(consultationId).endedAt = at;
+  }
+
+  llmUsage(consultationId: string, inputTokens: number, outputTokens: number): void {
+    const rec = this.record(consultationId);
+    rec.llmCalls += 1;
+    rec.llmInputTokens += inputTokens;
+    rec.llmOutputTokens += outputTokens;
+  }
+
+  sttSegment(consultationId: string): void {
+    this.record(consultationId).sttSegments += 1;
+  }
+
+  gateDecision(consultationId: string, kind: GateDecisionKind): void {
+    const rec = this.record(consultationId);
+    rec.decisions.set(kind, (rec.decisions.get(kind) ?? 0) + 1);
+    if (kind === 'deliver') rec.contributionsDelivered += 1;
+  }
+
+  /** Latência fala(final do gatilho)→publicação (§11). */
+  contributionLatency(consultationId: string, latencyMs: number): void {
+    if (latencyMs >= 0) this.record(consultationId).latenciesMs.push(latencyMs);
+  }
+
+  uiEvent(consultationId: string, kind: UiEventKind): void {
+    const rec = this.record(consultationId);
+    rec.uiEvents.set(kind, (rec.uiEvents.get(kind) ?? 0) + 1);
+  }
+
+  report(consultationId: string, now = Date.now()): ConsultationReport {
+    const rec = this.record(consultationId);
+    const durationMs = rec.startedAt !== null ? (rec.endedAt ?? now) - rec.startedAt : 0;
+    const durationMinutes = durationMs / 60_000;
+    const llmUsd =
+      (rec.llmInputTokens / 1_000_000) * PRICING.llmInputPerMTok +
+      (rec.llmOutputTokens / 1_000_000) * PRICING.llmOutputPerMTok;
+    const sttUsd = durationMinutes * PRICING.sttPerMinute;
+    const sorted = [...rec.latenciesMs].sort((a, b) => a - b);
+    const decisions = Object.fromEntries(
+      (['deliver', 'rejected-score', 'duplicate', 'held-for-pause', 'rate-limited'] as const).map(
+        (k) => [k, rec.decisions.get(k) ?? 0],
+      ),
+    ) as Record<GateDecisionKind, number>;
+    const ui = Object.fromEntries(
+      (['focus-on', 'focus-off', 'silence', 'unsilence', 'dismiss', 'pin', 'undo-dismiss'] as const).map(
+        (k) => [k, rec.uiEvents.get(k) ?? 0],
+      ),
+    ) as Record<UiEventKind, number>;
+    const dismissed = ui.dismiss - ui['undo-dismiss'];
+    return {
+      consultationId,
+      durationMinutes,
+      cost: {
+        llmUsd,
+        sttUsd,
+        videoUsd: PRICING.videoPerConsultation,
+        totalUsd: llmUsd + sttUsd + PRICING.videoPerConsultation,
+        llmCalls: rec.llmCalls,
+        llmInputTokens: rec.llmInputTokens,
+        llmOutputTokens: rec.llmOutputTokens,
+      },
+      gate: decisions,
+      latency: { samples: sorted.length, p50Ms: percentile(sorted, 50), p95Ms: percentile(sorted, 95) },
+      ui,
+      noiseControlsUsed: ui['focus-on'] > 0 || ui.silence > 0,
+      acceptance: {
+        delivered: rec.contributionsDelivered,
+        dismissed: Math.max(0, dismissed),
+        pinned: ui.pin,
+        rate:
+          rec.contributionsDelivered > 0
+            ? Math.max(0, rec.contributionsDelivered - Math.max(0, dismissed)) / rec.contributionsDelivered
+            : null,
+      },
+    };
+  }
+
+  /** Sumário da instância + gatilho Board Ativo → Quiet Board (§13.7). */
+  summary(now = Date.now()): InstanceSummary {
+    const ids = [...this.records.keys()];
+    const reports = ids.map((id) => this.report(id, now));
+    const withControls = reports.filter((r) => r.noiseControlsUsed).length;
+    const noiseRate = reports.length > 0 ? withControls / reports.length : null;
+    const costs = reports.map((r) => r.cost.totalUsd);
+    return {
+      consultations: reports.length,
+      consultationsWithNoiseControls: withControls,
+      noiseRate,
+      recommendQuietBoard: noiseRate !== null && noiseRate > 0.2,
+      avgCostUsd: costs.length > 0 ? costs.reduce((a, b) => a + b, 0) / costs.length : null,
+    };
+  }
+}
