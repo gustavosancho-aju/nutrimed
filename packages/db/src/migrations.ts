@@ -100,4 +100,19 @@ CREATE TRIGGER trg_audit_log_immutable
   FOR EACH ROW EXECUTE FUNCTION audit_log_immutable();
 `,
   },
+  {
+    name: '0004_clinical_note',
+    sql: `
+-- Documentação clínica (Story 9.2 / FR17): nota simples editável, 1:1 com a
+-- consulta. Conteúdo é dado de saúde ⇒ cifrado em repouso (NFR9, sufixo _enc).
+
+CREATE TABLE IF NOT EXISTS clinical_note (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  consultation_id  uuid NOT NULL UNIQUE REFERENCES consultation(id),
+  content_enc      text NOT NULL,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now()
+);
+`,
+  },
 ];

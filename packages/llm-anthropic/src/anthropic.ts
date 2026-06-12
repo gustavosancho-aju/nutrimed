@@ -26,6 +26,8 @@ export interface AnthropicLlmConfig {
   readonly model?: string;
   readonly endpoint?: string;
   readonly maxTokens?: number;
+  /** Documentos longos (ex.: nota clínica): remove o limite de 1-3 frases. */
+  readonly longForm?: boolean;
   readonly fetchImpl?: typeof fetch;
 }
 
@@ -56,10 +58,15 @@ export function anthropicConfigFromEnv(
   return { apiKey, personaId };
 }
 
-const OUTPUT_INSTRUCTIONS =
-  'Responda APENAS com um objeto JSON válido, sem markdown, no formato: ' +
-  '{"type":"atencao|sugestao|hipotese","severity":"normal|critical","text":"...","relevanceScore":0.0}. ' +
-  'O campo text deve ser curto (1-3 frases), em português do Brasil, em tom de sugestão.';
+function outputInstructions(longForm: boolean): string {
+  return (
+    'Responda APENAS com um objeto JSON válido (sem cercas de código), no formato: ' +
+    '{"type":"atencao|sugestao|hipotese|sintese","severity":"normal|critical","text":"...","relevanceScore":0.0}. ' +
+    (longForm
+      ? 'O campo text deve conter o DOCUMENTO COMPLETO em markdown, com todas as seções e quebras de linha escapadas no JSON, em português do Brasil.'
+      : 'O campo text deve ser curto (1-3 frases), em português do Brasil, em tom de sugestão.')
+  );
+}
 
 interface AnthropicResponse {
   model?: string;
@@ -94,7 +101,7 @@ export class AnthropicLlmProvider implements ILlmProvider {
       body: JSON.stringify({
         model: this.config.model ?? DEFAULT_MODEL,
         max_tokens: this.config.maxTokens ?? 300,
-        system: `${req.system}\n\n${OUTPUT_INSTRUCTIONS}`,
+        system: `${req.system}\n\n${outputInstructions(this.config.longForm ?? false)}`,
         messages: [
           {
             role: 'user',

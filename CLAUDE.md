@@ -32,7 +32,7 @@ Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build`
 | 1.7 | Disclaimers persistentes (FR19) | ✅ Done | (ver git log) |
 | 1.8 | ADR residência BR + checklist jurídico | ✅ Done | (ver git log) |
 
-Testes acumulados: **177/177 PASS** (+1 E2E skipif). ANTHROPIC_API_KEY no .env — smoke real do Haiku OK (1.79s, contribuição clínica em tom de sugestão). Candidatos STT prontos p/ POC 2.5: `@nutrimed/stt-deepgram` (keywords boost) e `@nutrimed/stt-openai` (Realtime, prompt hint) (inclui testes de UI — jsdom + Testing Library). CodeRabbit pre-commit **diferido p/ pre-PR** em todas (CLI exige `auth login` interativo via WSL).
+Testes acumulados: **181/181 PASS** (+1 E2E skipif). ANTHROPIC_API_KEY no .env — smoke real do Haiku OK (1.79s, contribuição clínica em tom de sugestão). Candidatos STT prontos p/ POC 2.5: `@nutrimed/stt-deepgram` (keywords boost) e `@nutrimed/stt-openai` (Realtime, prompt hint) (inclui testes de UI — jsdom + Testing Library). CodeRabbit pre-commit **diferido p/ pre-PR** em todas (CLI exige `auth login` interativo via WSL).
 
 ### Destaques de implementação
 - **1.4 Consent:** servidor é fonte de verdade; default NEGA. Gate `isCaptureAuthorized`/`assertCaptureAuthorized` + rota `GET /api/consultations/[id]/capture-authorization` (401/403/200). `CONSENT` 1:1 `CONSULTATION`; auditável (`granted_by`+`granted_at`).
@@ -78,6 +78,10 @@ LLM adapters: `@nutrimed/llm-anthropic` (Claude Haiku default) pronto; 2º candi
 ## Épico 7 — UI do Board (núcleo implementado, 7.1–7.4 Ready for Review)
 
 Tela de Consulta final: grid 2 colunas (transcrição AO VIVO via WS + painel lateral do board), design tokens §6 (4 tipos semânticos + acentos por doutor + motion), `<SuggestionCard>` com hierarquia de segurança NFR4 (⚠️ borda 4px/pulso 2x/topo fixo; 💡🔍 decaem 8s — NFR3), `<SuggestionFeed>` com 2 regiões ARIA-live (assertive/polite), `<DoctorStrip>` (estados ouvindo/sinalizando + silenciar FR13; vídeo = E8), fixar/dispensar com undo 5s (FR15), Modo Foco tecla F com represadas (FR16), render de consolidado/divergência (E6). Verificada ao vivo (produto-final-e7.png). **Identidade visual das personas** (Gemini 2.5 Flash Image): retratos fotorrealistas em apps/web/public/personas/{aurelio,paulo,yara}.png — cada um à mesa do consultório, acentos verde-petróleo; script scripts/gen-personas.mjs (GEMINI_API_KEY no .env) p/ regenerar. DoctorStrip usa os retratos (grayscale quando silenciado); slot vira vídeo no E8.
+
+## Épico 9 — Documentação Clínica ✅ núcleo (9.1–9.3 Ready for Review)
+
+Documentation Service (): nota clínica simples gerada da transcrição + contribuições do board (prompt fiel, rodapé de validação médica), persistida CIFRADA (migration 0004, AES-256-GCM) e AUDITADA (generate c/ modelVersion; edit como human-edit). Tela na consulta: gerar/regenerar + textarea editável + salvar. Adapter Anthropic ganhou . Nota completa verificada ao vivo (nota-clinica-e9.png). SOAP/EHR = fora (A1/O7).
 
 ## Pendências
 

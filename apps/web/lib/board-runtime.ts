@@ -2,7 +2,7 @@ import 'server-only';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BoardGateway } from '@nutrimed/board-gateway';
-import { FullBoardOrchestrator } from '@nutrimed/board';
+import { FullBoardOrchestrator, type FullBoardEvent } from '@nutrimed/board';
 import { startConsultationSession, type ConsultationSession } from '@nutrimed/session';
 import { AnthropicLlmProvider } from '@nutrimed/llm-anthropic';
 import { NamespacedKnowledgeStore, ingest, seedSources } from '@nutrimed/kb';
@@ -27,7 +27,7 @@ import { getDb } from './db';
 interface BoardRuntime {
   gateway: BoardGateway;
   kb: NamespacedKnowledgeStore;
-  active: Map<string, { session: ConsultationSession; orchestrator: FullBoardOrchestrator }>;
+  active: Map<string, { session: ConsultationSession; orchestrator: FullBoardOrchestrator; events: FullBoardEvent[] }>;
 }
 
 const globalForBoard = globalThis as unknown as { __nutrimedBoard?: Promise<BoardRuntime> };
@@ -135,8 +135,11 @@ export async function startDemoBoard(consultationId: string): Promise<{ llmLabel
       runtime.gateway.broadcastTranscript(consultationId, event.segment.text, event.segment.isFinal);
     }
   });
+  // histórico de contribuições da sessão (insumo da nota clínica — E9)
+  const events: FullBoardEvent[] = [];
+  orchestrator.subscribe((event) => events.push(event));
   orchestrator.start();
-  runtime.active.set(consultationId, { session, orchestrator });
+  runtime.active.set(consultationId, { session, orchestrator, events });
   return { llmLabel: label };
 }
 
@@ -144,4 +147,18 @@ export async function startDemoBoard(consultationId: string): Promise<{ llmLabel
 export async function requestSynthesis(consultationId: string): Promise<void> {
   const runtime = await getBoardRuntime();
   await runtime.active.get(consultationId)?.orchestrator.synthesizeNow();
+}
+
+/** Insumos da nota clínica (E9): transcript acumulado + contribuições do board. */
+export async function getNoteInputs(consultationId: string): Promise<{
+  finals: string[];
+  contributions: FullBoardEvent['contribution'][];
+} | null> {
+  const runtime = await getBoardRuntime();
+  const active = runtime.active.get(consultationId);
+  if (!active) return null;
+  return {
+    finals: active.session.getSnapshot().finalSegments.map((s) => s.text),
+    contributions: active.events.map((e) => e.contribution),
+  };
 }

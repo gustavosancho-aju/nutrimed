@@ -14,6 +14,7 @@
     "@nutrimed/auth": "workspace:*",
     "@nutrimed/board": "workspace:^",
     "@nutrimed/board-gateway": "workspace:^",
+    "@nutrimed/clinical-notes": "workspace:^",
     "@nutrimed/consent": "workspace:*",
     "@nutrimed/crypto": "workspace:*",
     "@nutrimed/db": "workspace:*",

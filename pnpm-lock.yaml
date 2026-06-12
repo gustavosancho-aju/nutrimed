@@ -41,6 +41,9 @@ importers:
       '@nutrimed/board-gateway':
         specifier: workspace:^
         version: link:../../packages/board-gateway
+      '@nutrimed/clinical-notes':
+        specifier: workspace:^
+        version: link:../../packages/clinical-notes
       '@nutrimed/consent':
         specifier: workspace:*
         version: link:../../packages/consent
@@ -220,6 +223,34 @@ importers:
       '@types/ws':
         specifier: ^8.18.0
         version: 8.18.1
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
+  packages/clinical-notes:
+    dependencies:
+      '@nutrimed/audit':
+        specifier: workspace:*
+        version: link:../audit
+      '@nutrimed/crypto':
+        specifier: workspace:*
+        version: link:../crypto
+      '@nutrimed/db':
+        specifier: workspace:*
+        version: link:../db
+      '@nutrimed/providers':
+        specifier: workspace:*
+        version: link:../providers
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.5.0
+        version: 0.5.1
+      '@nutrimed/consent':
+        specifier: workspace:*
+        version: link:../consent
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.21
       typescript:
         specifier: ^5.6.0
         version: 5.9.3
