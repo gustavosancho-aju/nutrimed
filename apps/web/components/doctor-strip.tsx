@@ -1,17 +1,20 @@
 'use client';
 
+import Image from 'next/image';
 import { useBoardStore } from '@/lib/board-store';
 
 /**
  * Faixa dos doutores (E7 — FR9 parcial/FR13). Vídeo em loop é E8 — aqui o
- * avatar estático + estado (ouvindo/sinalizando) + toggle de silenciar por
- * doutor (FR13). "Sinalizando" acende quando há ⚠️ recente da persona.
+ * RETRATO da persona (identidade visual gerada, cada um à mesa do consultório)
+ * + estado (ouvindo/sinalizando) + toggle de silenciar (FR13). "Sinalizando"
+ * acende quando há ⚠️ recente da persona. Fallback p/ falha de imagem = emoji
+ * (frontend-spec §3.1 — degradação graciosa).
  */
 
 const DOCTORS = [
-  { id: 'aurelio', emoji: '🩺', name: 'Aurélio', ring: 'ring-doctor-aurelio' },
-  { id: 'paulo', emoji: '❤️', name: 'Paulo', ring: 'ring-doctor-paulo' },
-  { id: 'yara', emoji: '🔬', name: 'Yara', ring: 'ring-doctor-yara' },
+  { id: 'aurelio', emoji: '🩺', name: 'Dr. Aurélio', specialty: 'Nutrologia' },
+  { id: 'paulo', emoji: '❤️', name: 'Dr. Paulo', specialty: 'Cardiologia' },
+  { id: 'yara', emoji: '🔬', name: 'Dra. Yara', specialty: 'Endocrinologia' },
 ] as const;
 
 const SIGNAL_WINDOW_MS = 8000;
@@ -41,8 +44,16 @@ export function DoctorStrip() {
               signaling ? 'ring-attn' : 'ring-transparent'
             } ${isSilenced ? 'opacity-50' : ''}`}
           >
-            {/* placeholder do vídeo em loop (E8) — avatar estático com estado */}
-            <span aria-hidden="true" className="text-2xl">{doctor.emoji}</span>
+            {/* retrato da persona — o slot vira vídeo em loop no E8 */}
+            <Image
+              src={`/personas/${doctor.id}.png`}
+              alt={`${doctor.name} — ${doctor.specialty}`}
+              width={104}
+              height={104}
+              className={`aspect-square w-full max-w-[104px] rounded-[10px] object-cover ${
+                isSilenced ? 'grayscale' : ''
+              }`}
+            />
             <span className="text-xs font-semibold text-ink">{doctor.name}</span>
             <span className="text-[10px] text-ink-muted">
               {isSilenced ? '🔇 silenciado' : signaling ? '▲ sinalizando' : '● ouvindo'}

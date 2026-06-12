@@ -77,7 +77,7 @@ LLM adapters: `@nutrimed/llm-anthropic` (Claude Haiku default) pronto; 2º candi
 
 ## Épico 7 — UI do Board (núcleo implementado, 7.1–7.4 Ready for Review)
 
-Tela de Consulta final: grid 2 colunas (transcrição AO VIVO via WS + painel lateral do board), design tokens §6 (4 tipos semânticos + acentos por doutor + motion), `<SuggestionCard>` com hierarquia de segurança NFR4 (⚠️ borda 4px/pulso 2x/topo fixo; 💡🔍 decaem 8s — NFR3), `<SuggestionFeed>` com 2 regiões ARIA-live (assertive/polite), `<DoctorStrip>` (estados ouvindo/sinalizando + silenciar FR13; vídeo = E8), fixar/dispensar com undo 5s (FR15), Modo Foco tecla F com represadas (FR16), render de consolidado/divergência (E6). Verificada ao vivo (produto-final-e7.png).
+Tela de Consulta final: grid 2 colunas (transcrição AO VIVO via WS + painel lateral do board), design tokens §6 (4 tipos semânticos + acentos por doutor + motion), `<SuggestionCard>` com hierarquia de segurança NFR4 (⚠️ borda 4px/pulso 2x/topo fixo; 💡🔍 decaem 8s — NFR3), `<SuggestionFeed>` com 2 regiões ARIA-live (assertive/polite), `<DoctorStrip>` (estados ouvindo/sinalizando + silenciar FR13; vídeo = E8), fixar/dispensar com undo 5s (FR15), Modo Foco tecla F com represadas (FR16), render de consolidado/divergência (E6). Verificada ao vivo (produto-final-e7.png). **Identidade visual das personas** (Gemini 2.5 Flash Image): retratos fotorrealistas em apps/web/public/personas/{aurelio,paulo,yara}.png — cada um à mesa do consultório, acentos verde-petróleo; script scripts/gen-personas.mjs (GEMINI_API_KEY no .env) p/ regenerar. DoctorStrip usa os retratos (grayscale quando silenciado); slot vira vídeo no E8.
 
 ## Pendências
 
