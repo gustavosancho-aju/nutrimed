@@ -1,0 +1,60 @@
+# NutriMed — contexto de build mínimo e seguro.
+# Regra de ouro: NENHUM segredo entra na imagem (CLAUDE.md: keys vazaram uma vez).
+
+# Dependências e artefatos de build (reconstruídos dentro da imagem)
+node_modules
+**/node_modules
+.next
+**/.next
+dist
+**/dist
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# Segredos / ambiente — runtime keys vêm do cofre do Fly (fly secrets), nunca da imagem
+.env
+.env.*
+**/.env
+**/.env.*
+apps/web/.env.local
+
+# Dados locais de dev (PGlite file-backed) — produção usa Postgres gerenciado BR
+.pgdata
+**/.pgdata
+
+# Screenshots e PNGs da raiz (artefatos de demo/QA, não vão para produção)
+*.png
+bg-check-*.png
+premium-*.png
+demo-board-*.png
+shot-*.png
+verify-*.png
+nota-clinica-*.png
+produto-*.png
+telemetria-*.png
+
+# Git e CI
+.git
+.gitignore
+.github
+
+# Tooling de agentes / docs (a SEED do KB é re-incluída explicitamente no Dockerfile)
+.claude
+.aiox
+.aiox-core
+docs
+!docs/personas-knowledge-base-seed.md
+
+# Testes e coverage (a imagem de runtime não executa testes — isso é gate de CI)
+**/*.test.ts
+**/*.test.tsx
+coverage
+**/coverage
+playwright-report
+test-results
+
+# Editor / SO
+.vscode
+.idea
+.DS_Store
+Thumbs.db

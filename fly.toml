@@ -1,0 +1,99 @@
+# NutriMed — Fly.io · região GRU (São Paulo) — ADR-009 (residência BR) + ADR-010 (runtime).
+#
+# Modelo de runtime (ADR-010): UM processo Node long-lived, single-process, stateful.
+#  - Estado de sessão vive em memória (Map por consultationId) → NÃO pode haver
+#    balanceamento que espalhe uma consulta por instâncias. Por isso:
+#      * min_machines_running = 1 e (nesta fase) UMA instância sticky.
+#      * auto_stop_machines = "off" — o processo NÃO pode dormir no meio de uma consulta.
+#  - Deploy = graceful drain (ADR-010 Decisão 4): para de aceitar novas consultas,
+#    mantém as ativas até encerrarem. strategy = "bluegreen" não serve (estado vivo
+#    não migra); usamos rolling com 1 máquina + grace longo.
+#
+# IMPORTANTE: este arquivo NÃO contém segredos. Todos os secrets vão via
+# `fly secrets set ...` (ver docs/deploy/RUNBOOK.md §5).
+
+app = "nutrimed"
+primary_region = "gru"   # São Paulo — critério eliminatório de residência BR (ADR-009)
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  # Portas do processo (sem segredos aqui). BOARD_WS_PORT também é lido por board-runtime.ts.
+  PORT = "3000"
+  BOARD_WS_PORT = "3001"
+  NODE_ENV = "production"
+  NEXT_TELEMETRY_DISABLED = "1"
+  # URL pública do WS para o browser (consumida por NEXT_PUBLIC_BOARD_WS_URL no client).
+  # Mesmo host do app, porta do board exposta abaixo. Ajuste o domínio ao seu app real.
+  NEXT_PUBLIC_BOARD_WS_URL = "wss://nutrimed.fly.dev:3001"
+
+# --- HTTP do Next (porta 3000) ---------------------------------------------
+[http_service]
+  internal_port = 3000
+  force_https = true
+  # Single-process stateful: nunca derrubar a máquina sozinho, nunca <1 viva.
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 1
+  processes = ["app"]
+
+  [http_service.concurrency]
+    # Muitas sessões por processo (ADR-010 Decisão 3). Calibrar com a POC de carga (3.4).
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+  # Healthcheck HTTP — bate em /login (rota pública que renderiza sem auth).
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "40s"
+    method = "GET"
+    path = "/login"
+
+# --- WebSocket do board (porta 3001: /board e /audio) -----------------------
+# Serviço TCP cru com TLS terminado pelo Fly → handler "tls" + "http" para
+# permitir o upgrade WebSocket. SEM idle timeout que mate conexões longas:
+# o Fly não fecha WS ociosos por padrão; o heartbeat do BoardGateway mantém vivo.
+[[services]]
+  protocol = "tcp"
+  internal_port = 3001
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [[services.ports]]
+    # Porta 3001 explícita caso o NEXT_PUBLIC_BOARD_WS_URL aponte para :3001.
+    port = 3001
+    handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type = "connections"
+    soft_limit = 200
+    hard_limit = 250
+
+  # TCP check só confirma que o WS está escutando (não valida o upgrade).
+  [[services.tcp_checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "60s"
+
+# --- VM -----------------------------------------------------------------
+# Sessões de voz em tempo real + LLM/STT streaming: memória folgada.
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2gb"
+
+# --- Deploy: graceful drain (ADR-010 Decisão 4) -------------------------
+[deploy]
+  # rolling com 1 máquina = derruba a antiga só após a nova estar saudável.
+  # Anunciar/agendar deploys em janela de baixa atividade (estado vivo não migra).
+  strategy = "rolling"
+  # tempo para drenar consultas ativas antes do kill (ajuste à duração típica da consulta).
+  wait_timeout = "5m"

@@ -37,17 +37,21 @@ class PushSttProvider implements ISttProvider {
     this.wake?.();
   }
 
-  openStream(_opts: { lang: 'pt-BR' }): SttSession {
-    const self = this;
+  openStream(): SttSession {
+    const queue = this.queue;
+    const setWake = (fn: (() => void) | null): void => {
+      this.wake = fn;
+    };
+    const callWake = (): void => this.wake?.();
     let closed = false;
     return {
       async *[Symbol.asyncIterator](): AsyncIterator<TranscriptSegment> {
         for (;;) {
           if (closed) return;
-          const item = self.queue.shift();
+          const item = queue.shift();
           if (item === undefined) {
             await new Promise<void>((resolve) => {
-              self.wake = resolve;
+              setWake(resolve);
             });
             continue;
           }
@@ -58,7 +62,7 @@ class PushSttProvider implements ISttProvider {
       },
       async close(): Promise<void> {
         closed = true;
-        self.wake?.();
+        callWake();
       },
     };
   }

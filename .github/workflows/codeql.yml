@@ -1,0 +1,38 @@
+name: CodeQL (SAST)
+
+# Análise estática de segurança sobre TypeScript/JavaScript (Blueprint §6).
+# Findings críticos aparecem na aba Security; configure branch protection p/ exigir
+# o check "CodeQL" antes do merge (BLOQUEANTE — passo manual no GitHub, ver RUNBOOK §6).
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"   # varredura semanal (segunda 06:00 UTC)
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze (javascript-typescript)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript-typescript"
