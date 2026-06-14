@@ -1,0 +1,28 @@
+version: 2
+# Atualização e alerta de vulnerabilidades de dependências (Blueprint §6).
+updates:
+  - package-ecosystem: npm        # detecta pnpm-lock.yaml
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      # Agrupa patches/minors p/ reduzir ruído de PR; majors vêm individuais.
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+    labels:
+      - dependencies
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels:
+      - ci
+
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels:
+      - docker
