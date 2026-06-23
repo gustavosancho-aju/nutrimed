@@ -10,7 +10,8 @@
 ## Estado: MVP funcional fim-a-fim (2026-06-11)
 
 **9 de 10 épicos com núcleo implementado e verificado ao vivo no browser** (falta E8 — vídeos).
-Suíte: **187/187 PASS** (+1 E2E skipif) · gates `lint`/`typecheck`/`test`/`build` todos PASS (19 pacotes).
+**E11 (Pacientes & Dashboard) Fase 1 (fundação) Done** — falta verificação ao vivo no browser.
+Suíte: **202 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS (20 pacotes).
 
 | Épico | Status | Épico | Status |
 |---|---|---|---|
@@ -19,6 +20,7 @@ Suíte: **187/187 PASS** (+1 E2E skipif) · gates `lint`/`typecheck`/`test`/`bui
 | E3 Walking Skeleton + mic real | ✅ (faltam 3.4/3.5) | E8 Vídeo das Personas | ⬜ pendente |
 | E4 Motores (gate/dedup/pausa) | ✅ núcleo | E9 Documentação Clínica | ✅ |
 | E5 RAG namespaces + Reasoner | ✅ núcleo | E10 Observabilidade & Piloto | ✅ núcleo |
+| E9 Documentação Clínica | ✅ | E11 Pacientes & Dashboard | 🔨 Fase 1 (fundação) Done |
 
 **Fluxo vivo:** login (`demo@nutrimed.test`/`nutrimed123`) → consulta → consentimento (default NEGA)
 → `/consultations/[id]`: transcrição AO VIVO + board (3 personas com retratos, feed com hierarquia
@@ -26,14 +28,14 @@ de segurança, Modo Foco tecla F) → "▶ Consulta simulada" (STT roteirizado) 
 (mic real → WS `/audio` → Deepgram) → contribuições reais do **claude-haiku-4-5** auditadas →
 síntese do Aurélio → nota clínica gerada/editável (cifrada+auditada) → telemetria (custo/gate/latência/ruído).
 
-## Monorepo (19 pacotes)
+## Monorepo (20 pacotes)
 
 ```
 apps/web                 Tela de consulta completa + gateway WS in-process + retratos
 packages/shared-types    Protocolo WS v1 (contribution/ping/transcript)
 packages/domain          CLINICAL_VOCABULARY (boost STT)
 packages/crypto          AES-256-GCM (NFR9)
-packages/db              Migrations 0001–0004 · PGlite dev / pg prod (TLS)
+packages/db              Migrations 0001–0005 · PGlite dev / pg prod (TLS)
 packages/auth            scrypt + sessões DB-backed
 packages/consent         Gate de gravação FR20 (servidor, default NEGA)
 packages/audit           Trilha append-only com proveniência (NFR10)
@@ -48,6 +50,7 @@ packages/board           E6: FullBoardOrchestrator (3 personas, síntese, diverg
 packages/board-gateway   WS autenticado /board + /audio
 packages/clinical-notes  E9: nota cifrada+auditada
 packages/telemetry       E10: custo/gate/latência/ruído + Quiet Board trigger
+packages/patients        E11: paciente cifrado + medições (bioimpedância/exames) + computeAge
 ```
 
 Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build` · `npm run dev`.

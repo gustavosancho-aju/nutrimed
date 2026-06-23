@@ -22,6 +22,7 @@
     "@nutrimed/engines": "workspace:^",
     "@nutrimed/kb": "workspace:^",
     "@nutrimed/llm-anthropic": "workspace:^",
+    "@nutrimed/patients": "workspace:*",
     "@nutrimed/providers": "workspace:*",
     "@nutrimed/session": "workspace:*",
     "@nutrimed/shared-types": "workspace:*",

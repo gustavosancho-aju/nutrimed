@@ -115,4 +115,55 @@ CREATE TABLE IF NOT EXISTS clinical_note (
 );
 `,
   },
+  {
+    name: '0005_patients_evolution',
+    sql: `
+-- Pacientes & Evolução (Story 11.1 / E11, FR22/FR25). O paciente vira entidade
+-- de primeira classe (dono = médico). PII e dados de saúde são cifrados em
+-- repouso (NFR9, sufixo _enc). Idade NÃO é coluna — é derivada de birth_date_enc
+-- no servidor. Cada medição guarda os valores num blob JSON cifrado (values_enc),
+-- decifrado no servidor ao montar a dashboard (ADR-011) — mesmo padrão da nota.
+
+CREATE TABLE IF NOT EXISTS patient (
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id        uuid NOT NULL REFERENCES app_user(id),
+  name_enc       text NOT NULL,
+  phone_enc      text,
+  birth_date_enc text,
+  goal_enc       text,
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  updated_at     timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_patient_user_id ON patient(user_id);
+
+-- Consultas passam a apontar para um paciente. NULLABLE de propósito: consultas
+-- antigas (rótulo solto em patient_label_enc) continuam válidas, sem backfill.
+ALTER TABLE consultation ADD COLUMN IF NOT EXISTS patient_id uuid REFERENCES patient(id);
+CREATE INDEX IF NOT EXISTS idx_consultation_patient_id ON consultation(patient_id);
+
+-- Evolução de composição corporal (bioimpedância) — N por paciente.
+-- values_enc = AES-256-GCM de JSON { peso, massaMuscular, massaGordura, cintura, imc, pgc }.
+CREATE TABLE IF NOT EXISTS body_composition (
+  id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  patient_id             uuid NOT NULL REFERENCES patient(id),
+  measured_at            timestamptz NOT NULL,
+  source_consultation_id uuid REFERENCES consultation(id),
+  values_enc             text NOT NULL,
+  created_at             timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_body_composition_patient_id ON body_composition(patient_id);
+
+-- Evolução de exames laboratoriais — N por paciente.
+-- values_enc = AES-256-GCM de JSON { ldl, hba1c, insulina }.
+CREATE TABLE IF NOT EXISTS lab_exam (
+  id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  patient_id             uuid NOT NULL REFERENCES patient(id),
+  measured_at            timestamptz NOT NULL,
+  source_consultation_id uuid REFERENCES consultation(id),
+  values_enc             text NOT NULL,
+  created_at             timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_lab_exam_patient_id ON lab_exam(patient_id);
+`,
+  },
 ];

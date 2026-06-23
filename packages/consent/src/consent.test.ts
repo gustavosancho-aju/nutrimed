@@ -115,6 +115,33 @@ describe('Consent Service — gate de gravação (FR20)', () => {
     });
   });
 
+  describe('FR23 (E11) — vínculo opcional a paciente, sem quebrar o legado', () => {
+    it('consulta SEM patientId (legado) continua válida e com patient_id nulo', async () => {
+      const consultationId = await openConsultation();
+      const res = await exec.query<{ patient_id: string | null }>(
+        'SELECT patient_id FROM consultation WHERE id = $1',
+        [consultationId],
+      );
+      expect(res.rows[0]!.patient_id).toBeNull();
+      // E o gate de consentimento segue intacto (default nega).
+      expect(await isCaptureAuthorized(exec, consultationId)).toBe(false);
+    });
+
+    it('consulta COM patientId grava o vínculo', async () => {
+      const p = await exec.query<{ id: string }>(
+        'INSERT INTO patient (user_id, name_enc) VALUES ($1, $2) RETURNING id',
+        [userId, 'x'],
+      );
+      const patientId = p.rows[0]!.id;
+      const consultationId = await createConsultation(exec, userId, 'Paciente X', KEY, patientId);
+      const res = await exec.query<{ patient_id: string | null }>(
+        'SELECT patient_id FROM consultation WHERE id = $1',
+        [consultationId],
+      );
+      expect(res.rows[0]!.patient_id).toBe(patientId);
+    });
+  });
+
   describe('Integridade do gate', () => {
     it('grantConsent em consulta inexistente falha (não cria silenciosamente)', async () => {
       await expect(

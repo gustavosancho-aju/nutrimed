@@ -1,0 +1,18 @@
+export {
+  computeAge,
+  createPatient,
+  updatePatient,
+  loadPatient,
+  listPatients,
+  addBodyComposition,
+  addLabExam,
+  listBodyComposition,
+  listLabExam,
+  type Patient,
+  type PatientInput,
+  type WriteOrigin,
+  type Measurement,
+  type MeasurementInput,
+  type BodyCompositionValues,
+  type LabExamValues,
+} from './patients';

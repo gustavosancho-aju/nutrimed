@@ -42,7 +42,13 @@ afterAll(async () => {
 
 describe('Migrations 0001 — schema base (AC1, AC3)', () => {
   it('aplica as migrations do zero', () => {
-    expect(firstRun).toEqual(['0001_init', '0002_auth_session', '0003_audit_provenance', '0004_clinical_note']);
+    expect(firstRun).toEqual([
+      '0001_init',
+      '0002_auth_session',
+      '0003_audit_provenance',
+      '0004_clinical_note',
+      '0005_patients_evolution',
+    ]);
   });
 
   it('é idempotente — reexecutar não reaplica nada (AC3)', async () => {
@@ -87,6 +93,73 @@ describe('Criptografia em repouso — AES-256-GCM (AC2, AC5)', () => {
     expect(stored).not.toContain('diabetes');
     // E só a chave correta recupera o original.
     expect(decryptField(stored, key)).toBe(plaintext);
+  });
+});
+
+describe('Migration 0005 — pacientes & evolução (Story 11.1)', () => {
+  it('cria patient, body_composition e lab_exam', async () => {
+    const res = await exec.query<{ table_name: string }>(
+      `SELECT table_name FROM information_schema.tables
+       WHERE table_schema = 'public' AND table_name = ANY($1)`,
+      [['patient', 'body_composition', 'lab_exam']],
+    );
+    expect(res.rows.map((r) => r.table_name).sort()).toEqual([
+      'body_composition',
+      'lab_exam',
+      'patient',
+    ]);
+  });
+
+  it('adiciona consultation.patient_id NULLABLE (consultas antigas continuam válidas — AC2)', async () => {
+    const col = await exec.query<{ is_nullable: string }>(
+      `SELECT is_nullable FROM information_schema.columns
+       WHERE table_name = 'consultation' AND column_name = 'patient_id'`,
+    );
+    expect(col.rows[0]!.is_nullable).toBe('YES');
+
+    // Consulta SEM paciente (legado) ainda insere sem erro.
+    const userId = await insertUser('legado@nutrimed.test');
+    await expect(
+      exec.query('INSERT INTO consultation (user_id, patient_label_enc) VALUES ($1, $2)', [
+        userId,
+        encryptField('Rótulo legado', key),
+      ]),
+    ).resolves.toBeDefined();
+  });
+
+  it('cripto em repouso (AC7): paciente e medição ILEGÍVEIS em claro, recuperáveis só com a chave', async () => {
+    const userId = await insertUser('evolucao@nutrimed.test');
+
+    const nameEnc = encryptField('João Pereira', key);
+    const p = await exec.query<{ id: string }>(
+      'INSERT INTO patient (user_id, name_enc, birth_date_enc) VALUES ($1, $2, $3) RETURNING id',
+      [userId, nameEnc, encryptField('1985-04-12', key)],
+    );
+    const patientId = p.rows[0]!.id;
+
+    const values = JSON.stringify({ peso: 82.4, massaMuscular: 36.1, pgc: 24.3 });
+    await exec.query(
+      'INSERT INTO body_composition (patient_id, measured_at, values_enc) VALUES ($1, now(), $2)',
+      [patientId, encryptField(values, key)],
+    );
+
+    const rawPatient = await exec.query<{ name_enc: string }>(
+      'SELECT name_enc FROM patient WHERE id = $1',
+      [patientId],
+    );
+    expect(rawPatient.rows[0]!.name_enc).not.toContain('João');
+    expect(decryptField(rawPatient.rows[0]!.name_enc, key)).toBe('João Pereira');
+
+    const rawBc = await exec.query<{ values_enc: string }>(
+      'SELECT values_enc FROM body_composition WHERE patient_id = $1',
+      [patientId],
+    );
+    expect(rawBc.rows[0]!.values_enc).not.toContain('82.4');
+    expect(JSON.parse(decryptField(rawBc.rows[0]!.values_enc, key))).toEqual({
+      peso: 82.4,
+      massaMuscular: 36.1,
+      pgc: 24.3,
+    });
   });
 });
 
