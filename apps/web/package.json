@@ -21,6 +21,7 @@
     "@nutrimed/domain": "workspace:*",
     "@nutrimed/engines": "workspace:^",
     "@nutrimed/kb": "workspace:^",
+    "@nutrimed/lab-import": "workspace:*",
     "@nutrimed/llm-anthropic": "workspace:^",
     "@nutrimed/patients": "workspace:*",
     "@nutrimed/providers": "workspace:*",

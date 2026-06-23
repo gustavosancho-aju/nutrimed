@@ -42,6 +42,13 @@ export async function addMeasurementAction(formData: FormData): Promise<void> {
   const dateRaw = String(formData.get('measuredAt') ?? '').trim();
   const measuredAt = dateRaw ? new Date(`${dateRaw}T00:00:00Z`) : new Date();
 
+  // Proveniência (NFR10): se veio de importação, a medição confirmada pelo médico
+  // registra o modelo extrator; senão é entrada manual ('human-edit').
+  const modelVersion = String(formData.get('modelVersion') ?? '').trim();
+  const origin = modelVersion
+    ? { action: 'measurement-import', modelVersion }
+    : { action: 'measurement-add' };
+
   if (kind === 'lab') {
     const values: LabExamValues = compact({
       ldl: parseDecimal(formData.get('ldl')),
@@ -49,7 +56,7 @@ export async function addMeasurementAction(formData: FormData): Promise<void> {
       insulina: parseDecimal(formData.get('insulina')),
     });
     if (Object.keys(values).length > 0) {
-      await addLabExam(db, patientId, { measuredAt, values }, key);
+      await addLabExam(db, patientId, { measuredAt, values }, key, origin);
     }
   } else {
     const values: BodyCompositionValues = compact({
@@ -61,7 +68,7 @@ export async function addMeasurementAction(formData: FormData): Promise<void> {
       pgc: parseDecimal(formData.get('pgc')),
     });
     if (Object.keys(values).length > 0) {
-      await addBodyComposition(db, patientId, { measuredAt, values }, key);
+      await addBodyComposition(db, patientId, { measuredAt, values }, key, origin);
     }
   }
 

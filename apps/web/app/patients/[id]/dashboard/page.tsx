@@ -58,17 +58,25 @@ export default async function DashboardPage({
 
   return (
     <main className="mx-auto min-h-screen max-w-4xl p-8">
-      <header className="border-b border-ink/10 pb-5">
-        <Link href={`/patients/${id}`} className="text-sm text-ink-muted transition-colors hover:text-ink">
-          ← {patient.name}
+      <header className="flex items-start justify-between gap-4 border-b border-ink/10 pb-5">
+        <div>
+          <Link href={`/patients/${id}`} className="text-sm text-ink-muted transition-colors hover:text-ink">
+            ← {patient.name}
+          </Link>
+          <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight text-ink">
+            Dashboard de evolução
+          </h1>
+          <p className="text-sm text-ink-muted">
+            {patient.name}
+            {age !== null ? ` · ${age} anos` : ''}
+          </p>
+        </div>
+        <Link
+          href={`/patients/${id}/import`}
+          className="shrink-0 rounded-[10px] border border-ink/15 px-3.5 py-1.5 text-sm text-ink transition-colors hover:bg-surface-muted"
+        >
+          📄 Importar laudo (PDF)
         </Link>
-        <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight text-ink">
-          Dashboard de evolução
-        </h1>
-        <p className="text-sm text-ink-muted">
-          {patient.name}
-          {age !== null ? ` · ${age} anos` : ''}
-        </p>
       </header>
 
       {/* Abas */}

@@ -10,8 +10,8 @@
 ## Estado: MVP funcional fim-a-fim (2026-06-11)
 
 **9 de 10 épicos com núcleo implementado e verificado ao vivo no browser** (falta E8 — vídeos).
-**E11 (Pacientes & Dashboard) Fases 1–3 Done** (fundação + lista/ficha + dashboard 3 abas), verificadas ao vivo.
-Suíte: **213 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS (20 pacotes).
+**E11 (Pacientes & Dashboard) COMPLETO** (4 fases: fundação + lista/ficha + dashboard 3 abas + importação de PDF), verificadas ao vivo.
+Suíte: **223 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS (21 pacotes).
 
 | Épico | Status | Épico | Status |
 |---|---|---|---|
@@ -20,7 +20,7 @@ Suíte: **213 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos 
 | E3 Walking Skeleton + mic real | ✅ (faltam 3.4/3.5) | E8 Vídeo das Personas | ⬜ pendente |
 | E4 Motores (gate/dedup/pausa) | ✅ núcleo | E9 Documentação Clínica | ✅ |
 | E5 RAG namespaces + Reasoner | ✅ núcleo | E10 Observabilidade & Piloto | ✅ núcleo |
-| E9 Documentação Clínica | ✅ | E11 Pacientes & Dashboard | 🔨 Fases 1–3 Done (falta 4: PDF) |
+| E9 Documentação Clínica | ✅ | E11 Pacientes & Dashboard | ✅ completo (4 fases) |
 
 **Fluxo vivo:** login (`demo@nutrimed.test`/`nutrimed123`) → consulta → consentimento (default NEGA)
 → `/consultations/[id]`: transcrição AO VIVO + board (3 personas com retratos, feed com hierarquia
@@ -28,7 +28,7 @@ de segurança, Modo Foco tecla F) → "▶ Consulta simulada" (STT roteirizado) 
 (mic real → WS `/audio` → Deepgram) → contribuições reais do **claude-haiku-4-5** auditadas →
 síntese do Aurélio → nota clínica gerada/editável (cifrada+auditada) → telemetria (custo/gate/latência/ruído).
 
-## Monorepo (20 pacotes)
+## Monorepo (21 pacotes)
 
 ```
 apps/web                 Tela de consulta completa + gateway WS in-process + retratos
@@ -51,6 +51,7 @@ packages/board-gateway   WS autenticado /board + /audio
 packages/clinical-notes  E9: nota cifrada+auditada
 packages/telemetry       E10: custo/gate/latência/ruído + Quiet Board trigger
 packages/patients        E11: paciente cifrado + medições (bioimpedância/exames) + computeAge
+packages/lab-import      E11: extração de laudo PDF (ILabExtractor: Claude nativo + fake) — ADR-012
 ```
 
 Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build` · `npm run dev`.

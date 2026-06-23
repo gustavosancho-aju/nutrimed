@@ -16,17 +16,26 @@ export function MeasurementForm({
   kind,
   fields,
   defaultDate,
+  defaults,
+  modelVersion,
+  title = 'Nova medição',
 }: {
   patientId: string;
   kind: 'body' | 'lab';
   fields: readonly MeasurementField[];
   defaultDate: string;
+  /** Pré-preenchimento (ex.: rascunho de uma importação — Story 11.10). */
+  defaults?: Record<string, number | string | undefined>;
+  /** Proveniência da extração para a auditoria (NFR10); ausente ⇒ entrada manual. */
+  modelVersion?: string;
+  title?: string;
 }) {
   return (
     <form action={addMeasurementAction} className="card-premium gold-hairline mt-6 p-5">
       <input type="hidden" name="patientId" value={patientId} />
       <input type="hidden" name="kind" value={kind} />
-      <p className="text-sm font-medium text-ink">Nova medição</p>
+      {modelVersion && <input type="hidden" name="modelVersion" value={modelVersion} />}
+      <p className="text-sm font-medium text-ink">{title}</p>
       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
         <label className="space-y-1">
           <span className="text-xs text-ink-muted">Data</span>
@@ -48,6 +57,7 @@ export function MeasurementForm({
               type="text"
               inputMode="decimal"
               placeholder="—"
+              defaultValue={defaults?.[f.name] ?? ''}
               className="w-full rounded-[10px] border border-ink/15 bg-white px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
             />
           </label>
