@@ -77,15 +77,12 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
           </div>
         )}
         <div className="mt-5">
-          {/* Dashboard de evolução chega na Fase 3 — entrada visível, sem 404. */}
-          <span
-            aria-disabled="true"
-            title="Dashboard de evolução — disponível na próxima fase"
-            className="inline-flex cursor-not-allowed items-center gap-2 rounded-[10px] border border-ink/15 px-4 py-2 text-sm text-ink-muted opacity-70"
+          <Link
+            href={`/patients/${patient.id}/dashboard`}
+            className="inline-flex items-center gap-2 rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
           >
             📊 Dashboard de evolução
-            <span className="rounded-full bg-ink/10 px-2 py-0.5 text-[11px]">em breve</span>
-          </span>
+          </Link>
         </div>
       </section>
 

@@ -10,8 +10,8 @@
 ## Estado: MVP funcional fim-a-fim (2026-06-11)
 
 **9 de 10 épicos com núcleo implementado e verificado ao vivo no browser** (falta E8 — vídeos).
-**E11 (Pacientes & Dashboard) Fases 1–2 Done** (fundação + lista/ficha), verificadas ao vivo no browser.
-Suíte: **203 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS (20 pacotes).
+**E11 (Pacientes & Dashboard) Fases 1–3 Done** (fundação + lista/ficha + dashboard 3 abas), verificadas ao vivo.
+Suíte: **213 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS (20 pacotes).
 
 | Épico | Status | Épico | Status |
 |---|---|---|---|
@@ -20,7 +20,7 @@ Suíte: **203 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos 
 | E3 Walking Skeleton + mic real | ✅ (faltam 3.4/3.5) | E8 Vídeo das Personas | ⬜ pendente |
 | E4 Motores (gate/dedup/pausa) | ✅ núcleo | E9 Documentação Clínica | ✅ |
 | E5 RAG namespaces + Reasoner | ✅ núcleo | E10 Observabilidade & Piloto | ✅ núcleo |
-| E9 Documentação Clínica | ✅ | E11 Pacientes & Dashboard | 🔨 Fases 1–2 Done (falta 3–4) |
+| E9 Documentação Clínica | ✅ | E11 Pacientes & Dashboard | 🔨 Fases 1–3 Done (falta 4: PDF) |
 
 **Fluxo vivo:** login (`demo@nutrimed.test`/`nutrimed123`) → consulta → consentimento (default NEGA)
 → `/consultations/[id]`: transcrição AO VIVO + board (3 personas com retratos, feed com hierarquia
