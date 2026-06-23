@@ -60,6 +60,28 @@ export async function createConsultation(
   return consultationId;
 }
 
+/** Resumo de uma consulta para o histórico da ficha do paciente (E11/11.5). */
+export interface ConsultationSummary {
+  id: string;
+  status: string;
+  createdAt: Date;
+}
+
+/**
+ * Lista as consultas de um paciente (FR24), mais recente primeiro. Retorna só
+ * metadados não sensíveis (id/status/data) — nenhum campo cifrado é exposto.
+ */
+export async function listConsultationsByPatient(
+  db: SqlExecutor,
+  patientId: string,
+): Promise<ConsultationSummary[]> {
+  const res = await db.query<{ id: string; status: string; created_at: Date }>(
+    'SELECT id, status, created_at FROM consultation WHERE patient_id = $1 ORDER BY created_at DESC, id DESC',
+    [patientId],
+  );
+  return res.rows.map((r) => ({ id: r.id, status: r.status, createdAt: new Date(r.created_at) }));
+}
+
 /**
  * Concede o consentimento de gravação para a consulta, registrando quem
  * consentiu e quando (AC2/AC5). Idempotente: reconceder apenas atualiza o

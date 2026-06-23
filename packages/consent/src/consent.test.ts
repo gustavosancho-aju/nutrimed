@@ -10,6 +10,7 @@ import {
   getConsentStatus,
   isCaptureAuthorized,
   assertCaptureAuthorized,
+  listConsultationsByPatient,
   ConsentRequiredError,
 } from './consent';
 
@@ -139,6 +140,32 @@ describe('Consent Service — gate de gravação (FR20)', () => {
         [consultationId],
       );
       expect(res.rows[0]!.patient_id).toBe(patientId);
+    });
+
+    it('listConsultationsByPatient retorna o histórico do paciente, mais recente primeiro (FR24)', async () => {
+      const p = await exec.query<{ id: string }>(
+        'INSERT INTO patient (user_id, name_enc) VALUES ($1, $2) RETURNING id',
+        [userId, 'hist'],
+      );
+      const patientId = p.rows[0]!.id;
+      const c1 = await createConsultation(exec, userId, 'C1', KEY, patientId);
+      const c2 = await createConsultation(exec, userId, 'C2', KEY, patientId);
+      // paciente sem relação não deve aparecer
+      const other = await exec.query<{ id: string }>(
+        'INSERT INTO patient (user_id, name_enc) VALUES ($1, $2) RETURNING id',
+        [userId, 'outro'],
+      );
+      const cOutro = await createConsultation(exec, userId, 'C-outro', KEY, other.rows[0]!.id);
+
+      const hist = await listConsultationsByPatient(exec, patientId);
+      const ids = hist.map((h) => h.id);
+      expect(ids).toHaveLength(2);
+      expect(ids).toContain(c1);
+      expect(ids).toContain(c2);
+      expect(ids).not.toContain(cOutro); // escopo por paciente
+      // ordenação mais-recente-primeiro (sem depender de tie-break por id)
+      expect(hist[0]!.createdAt.getTime()).toBeGreaterThanOrEqual(hist[1]!.createdAt.getTime());
+      expect(hist[0]!.status).toBe('open');
     });
   });
 
