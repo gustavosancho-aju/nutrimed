@@ -18,6 +18,7 @@
 | CJ-8 | **RIPD/DPIA** (Relatório de Impacto, art. 38 LGPD): é exigível antes do piloto? Quem assina como encarregado (DPO)? | R2 | 🟡 Evolutivo (recomendado iniciar no piloto; confirmar exigibilidade) |
 | CJ-9 | **Base de conhecimento curada por persona** (FR21): uso de diretrizes/publicações de terceiros na KB exige licenciamento/atribuição? | FR21, R8 (qualidade da KB) | 🟡 Evolutivo |
 | CJ-10 | **Incidentes de segurança** (art. 48 LGPD): plano de comunicação ANPD/titulares proporcional ao piloto. | R2, NFR9 | 🟡 Evolutivo (rascunho antes do piloto; formalização durante) |
+| CJ-11 | **Importação de laudos por IA (E11/ADR-012)**: enviar um laudo (BIA/exames) a um extrator externo é transferência internacional de dado de saúde (liga a CJ-3) — quais salvaguardas/DPA e qual canal (API direta vs. Bedrock/Vertex vs. Document AI regional) atendem a residência BR? O design já exige **validação médica obrigatória** antes de persistir (ADR-012, NFR10) — isso é suficiente como salvaguarda de exatidão do dado clínico, ou cabe registro adicional do aceite do médico sobre os valores importados? | NFR9, NFR10, ADR-012, ADR-009 | 🟡 Evolutivo (bloqueante só quando a importação for ao ar com pacientes reais; entrada manual não depende disto — NFR13) |
 
 ## Critério de saída (gate do piloto E10)
 

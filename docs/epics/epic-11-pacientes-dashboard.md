@@ -58,10 +58,10 @@ Reúsa integralmente: cripto AES-256-GCM (`@nutrimed/crypto`), trilha append-onl
 - **NFR10 (reúso):** toda criação/edição de paciente, medição e importação gera trilha de auditoria; extração por IA registra `modelVersion`.
 - **NFR13 (novo — degradação graciosa da extração):** a importação de PDF é estritamente **aditiva**; a dashboard é plenamente operável por entrada manual e a extração por IA nunca grava sem revisão humana — alinhado a NFR10 ("IA assiste, médico decide").
 
-## Decisões de Arquitetura (propostas — formalização por @architect)
+## Decisões de Arquitetura
 
-- **ADR-011 (proposto):** medições de evolução como **blob JSON cifrado por linha** (`values_enc`), decifrado no servidor ao montar a dashboard — mesmo padrão das notas (E9). Evita N colunas cifradas por marcador, mantém o schema estável quando novos marcadores surgem, e preserva NFR9.
-- **ADR-012 (proposto):** **extração de laudos assistida por IA com confirmação humana obrigatória** como padrão de integração de dados clínicos (NFR13/NFR10). O LLM nunca persiste direto; produz um rascunho estruturado para revisão.
+- **[ADR-011](../architecture/project-decisions/adr-011-modelo-medicoes-evolucao.md) (Aceito):** medições de evolução como **blob JSON cifrado por linha** (`values_enc`), decifrado no servidor ao montar a dashboard — mesmo padrão das notas (E9). Evita N colunas cifradas por marcador, mantém o schema estável quando novos marcadores surgem, e preserva NFR9.
+- **[ADR-012](../architecture/project-decisions/adr-012-importacao-laudos-extracao-ia.md) (Aceito — direção):** **extração de laudos por IA com VALIDAÇÃO MÉDICA OBRIGATÓRIA** (NFR13/NFR10) — nenhum dado importado é gravado sem confirmação/correção do médico. Extrator **plugável** (`ILabExtractor`, padrão NFR8/ADR-002); **Claude** lendo o PDF nativamente como 1ª implementação; **canal reavaliável** (API direta no piloto → Bedrock/Vertex/Document AI regional na comercialização, conforme custo/residência/jurídico). Liga a ADR-009 e ao checklist CJ-3/CJ-11.
 
 ## Dependências
 

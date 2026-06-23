@@ -283,6 +283,9 @@ erDiagram
 | **ADR-007** | Vídeo das personas = catálogo pré-renderizado (não avatar em tempo real no MVP) | Aceito (NFR7) |
 | **ADR-008** | Guarda-corpos: lógica (score/rate/dedup) no servidor; apresentação (decaimento/fila/pausa) no cliente | Aceito |
 | **ADR-009** | [Residência de dados de saúde no Brasil](architecture/project-decisions/adr-009-residencia-dados-br.md) — repouso em região BR; processamento externo minimizado via art. 33 LGPD; ver [checklist jurídico](architecture/project-decisions/checklist-consultoria-juridica.md) | Aceito (direção) — confirmação pela consultoria jurídica (Story 1.8, NFR9, R2) |
+| **ADR-010** | [Runtime de produção](architecture/project-decisions/adr-010-runtime-producao.md) | Aceito (E10) |
+| **ADR-011** | [Modelo de medições de evolução (blob JSON cifrado por linha)](architecture/project-decisions/adr-011-modelo-medicoes-evolucao.md) — schema estável p/ novos marcadores; padrão da nota clínica (E9) | Aceito — E11 Story 11.1 |
+| **ADR-012** | [Importação de laudos: extração por IA com **validação médica obrigatória**](architecture/project-decisions/adr-012-importacao-laudos-extracao-ia.md) — `ILabExtractor` plugável; Claude como 1ª impl; canal (API/Bedrock/Vertex/Document AI) reavaliável; nenhum dado importado grava sem confirmação do médico | Aceito (direção) — E11 Fase 4; canal/jurídico (CJ-3/CJ-11) |
 
 ---
 
