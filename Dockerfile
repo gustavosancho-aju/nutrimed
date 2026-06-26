@@ -54,8 +54,10 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --offline
 # build de todos os pacotes (pnpm -r build) — pré-requisito do app web
 RUN pnpm build
-# poda devDependencies para o runtime
-RUN pnpm prune --prod
+# NOTA: `pnpm prune --prod` foi REMOVIDO — em monorepo pnpm ele pendura no
+# build remoto (resolve o grafo e fica esperando rede). A imagem carrega as
+# devDeps no runtime (custo de tamanho, não de correção). Enxugar depois é uma
+# otimização (ex.: reinstalar só prod num stage limpo) — não bloqueia o deploy.
 
 ############################
 # Stage 4 — runtime        #
@@ -74,7 +76,7 @@ RUN groupadd --system --gid 1001 nodejs \
 
 WORKDIR /app
 
-# App + workspace já buildado e podado. Copiamos o workspace inteiro porque o
+# App + workspace já buildado. Copiamos o workspace inteiro porque o
 # app Next resolve os pacotes @nutrimed/* via symlinks do pnpm em node_modules.
 COPY --from=build --chown=nutrimed:nodejs /app/node_modules ./node_modules
 COPY --from=build --chown=nutrimed:nodejs /app/packages ./packages

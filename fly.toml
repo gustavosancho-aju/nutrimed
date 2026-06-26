@@ -64,12 +64,11 @@ primary_region = "gru"   # São Paulo — critério eliminatório de residência
   min_machines_running = 1
   processes = ["app"]
 
+  # IMPORTANTE: o WS NÃO pode declarar a porta 443 — ela é exclusiva do
+  # [http_service] (Next, porta 3000). Declarar 443 aqui faz o Fly rotear o
+  # tráfego HTTP para o gateway WS, que responde 426 (Upgrade Required). O board
+  # usa a porta 3001 (NEXT_PUBLIC_BOARD_WS_URL = wss://...:3001).
   [[services.ports]]
-    port = 443
-    handlers = ["tls", "http"]
-
-  [[services.ports]]
-    # Porta 3001 explícita caso o NEXT_PUBLIC_BOARD_WS_URL aponte para :3001.
     port = 3001
     handlers = ["tls", "http"]
 
