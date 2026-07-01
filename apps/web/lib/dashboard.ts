@@ -97,6 +97,38 @@ export function idealWeightTarget(heightM: number): number {
   return TARGET_IMC * heightM * heightM;
 }
 
+// ── Classificação de IMC (OMS) — apoio visual de apresentação, NÃO diagnóstico ──
+
+export type ImcTone = 'low' | 'ok' | 'warn' | 'high' | 'severe';
+
+export interface ImcCategory {
+  readonly key: string;
+  readonly label: string;
+  /** Limite inferior (inclusivo) da faixa de IMC. */
+  readonly min: number;
+  /** Limite superior (exclusivo); null = sem teto (última faixa). */
+  readonly max: number | null;
+  readonly tone: ImcTone;
+}
+
+/** Faixas de IMC da OMS, em ordem. Rótulo textual sempre acompanha a cor. */
+export const IMC_CATEGORIES: readonly ImcCategory[] = [
+  { key: 'abaixo', label: 'Abaixo do peso', min: 0, max: 18.5, tone: 'low' },
+  { key: 'normal', label: 'Peso normal', min: 18.5, max: 25, tone: 'ok' },
+  { key: 'pre', label: 'Pré-obesidade', min: 25, max: 30, tone: 'warn' },
+  { key: 'ob1', label: 'Obesidade grau I', min: 30, max: 35, tone: 'high' },
+  { key: 'ob2', label: 'Obesidade grau II', min: 35, max: 40, tone: 'high' },
+  { key: 'ob3', label: 'Obesidade grau III', min: 40, max: null, tone: 'severe' },
+];
+
+/** Classifica um IMC na faixa OMS correspondente (apoio visual). */
+export function classifyImc(imc: number): ImcCategory {
+  for (const cat of IMC_CATEGORIES) {
+    if (imc >= cat.min && (cat.max === null || imc < cat.max)) return cat;
+  }
+  return IMC_CATEGORIES[IMC_CATEGORIES.length - 1]!;
+}
+
 /** Aceita "82,4" ou "82.4"; vazio/invalido ⇒ undefined (campo opcional). */
 export function parseDecimal(raw: FormDataEntryValue | null): number | undefined {
   if (raw === null) return undefined;

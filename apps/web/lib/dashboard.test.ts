@@ -7,6 +7,8 @@ import {
   deriveHeightMeters,
   idealWeightRange,
   idealWeightTarget,
+  classifyImc,
+  IMC_CATEGORIES,
 } from './dashboard';
 
 describe('computeTrend (E11/11.6)', () => {
@@ -84,6 +86,28 @@ describe('parâmetros ideais — altura derivada + peso ideal (OMS)', () => {
   });
   it('peso-alvo = IMC 22 × altura²', () => {
     expect(idealWeightTarget(1.76)).toBeCloseTo(22 * 1.76 * 1.76, 3); // ~68.1
+  });
+});
+
+describe('classifyImc — faixas OMS (apresentação)', () => {
+  it('classifica cada faixa nos limites (min inclusivo, max exclusivo)', () => {
+    expect(classifyImc(17).key).toBe('abaixo');
+    expect(classifyImc(18.5).key).toBe('normal');
+    expect(classifyImc(24.9).key).toBe('normal');
+    expect(classifyImc(25).key).toBe('pre');
+    expect(classifyImc(28.6).key).toBe('pre'); // o caso do print do usuário
+    expect(classifyImc(30).key).toBe('ob1');
+    expect(classifyImc(35).key).toBe('ob2');
+    expect(classifyImc(40).key).toBe('ob3');
+    expect(classifyImc(55).key).toBe('ob3'); // sem teto
+  });
+  it('faixas são contíguas e ordenadas (sem buraco)', () => {
+    for (let i = 1; i < IMC_CATEGORIES.length; i += 1) {
+      expect(IMC_CATEGORIES[i]!.min).toBe(IMC_CATEGORIES[i - 1]!.max);
+    }
+  });
+  it('todo rótulo é textual (não depende só de cor)', () => {
+    for (const c of IMC_CATEGORIES) expect(c.label.length).toBeGreaterThan(3);
   });
 });
 

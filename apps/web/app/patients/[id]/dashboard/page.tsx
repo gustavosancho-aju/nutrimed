@@ -92,12 +92,20 @@ export default async function DashboardPage({
             {age !== null ? ` · ${age} anos` : ''}
           </p>
         </div>
-        <Link
-          href={`/patients/${id}/import`}
-          className="shrink-0 rounded-[10px] border border-ink/15 px-3.5 py-1.5 text-sm text-ink transition-colors hover:bg-surface-muted"
-        >
-          📄 Importar laudo (PDF)
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            href={`/patients/${id}/apresentacao`}
+            className="rounded-[10px] bg-brand px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+          >
+            ✨ Apresentação
+          </Link>
+          <Link
+            href={`/patients/${id}/import`}
+            className="rounded-[10px] border border-ink/15 px-3.5 py-1.5 text-sm text-ink transition-colors hover:bg-surface-muted"
+          >
+            📄 Importar laudo (PDF)
+          </Link>
+        </div>
       </header>
 
       {/* Abas */}
