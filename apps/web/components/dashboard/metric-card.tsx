@@ -1,4 +1,4 @@
-import { computeTrend, type TrendPoint } from '@/lib/dashboard';
+import { computeTrend, type TrendPoint, type TargetBand } from '@/lib/dashboard';
 import { TrendChart } from './trend-chart';
 
 /** Formata número: inteiro sem casas, senão 1 casa decimal. */
@@ -7,18 +7,28 @@ function fmt(n: number): string {
 }
 
 /**
- * Card de métrica (E11/11.6): valor atual + variação vs. anterior + mini-tendência.
- * A variação é exibida com seta direcional e SEM juízo clínico de cor (a
- * interpretação é do médico) — apenas indica sentido e magnitude.
+ * Card de métrica (E11/11.6 + evolução visual): valor atual + variação vs.
+ * anterior + gráfico com o PONTO ATUAL desde a 1ª medição, faixa ideal (banda)
+ * e meta (linha pontilhada) quando aplicável. A variação usa seta direcional
+ * SEM juízo clínico de cor — a interpretação é do médico.
  */
 export function MetricCard({
   label,
   points,
   unit,
+  band,
+  target,
+  targetLabel,
 }: {
   label: string;
   points: readonly TrendPoint[];
   unit?: string;
+  /** Faixa ideal (banda verde no gráfico). */
+  band?: TargetBand;
+  /** Meta/alvo (linha pontilhada no gráfico). */
+  target?: number;
+  /** Rótulo textual da faixa/meta (ex.: "Faixa ideal 57–77 kg · meta ~68 kg"). */
+  targetLabel?: string;
 }) {
   const trend = computeTrend(points);
 
@@ -41,10 +51,21 @@ export function MetricCard({
               {trend.deltaPct !== null && ` (${trend.deltaPct > 0 ? '+' : ''}${trend.deltaPct.toFixed(1)}%)`}
             </p>
           )}
-          {points.length > 1 && (
+          {targetLabel && (
+            <p className="mt-1 flex items-center gap-1.5 text-[11px] text-ink-muted">
+              <span aria-hidden className="inline-block h-1.5 w-3 rounded-full bg-emerald-500/70" />
+              {targetLabel}
+            </p>
+          )}
+          {points.length >= 1 && (
             <div className="mt-3">
-              <TrendChart points={points} unit={unit} />
+              <TrendChart points={points} unit={unit} band={band} target={target} />
             </div>
+          )}
+          {points.length === 1 && (
+            <p className="mt-2 text-[11px] text-ink-muted">
+              Ponto atual marcado. A linha de evolução se forma a partir da 2ª medição.
+            </p>
           )}
         </>
       )}

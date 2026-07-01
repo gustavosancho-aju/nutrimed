@@ -63,6 +63,40 @@ export function classifyExam(marker: ExamMarker, value: number): ExamStatus {
   }
 }
 
+// ── Parâmetros ideais (apoio visual) — referência OMS por IMC, NÃO diagnóstico ──
+
+/** Faixa de referência para bandas/metas de um gráfico (min/max no eixo Y). */
+export interface TargetBand {
+  readonly min: number;
+  readonly max: number;
+}
+
+/** Faixa de IMC saudável (OMS): 18,5–24,9. Referência de apoio, não diagnóstico. */
+export const HEALTHY_IMC: TargetBand = { min: 18.5, max: 24.9 };
+
+/** IMC de referência para o "peso ideal" (ponto médio da faixa saudável). */
+export const TARGET_IMC = 22;
+
+/**
+ * Deriva a altura (m) de uma medição que tenha peso (kg) e IMC juntos
+ * (IMC = peso / altura²). Sem os dois valores ⇒ null. Pura/testável.
+ */
+export function deriveHeightMeters(peso?: number, imc?: number): number | null {
+  if (peso === undefined || imc === undefined || peso <= 0 || imc <= 0) return null;
+  return Math.sqrt(peso / imc);
+}
+
+/** Faixa de peso saudável (kg) para uma altura (m), pela faixa de IMC da OMS. */
+export function idealWeightRange(heightM: number): TargetBand {
+  const h2 = heightM * heightM;
+  return { min: HEALTHY_IMC.min * h2, max: HEALTHY_IMC.max * h2 };
+}
+
+/** Peso-alvo (kg) no IMC de referência ({@link TARGET_IMC}) para a altura (m). */
+export function idealWeightTarget(heightM: number): number {
+  return TARGET_IMC * heightM * heightM;
+}
+
 /** Aceita "82,4" ou "82.4"; vazio/invalido ⇒ undefined (campo opcional). */
 export function parseDecimal(raw: FormDataEntryValue | null): number | undefined {
   if (raw === null) return undefined;

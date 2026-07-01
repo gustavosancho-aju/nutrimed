@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { computeTrend, classifyExam, parseDecimal, EXAM_STATUS_LABEL } from './dashboard';
+import {
+  computeTrend,
+  classifyExam,
+  parseDecimal,
+  EXAM_STATUS_LABEL,
+  deriveHeightMeters,
+  idealWeightRange,
+  idealWeightTarget,
+} from './dashboard';
 
 describe('computeTrend (E11/11.6)', () => {
   it('retorna null sem pontos', () => {
@@ -56,6 +64,26 @@ describe('classifyExam — faixas de referência (E11/11.8 · NFR10)', () => {
     expect(EXAM_STATUS_LABEL.ok).toBeTruthy();
     expect(EXAM_STATUS_LABEL.atencao).toBeTruthy();
     expect(EXAM_STATUS_LABEL.alerta).toBeTruthy();
+  });
+});
+
+describe('parâmetros ideais — altura derivada + peso ideal (OMS)', () => {
+  it('deriva altura de peso + IMC (IMC = peso/altura²)', () => {
+    // 88.6 kg, IMC 28.6 ⇒ altura ≈ 1.76 m
+    expect(deriveHeightMeters(88.6, 28.6)!).toBeCloseTo(1.76, 2);
+  });
+  it('sem peso ou IMC ⇒ null (não inventa)', () => {
+    expect(deriveHeightMeters(undefined, 28.6)).toBeNull();
+    expect(deriveHeightMeters(80, undefined)).toBeNull();
+    expect(deriveHeightMeters(0, 0)).toBeNull();
+  });
+  it('faixa de peso ideal = 18,5–24,9 × altura²', () => {
+    const r = idealWeightRange(1.76);
+    expect(r.min).toBeCloseTo(18.5 * 1.76 * 1.76, 3); // ~57.3
+    expect(r.max).toBeCloseTo(24.9 * 1.76 * 1.76, 3); // ~77.1
+  });
+  it('peso-alvo = IMC 22 × altura²', () => {
+    expect(idealWeightTarget(1.76)).toBeCloseTo(22 * 1.76 * 1.76, 3); // ~68.1
   });
 });
 
