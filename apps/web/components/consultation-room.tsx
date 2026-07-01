@@ -8,7 +8,7 @@ import { useBoardStore } from '@/lib/board-store';
 import { TranscriptPanel, type TranscriptSource } from './transcript-panel';
 import { SuggestionFeed } from './suggestion-feed';
 import { DoctorStrip } from './doctor-strip';
-import { ContributionPopup } from './contribution-popup';
+import { AlertVignette } from './alert-vignette';
 import { LiveMicButton } from './live-mic-button';
 
 /**
@@ -71,21 +71,21 @@ export function ConsultationRoom({
   }, [transcript, consultationId]);
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_clamp(380px,34vw,500px)]">
-      {/* aceno da persona ao contribuir — o card definitivo vive no feed */}
-      <ContributionPopup />
-      {/* área principal — transcrição ao vivo */}
-      <div className="flex min-h-[480px] flex-col gap-3">
-        <TranscriptPanel source={transcriptSource} />
-      </div>
+    <section
+      aria-label="Sala do board"
+      className="surface-deep-gradient gold-hairline rounded-2xl border border-white/10 p-4 shadow-[0_2px_4px_hsl(var(--text)/0.08),0_20px_50px_hsl(var(--text)/0.22)] lg:p-5"
+    >
+      {/* ⚠️ crítico: a sala inteira responde (vinheta periférica 2s) */}
+      <AlertVignette />
 
-      {/* painel lateral fixo — BOARD */}
-      <aside
-        aria-label="Painel do board"
-        className="surface-deep-gradient gold-hairline flex min-h-[480px] flex-col gap-3 rounded-(--radius) border border-white/10 p-4 shadow-[0_2px_4px_hsl(var(--text)/0.08),0_16px_40px_hsl(var(--text)/0.18)]"
-      >
-        <div className="flex items-center justify-between">
-          <h2 className="font-display text-lg font-semibold tracking-tight text-white">Board</h2>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="font-display text-lg font-semibold tracking-tight text-white">
+          Sala do Board
+          <span className="ml-2 text-xs font-normal tracking-wide text-emerald-200/70">
+            ● 3 especialistas presentes
+          </span>
+        </h2>
+        <div className="flex items-center gap-3">
           <span
             title="⚠️ atenção · 💡 sugestão · 🔍 hipótese · 📋 síntese"
             className="cursor-help text-xs text-white/50"
@@ -93,27 +93,37 @@ export function ConsultationRoom({
             ⓘ 4 tipos
           </span>
         </div>
+      </div>
 
-        <DoctorStrip />
-        <div className="border-t border-white/10" />
-        <SuggestionFeed />
+      {/* faixa hero — os médicos acompanham a consulta, grandes e presentes */}
+      <DoctorStrip />
 
-        <div className="flex items-center justify-between gap-2 border-t border-white/10 pt-3">
-          <button
-            type="button"
-            aria-pressed={focusMode}
-            onClick={toggleFocusMode}
-            className={`rounded-md px-3 py-2 text-xs font-semibold transition-colors ${
-              focusMode
-                ? 'bg-white text-surface-deep'
-                : 'border border-white/25 text-white hover:bg-white/10'
-            }`}
-          >
-            🔇 Modo Foco <kbd className="ml-1 rounded bg-black/20 px-1">F</kbd>
-          </button>
-          <div className="flex items-start gap-2">{synthesisForm}{startForm}<LiveMicButton consultationId={consultationId} token={token} wsBaseUrl={wsBaseUrl} /></div>
+      {/* a "mesa" da reunião: transcrição (documento iluminado) + feed */}
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1.45fr_1fr]">
+        <div className="flex min-h-[420px] flex-col">
+          <TranscriptPanel source={transcriptSource} />
         </div>
-      </aside>
-    </div>
+
+        <aside aria-label="Painel do board" className="flex min-h-[420px] flex-col gap-3">
+          <SuggestionFeed />
+        </aside>
+      </div>
+
+      <div className="mt-4 flex items-center justify-between gap-2 border-t border-white/10 pt-3">
+        <button
+          type="button"
+          aria-pressed={focusMode}
+          onClick={toggleFocusMode}
+          className={`rounded-md px-3 py-2 text-xs font-semibold transition-colors ${
+            focusMode
+              ? 'bg-white text-surface-deep'
+              : 'border border-white/25 text-white hover:bg-white/10'
+          }`}
+        >
+          🔇 Modo Foco <kbd className="ml-1 rounded bg-black/20 px-1">F</kbd>
+        </button>
+        <div className="flex items-start gap-2">{synthesisForm}{startForm}<LiveMicButton consultationId={consultationId} token={token} wsBaseUrl={wsBaseUrl} /></div>
+      </div>
+    </section>
   );
 }

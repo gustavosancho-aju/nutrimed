@@ -101,6 +101,33 @@ body::before {
     hsl(var(--surface-deep));
 }
 
+/* Equalizador de fala (Sala de Board): 3 barras pulsando enquanto a persona
+   "fala" — event-driven, nunca em repouso. */
+@keyframes eq-bar {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
+}
+.eq-bar {
+  transform-origin: bottom;
+  animation: eq-bar 900ms ease-in-out infinite;
+}
+
+/* Vinheta de alerta (⚠️ crítico): a sala inteira responde por 2s — percepção
+   periférica antes da leitura. Some sozinha, nunca persiste. */
+@keyframes alert-vignette {
+  0% { opacity: 0; }
+  15% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.alert-vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  box-shadow: inset 0 0 140px 36px hsl(var(--attn) / 0.4);
+  animation: alert-vignette 2000ms ease-out forwards;
+}
+
 /* Decaimento visual do destaque (NFR3/A6 ~8s): o realce some, o card fica. */
 @keyframes board-decay {
   from {
@@ -138,7 +165,12 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   .board-decay,
   .board-pulse,
-  .board-entry {
+  .board-entry,
+  .eq-bar,
+  .alert-vignette {
     animation: none;
+  }
+  .alert-vignette {
+    display: none;
   }
 }
