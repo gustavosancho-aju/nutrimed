@@ -35,6 +35,7 @@ interface TgPhotoSize {
 interface TgMessage {
   chat: { id: number };
   text?: string;
+  caption?: string;
   photo?: TgPhotoSize[];
 }
 interface TgUpdate {
@@ -94,7 +95,7 @@ function llmFromEnv(): ILlmProvider | null {
     : null;
 }
 
-async function buildDeps(telemetry: TelegramTelemetry): Promise<BotDeps> {
+async function buildDeps(token: string, telemetry: TelegramTelemetry): Promise<BotDeps> {
   return {
     db: await getDb(),
     key: loadEncryptionKey(),
@@ -102,6 +103,8 @@ async function buildDeps(telemetry: TelegramTelemetry): Promise<BotDeps> {
       onUsage: (u) => telemetry.visionUsage(u.inputTokens, u.outputTokens),
     }),
     llm: llmFromEnv(),
+    // /corrigir reestima a MESMA foto: re-download pelo file_id salvo (photoRef).
+    downloadPhoto: (photoRef) => downloadPhoto(token, photoRef),
     tzOffsetMinutes: BR_TZ,
   };
 }
@@ -121,7 +124,7 @@ async function processUpdate(
     if (Array.isArray(msg.photo) && msg.photo.length > 0) {
       const largest = msg.photo[msg.photo.length - 1]!;
       const image = await downloadPhoto(token, largest.file_id);
-      const reply = await handlePhoto(deps, chatId, image, largest.file_id);
+      const reply = await handlePhoto(deps, chatId, image, largest.file_id, msg.caption);
       telemetry.photoLogged(chatId, localDay());
       console.log(
         `[telegram] foto processada — pacientes ativos: ${telemetry.report().activePatients}, ` +
@@ -163,7 +166,7 @@ async function init(): Promise<TelegramRuntime | null> {
   if (!token) return null; // canal desligado (degradação graciosa)
 
   const telemetry = new TelegramTelemetry();
-  const deps = await buildDeps(telemetry);
+  const deps = await buildDeps(token, telemetry);
   const secretToken = process.env.TELEGRAM_WEBHOOK_SECRET;
   const mode = process.env.TELEGRAM_MODE ?? (process.env.NODE_ENV === 'production' ? 'webhook' : 'polling');
 

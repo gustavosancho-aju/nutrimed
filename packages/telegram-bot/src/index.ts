@@ -1,6 +1,7 @@
 export {
   handleStart,
   handlePhoto,
+  handleCorrection,
   handleToday,
   handleGoal,
   handleUpdate,

@@ -18,10 +18,21 @@ const SAMPLE = {
   notes: 'Estimativa de exemplo (estimador fake) — aproximada, não é medida clínica.',
 };
 
+/** Valores fixos usados quando o paciente descreve/corrige o prato (hint). */
+const SAMPLE_WITH_HINT = {
+  values: { kcal: 580, protein: 48, carbs: 60, fat: 16 },
+  confidence: 'high',
+  notes: 'Estimativa de exemplo ajustada pela descrição do paciente (estimador fake).',
+};
+
 export class FakeFoodEstimator implements IFoodEstimator {
   readonly modelVersion = 'fake-food-estimator';
 
-  async estimate(_input: FoodImageInput): Promise<FoodEstimate> {
+  async estimate(_input: FoodImageInput, hint?: string): Promise<FoodEstimate> {
+    const cleanHint = hint?.trim();
+    if (cleanHint) {
+      return sanitizeFoodEstimate({ ...SAMPLE_WITH_HINT, itemsLabel: `${cleanHint} (exemplo)` });
+    }
     return sanitizeFoodEstimate(SAMPLE);
   }
 }

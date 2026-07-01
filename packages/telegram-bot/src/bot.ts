@@ -1,6 +1,8 @@
 import type { SqlExecutor } from '@nutrimed/db';
 import {
   addFoodLogEntry,
+  findLatestFoodLogEntry,
+  updateFoodLogEntryValues,
   sumFoodLogForDay,
   loadCurrentNutritionGoal,
   type DailyProgress,
@@ -35,6 +37,12 @@ export interface BotDeps {
   readonly estimator: IFoodEstimator | null;
   /** Provedor de orientação textual (12.8); `null`/ausente ⇒ só feedback factual. */
   readonly llm?: ILlmProvider | null;
+  /**
+   * Re-baixa a foto de um `photoRef` (file_id do Telegram) — fornecido pelo
+   * transporte. Habilita o /corrigir reestimar o prato; ausente ⇒ o bot pede o
+   * reenvio da foto com legenda (degradação graciosa).
+   */
+  readonly downloadPhoto?: (photoRef: string) => Promise<FoodImageInput>;
   /** Relógio injetável (testável); default `() => new Date()` no ponto de uso. */
   readonly now?: () => Date;
   /** Offset do fuso em minutos (default BR = -180). */
@@ -51,10 +59,15 @@ export interface BotUpdate {
   readonly text?: string;
   readonly photo?: FoodImageInput;
   readonly photoRef?: string;
+  /** Legenda da foto — descrição do paciente que orienta a estimativa. */
+  readonly caption?: string;
 }
 
 const DISCLAIMER =
   'ℹ️ Estimativa automática e aproximada — não substitui a orientação do seu nutricionista.';
+
+const CORRECT_TIP =
+  '✏️ Identifiquei algo errado? Responda /corrigir com o ajuste (ex.: /corrigir era frango grelhado, não peixe).';
 
 const WELCOME =
   '👋 Olá! Sou o assistente nutricional do seu consultório. Para começar, peça um código de ' +
@@ -169,8 +182,9 @@ export async function handleStart(deps: BotDeps, chatId: string, arg?: string): 
   if (result.ok) {
     return {
       text:
-        '✅ Canal ativado! Agora é só me enviar a foto do seu prato que eu estimo os nutrientes. ' +
-        'Use /hoje para ver seu progresso do dia e /meta para suas metas.',
+        '✅ Canal ativado! Agora é só me enviar a foto do seu prato que eu estimo os nutrientes ' +
+        '(a legenda da foto me ajuda a identificar os alimentos). Use /hoje para ver seu progresso ' +
+        'do dia, /meta para suas metas e /corrigir se eu identificar algo errado.',
     };
   }
   const reason = { invalid: 'Código inválido.', expired: 'Código expirado.', consumed: 'Esse código já foi usado.' }[
@@ -179,12 +193,16 @@ export async function handleStart(deps: BotDeps, chatId: string, arg?: string): 
   return { text: `${reason} Peça um novo código ao seu nutricionista e envie /start CÓDIGO.` };
 }
 
-/** Foto do prato → estimativa → registro auditado → feedback vs. meta + disclaimer. */
+/**
+ * Foto do prato → estimativa → registro auditado → feedback vs. meta + disclaimer.
+ * A legenda da foto (`caption`), se houver, orienta a identificação dos alimentos.
+ */
 export async function handlePhoto(
   deps: BotDeps,
   chatId: string,
   image: FoodImageInput,
   photoRef?: string,
+  caption?: string,
 ): Promise<BotReply> {
   if (!(await isChannelAuthorized(deps.db, chatId))) return { text: NEEDS_PAIRING };
   const patientId = await resolvePatientByChat(deps.db, chatId);
@@ -194,7 +212,7 @@ export async function handlePhoto(
     return { text: 'No momento não consigo estimar sua foto (serviço indisponível). Tente novamente mais tarde.' };
   }
 
-  const estimate = await deps.estimator.estimate(image);
+  const estimate = await deps.estimator.estimate(image, caption?.trim() || undefined);
   const modelVersion = deps.estimator.modelVersion;
   const now = clock(deps);
 
@@ -217,7 +235,78 @@ export async function handlePhoto(
 
   const progress = await sumFoodLogForDay(deps.db, patientId, localDayISO(now, tz(deps)), tz(deps), deps.key);
   const orientation = await buildOrientation(deps.llm, progress, estimate);
-  return { text: compose([formatEstimate(estimate), formatProgress(progress), orientation, DISCLAIMER]) };
+  return { text: compose([formatEstimate(estimate), formatProgress(progress), orientation, CORRECT_TIP, DISCLAIMER]) };
+}
+
+/**
+ * `/corrigir <ajuste>` — o paciente corrige a identificação do último prato do
+ * dia (ex.: "era frango, não peixe"). Reestima a MESMA foto (re-baixada pelo
+ * `photoRef`) com a correção como dica e ATUALIZA a entrada existente — o
+ * consumo do dia não duplica. Sem foto recuperável ⇒ pede reenvio com legenda.
+ */
+export async function handleCorrection(deps: BotDeps, chatId: string, correction: string): Promise<BotReply> {
+  if (!(await isChannelAuthorized(deps.db, chatId))) return { text: NEEDS_PAIRING };
+  const patientId = await resolvePatientByChat(deps.db, chatId);
+  if (!patientId) return { text: NEEDS_PAIRING };
+
+  const text = correction.trim();
+  if (!text) {
+    return {
+      text: 'Me diga o que ajustar: /corrigir descrição do prato (ex.: /corrigir era frango grelhado, não peixe).',
+    };
+  }
+  if (!deps.estimator) {
+    return { text: 'No momento não consigo reestimar seu prato (serviço indisponível). Tente novamente mais tarde.' };
+  }
+
+  const now = clock(deps);
+  const today = localDayISO(now, tz(deps));
+  const entry = await findLatestFoodLogEntry(deps.db, patientId, deps.key);
+  if (!entry || localDayISO(entry.eatenAt, tz(deps)) !== today) {
+    return { text: 'Não encontrei um prato registrado hoje para corrigir. Envie a foto do prato primeiro.' };
+  }
+  if (!entry.photoRef || !deps.downloadPhoto) {
+    return {
+      text: 'Não consigo rever a foto desse prato. Envie a foto novamente com a descrição na legenda que eu reestimo.',
+    };
+  }
+
+  let image: FoodImageInput;
+  try {
+    image = await deps.downloadPhoto(entry.photoRef);
+  } catch {
+    return {
+      text: 'Não consegui recuperar a foto desse prato. Envie a foto novamente com a descrição na legenda que eu reestimo.',
+    };
+  }
+
+  const estimate = await deps.estimator.estimate(image, text);
+  const modelVersion = deps.estimator.modelVersion;
+  await updateFoodLogEntryValues(
+    deps.db,
+    patientId,
+    entry.id,
+    {
+      ...estimate.values,
+      confidence: estimate.confidence,
+      ...(estimate.itemsLabel ? { itemsLabel: estimate.itemsLabel } : {}),
+    },
+    deps.key,
+    modelVersion,
+    { action: 'telegram-bot-correct', ...(modelVersion ? { modelVersion } : {}) },
+  );
+
+  const progress = await sumFoodLogForDay(deps.db, patientId, today, tz(deps), deps.key);
+  const orientation = await buildOrientation(deps.llm, progress, estimate);
+  return {
+    text: compose([
+      '✏️ Ajustado! Reestimei o prato com a sua correção.',
+      formatEstimate(estimate),
+      formatProgress(progress),
+      orientation,
+      DISCLAIMER,
+    ]),
+  };
 }
 
 /** `/hoje` — progresso do dia vs. meta. */
@@ -251,9 +340,9 @@ export async function handleGoal(deps: BotDeps, chatId: string): Promise<BotRepl
   };
 }
 
-/** Dispatcher: foto → estimativa; `/start`/`/hoje`/`/meta`; senão ajuda. */
+/** Dispatcher: foto → estimativa; `/start`/`/hoje`/`/meta`/`/corrigir`; senão ajuda. */
 export async function handleUpdate(deps: BotDeps, update: BotUpdate): Promise<BotReply | null> {
-  if (update.photo) return handlePhoto(deps, update.chatId, update.photo, update.photoRef);
+  if (update.photo) return handlePhoto(deps, update.chatId, update.photo, update.photoRef, update.caption);
 
   const text = update.text?.trim();
   if (!text) return null;
@@ -263,7 +352,12 @@ export async function handleUpdate(deps: BotDeps, update: BotUpdate): Promise<Bo
   }
   if (/^\/hoje\b/i.test(text)) return handleToday(deps, update.chatId);
   if (/^\/meta\b/i.test(text)) return handleGoal(deps, update.chatId);
+  if (/^\/corrigir\b/i.test(text)) {
+    return handleCorrection(deps, update.chatId, text.replace(/^\/corrigir\b/i, '').trim());
+  }
   return {
-    text: 'Não entendi. Envie a foto do seu prato, ou use /hoje e /meta. Se ainda não vinculou, use /start CÓDIGO.',
+    text:
+      'Não entendi. Envie a foto do seu prato, ou use /hoje, /meta e /corrigir (ajusta o último prato). ' +
+      'Se ainda não vinculou, use /start CÓDIGO.',
   };
 }

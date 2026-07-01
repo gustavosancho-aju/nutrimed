@@ -37,8 +37,12 @@ export interface FoodImageInput {
 export interface IFoodEstimator {
   /** Versão do modelo/fonte — proveniência da auditoria no registro (NFR10). */
   readonly modelVersion?: string;
-  /** Estima os nutrientes da foto. NUNCA persiste. */
-  estimate(input: FoodImageInput): Promise<FoodEstimate>;
+  /**
+   * Estima os nutrientes da foto. `hint` é a descrição/correção do paciente
+   * (legenda da foto ou /corrigir) — orienta a IDENTIFICAÇÃO dos alimentos;
+   * as porções continuam vindo da foto. NUNCA persiste.
+   */
+  estimate(input: FoodImageInput, hint?: string): Promise<FoodEstimate>;
 }
 
 const VALID_CONFIDENCE: readonly string[] = ['low', 'medium', 'high'];

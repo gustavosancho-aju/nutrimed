@@ -9,6 +9,7 @@ import { FakeLlmProvider, type ILlmProvider } from '@nutrimed/providers';
 import {
   handleStart,
   handlePhoto,
+  handleCorrection,
   handleToday,
   handleGoal,
   handleUpdate,
@@ -58,7 +59,14 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
     exec = fromPglite(db);
     await runMigrations(exec);
     userId = await insertUser(exec, 'medico@nutrimed.test');
-    deps = { db: exec, key: KEY, estimator: new FakeFoodEstimator(), now: NOW, tzOffsetMinutes: -180 };
+    deps = {
+      db: exec,
+      key: KEY,
+      estimator: new FakeFoodEstimator(),
+      now: NOW,
+      tzOffsetMinutes: -180,
+      downloadPhoto: async () => IMAGE, // transporte fake: /corrigir re-baixa a foto pelo photoRef
+    };
   });
 
   afterAll(async () => {
@@ -123,6 +131,79 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
       const depsNoEst: BotDeps = { ...deps, estimator: null };
       const r = await handlePhoto(depsNoEst, 'chat-no-est', IMAGE);
       expect(r.text).toMatch(/indispon[íi]vel/i);
+    });
+  });
+
+  describe('legenda da foto e /corrigir', () => {
+    it('foto com legenda: a descrição do paciente orienta a estimativa', async () => {
+      await pairNewChat('chat-caption');
+      const r = await handleUpdate(deps, {
+        chatId: 'chat-caption',
+        photo: IMAGE,
+        photoRef: 'f-cap',
+        caption: 'frango grelhado com arroz',
+      });
+      expect(r?.text).toContain('frango grelhado com arroz'); // itemsLabel do fake reflete a legenda
+    });
+
+    it('/corrigir: reestima a mesma foto e ATUALIZA a entrada (não duplica o consumo)', async () => {
+      const patientId = await pairNewChat('chat-fix');
+      await handlePhoto(deps, 'chat-fix', IMAGE, 'tg-file-fix'); // 620 kcal (fake sem hint)
+
+      const r = await handleCorrection(deps, 'chat-fix', 'era frango grelhado, não peixe');
+      expect(r.text).toMatch(/ajustad/i);
+      expect(r.text).toContain('era frango grelhado, não peixe'); // itemsLabel reflete a correção
+      expect(r.text).toContain('não substitui'); // disclaimer segue presente (ADR-015)
+
+      const progress = await sumFoodLogForDay(exec, patientId, '2026-07-01', -180, KEY);
+      expect(progress.consumed.kcal).toBe(580); // substituiu os 620 do registro original — não somou
+    });
+
+    it('/corrigir corrige a última entrada, preservando as anteriores do dia', async () => {
+      const patientId = await pairNewChat('chat-fix-2x');
+      await handlePhoto(deps, 'chat-fix-2x', IMAGE, 'tg-a'); // 620
+      await handlePhoto(deps, 'chat-fix-2x', IMAGE, 'tg-b'); // 620
+      await handleCorrection(deps, 'chat-fix-2x', 'era frango'); // última vira 580
+
+      const progress = await sumFoodLogForDay(exec, patientId, '2026-07-01', -180, KEY);
+      expect(progress.consumed.kcal).toBe(620 + 580);
+    });
+
+    it('/corrigir sem texto: explica o uso', async () => {
+      await pairNewChat('chat-fix-empty');
+      const r = await handleCorrection(deps, 'chat-fix-empty', '');
+      expect(r.text).toMatch(/\/corrigir/);
+    });
+
+    it('/corrigir sem prato registrado hoje: orienta enviar a foto primeiro', async () => {
+      await pairNewChat('chat-fix-none');
+      const r = await handleCorrection(deps, 'chat-fix-none', 'era frango');
+      expect(r.text).toMatch(/n[ãa]o encontrei/i);
+    });
+
+    it('/corrigir sem photoRef salvo: pede o reenvio da foto com legenda', async () => {
+      await pairNewChat('chat-fix-noref');
+      await handlePhoto(deps, 'chat-fix-noref', IMAGE); // sem photoRef
+      const r = await handleCorrection(deps, 'chat-fix-noref', 'era frango');
+      expect(r.text).toMatch(/envie a foto novamente/i);
+    });
+
+    it('/corrigir sem pareamento: nega e instrui parear', async () => {
+      const r = await handleCorrection(deps, 'chat-fix-unpaired', 'era frango');
+      expect(r.text).toMatch(/n[ãa]o est[áa] ativo/i);
+    });
+
+    it('resposta da foto convida a corrigir (/corrigir descoberto no fluxo)', async () => {
+      await pairNewChat('chat-fix-tip');
+      const r = await handlePhoto(deps, 'chat-fix-tip', IMAGE, 'tg-tip');
+      expect(r.text).toContain('/corrigir');
+    });
+
+    it('dispatcher roteia /corrigir', async () => {
+      await pairNewChat('chat-fix-disp');
+      await handleUpdate(deps, { chatId: 'chat-fix-disp', photo: IMAGE, photoRef: 'f-d' });
+      const r = await handleUpdate(deps, { chatId: 'chat-fix-disp', text: '/corrigir era frango' });
+      expect(r?.text).toMatch(/ajustad/i);
     });
   });
 

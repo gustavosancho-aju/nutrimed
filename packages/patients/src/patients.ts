@@ -512,6 +512,54 @@ export async function addFoodLogEntry(
   return entryId;
 }
 
+/** Última entrada do diário do paciente (mais recente por `eaten_at`). Null se vazio. */
+export async function findLatestFoodLogEntry(
+  db: SqlExecutor,
+  patientId: string,
+  key: Buffer,
+): Promise<FoodLogEntry | null> {
+  const res = await db.query<FoodLogRow>(
+    `SELECT id, patient_id, eaten_at, source, photo_ref, values_enc, model_version, created_at
+     FROM food_log_entry WHERE patient_id = $1
+     ORDER BY eaten_at DESC, created_at DESC
+     LIMIT 1`,
+    [patientId],
+  );
+  const row = res.rows[0];
+  return row ? toFoodLogEntry(row, key) : null;
+}
+
+/**
+ * Corrige os valores de uma entrada existente do diário (re-cifra + audita).
+ * Usado quando o paciente ajusta a identificação do prato (ex.: "era frango,
+ * não peixe"): ATUALIZA a entrada em vez de inserir outra — o consumo do dia
+ * não duplica. O `patientId` no WHERE impede correção cruzada entre pacientes.
+ * Retorna false se a entrada não existe (nada auditado).
+ */
+export async function updateFoodLogEntryValues(
+  db: SqlExecutor,
+  patientId: string,
+  entryId: string,
+  values: FoodLogValues,
+  key: Buffer,
+  modelVersion?: string,
+  origin: WriteOrigin = { action: 'food-log-correct' },
+): Promise<boolean> {
+  const res = await db.query<{ id: string }>(
+    `UPDATE food_log_entry
+     SET values_enc = $3, model_version = COALESCE($4, model_version)
+     WHERE id = $1 AND patient_id = $2 RETURNING id`,
+    [entryId, patientId, encryptField(JSON.stringify(values), key), modelVersion ?? null],
+  );
+  if (res.rows.length === 0) return false;
+  await writeAudit(db, patientId, {
+    triggeredBy: origin.action,
+    kbSources: [],
+    modelVersion: origin.modelVersion ?? modelVersion ?? 'human-edit',
+  });
+  return true;
+}
+
 /**
  * Janela UTC `[início, fim)` do dia local `dayISO` (`YYYY-MM-DD`), dado o offset
  * do fuso em minutos (local = UTC + offset; BR = -180). Explícito e testável —

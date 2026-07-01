@@ -13,6 +13,8 @@ export {
   loadCurrentNutritionGoal,
   listNutritionGoalHistory,
   addFoodLogEntry,
+  findLatestFoodLogEntry,
+  updateFoodLogEntryValues,
   listFoodLogByDay,
   sumFoodLogForDay,
   type Patient,

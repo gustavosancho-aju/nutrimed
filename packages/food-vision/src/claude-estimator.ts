@@ -67,8 +67,17 @@ export class ClaudeFoodEstimator implements IFoodEstimator {
     }
   }
 
-  async estimate(input: FoodImageInput): Promise<FoodEstimate> {
+  async estimate(input: FoodImageInput, hint?: string): Promise<FoodEstimate> {
     const doFetch = this.config.fetchImpl ?? fetch;
+    // Descrição/correção do paciente orienta a IDENTIFICAÇÃO; porções vêm da foto.
+    // Truncada para limitar a superfície de injeção — a sanitização segue sendo a fronteira.
+    const cleanHint = hint?.trim().slice(0, 300);
+    const ask = 'Estime os nutrientes deste prato conforme o formato JSON pedido.';
+    const askWithHint = cleanHint
+      ? `${ask}\nO paciente descreveu o prato assim: "${cleanHint}". Use essa descrição para ` +
+        'identificar os alimentos (ela corrige o que a foto pode enganar), mas estime as ' +
+        'porções pela foto. Continue retornando APENAS o JSON pedido.'
+      : ask;
     const response = await doFetch(this.config.endpoint ?? DEFAULT_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -88,7 +97,7 @@ export class ClaudeFoodEstimator implements IFoodEstimator {
                 type: 'image',
                 source: { type: 'base64', media_type: input.mediaType, data: input.base64 },
               },
-              { type: 'text', text: 'Estime os nutrientes deste prato conforme o formato JSON pedido.' },
+              { type: 'text', text: askWithHint },
             ],
           },
         ],

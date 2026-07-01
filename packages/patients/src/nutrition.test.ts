@@ -9,6 +9,8 @@ import {
   loadCurrentNutritionGoal,
   listNutritionGoalHistory,
   addFoodLogEntry,
+  findLatestFoodLogEntry,
+  updateFoodLogEntryValues,
   listFoodLogByDay,
   sumFoodLogForDay,
 } from './patients';
@@ -146,6 +148,54 @@ describe('Nutrition Goals & Food Log (E12 — 12.2)', () => {
       const dia01 = await listFoodLogByDay(exec, patientId, '2026-07-01', BR, KEY);
       expect(dia30.map((e) => e.values.kcal)).toEqual([300]);
       expect(dia01.map((e) => e.values.kcal)).toEqual([500]);
+    });
+
+    it('corrige a última entrada (update, não insert) e audita a correção', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Correção' }, KEY);
+      await addFoodLogEntry(exec, patientId, { eatenAt: new Date('2026-07-01T12:00:00Z'), values: { kcal: 400, protein: 20, carbs: 50, fat: 10 } }, KEY);
+      await addFoodLogEntry(
+        exec,
+        patientId,
+        { eatenAt: new Date('2026-07-01T18:00:00Z'), values: { kcal: 700, protein: 30, carbs: 80, fat: 25, itemsLabel: 'peixe assado' }, photoRef: 'tg-x' },
+        KEY,
+      );
+
+      const latest = await findLatestFoodLogEntry(exec, patientId, KEY);
+      expect(latest!.values.itemsLabel).toBe('peixe assado');
+      expect(latest!.photoRef).toBe('tg-x');
+
+      const ok = await updateFoodLogEntryValues(
+        exec,
+        patientId,
+        latest!.id,
+        { kcal: 620, protein: 45, carbs: 60, fat: 18, itemsLabel: 'frango grelhado' },
+        KEY,
+        'food-vision-fake',
+        { action: 'telegram-bot-correct', modelVersion: 'food-vision-fake' },
+      );
+      expect(ok).toBe(true);
+
+      const doDia = await listFoodLogByDay(exec, patientId, '2026-07-01', BR, KEY);
+      expect(doDia).toHaveLength(2); // atualizou — não inseriu uma terceira
+      expect(doDia[1]!.values.itemsLabel).toBe('frango grelhado');
+      expect(doDia[1]!.values.kcal).toBe(620);
+      expect(doDia[0]!.values.kcal).toBe(400); // a entrada anterior segue intacta
+
+      const trail = await getAuditTrail(exec, patientId);
+      expect(trail.some((e) => e.triggeredBy === 'telegram-bot-correct')).toBe(true);
+    });
+
+    it('corrigir entrada de outro paciente ⇒ false (nada muda, nada audita)', async () => {
+      const donoId = await createPatient(exec, userId, { name: 'Dono' }, KEY);
+      const outroId = await createPatient(exec, userId, { name: 'Outro' }, KEY);
+      await addFoodLogEntry(exec, donoId, { eatenAt: new Date('2026-07-01T12:00:00Z'), values: { kcal: 500, protein: 30, carbs: 50, fat: 15 } }, KEY);
+      const entry = await findLatestFoodLogEntry(exec, donoId, KEY);
+
+      const ok = await updateFoodLogEntryValues(exec, outroId, entry!.id, { kcal: 1, protein: 1, carbs: 1, fat: 1 }, KEY);
+      expect(ok).toBe(false);
+
+      const intacta = await findLatestFoodLogEntry(exec, donoId, KEY);
+      expect(intacta!.values.kcal).toBe(500);
     });
   });
 
