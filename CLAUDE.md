@@ -7,11 +7,15 @@
 **📋 Registro completo do que foi construído: [`docs/IMPLEMENTATION-RECORD.md`](docs/IMPLEMENTATION-RECORD.md)**
 (rastreabilidade FR/NFR/ADR, evidências ao vivo, decisões e pendências — fonte de verdade do status).
 
-## Estado: MVP funcional fim-a-fim (2026-06-11)
+## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-07-01)
 
-**9 de 10 épicos com núcleo implementado e verificado ao vivo no browser** (falta E8 — vídeos).
-**E11 (Pacientes & Dashboard) COMPLETO** (4 fases) e **E12 (Bot de Telegram) COMPLETO** (9 stories: dados/metas/food-log · pareamento+consentimento · estimador de foto · bot/webhook · orientação IA · telemetria) — bot **@RafaNutriBot** verificado ao vivo.
-Suíte: **272 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS (24 pacotes).
+**9 de 10 épicos com núcleo implementado e verificado ao vivo** (falta E8 — vídeos).
+**E11 (Pacientes & Dashboard) COMPLETO** (4 fases + extras: faixa ideal/meta nos gráficos e
+**Modo Apresentação** `/patients/[id]/apresentacao` — figura corporal paramétrica por IMC, régua
+OMS e evolução) e **E12 (Bot de Telegram) COMPLETO** (9 stories) — bot **@RafaNutriBot** em
+produção via webhook (visão real do Claude na foto do prato).
+Suíte: **279 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS (24 pacotes).
+Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 · RUNBOOK Fase 5 = canal Telegram.
 
 | Épico | Status | Épico | Status |
 |---|---|---|---|
@@ -77,6 +81,8 @@ Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build`
 ## Avisos operacionais (lições pagas)
 
 - **Next NÃO lê o `.env` da raiz** — keys de runtime em `apps/web/.env.local` (ambos gitignored).
+- **NÃO rodar `npm run dev` com o token de PROD do bot** — o long-polling local faz `deleteWebhook`
+  no boot e derruba o webhook de produção. Para dev do bot: criar um bot de teste no @BotFather.
 - **Mudou gateway/runtime/migrations? REINICIE o `npm run dev`** — singletons globais ignoram HMR;
   PGlite só aplica migration nova no boot.
 - **Nunca usar heredoc bash com backticks/template literals** — escrever script `.cjs` e executar.
