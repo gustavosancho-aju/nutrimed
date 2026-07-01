@@ -9,9 +9,14 @@ import {
   deriveHeightMeters,
   idealWeightRange,
   idealWeightTarget,
+  HEALTHY_IMC,
+  TARGET_IMC,
+  type TrendPoint,
+  type TargetBand,
 } from '@/lib/dashboard';
 import { BodyFigure } from '@/components/dashboard/body-figure';
 import { ImcScale } from '@/components/dashboard/imc-scale';
+import { TrendChart } from '@/components/dashboard/trend-chart';
 
 /**
  * Modo APRESENTAÇÃO (tela paralela à dashboard): visual premium para o médico
@@ -40,6 +45,59 @@ function firstOf<T>(rows: readonly { values: T }[], key: keyof T): number | null
     if (typeof v === 'number') return v;
   }
   return null;
+}
+
+/** Série temporal de um campo das medições (ignora os ausentes). */
+function seriesOf<T>(rows: readonly { measuredAt: Date; values: T }[], key: keyof T): TrendPoint[] {
+  return rows
+    .filter((r) => typeof r.values[key] === 'number')
+    .map((r) => ({ measuredAt: r.measuredAt, value: r.values[key] as number }));
+}
+
+/** dd/mm/aa (pt-BR) para o período das medições sob cada gráfico. */
+function fmtDate(d: Date): string {
+  return new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', day: '2-digit', month: '2-digit', year: '2-digit' }).format(d);
+}
+
+/** Cartão de gráfico do modo apresentação (linha + pontos + banda/meta). */
+function EvolutionChart({
+  label,
+  points,
+  unit,
+  band,
+  target,
+}: {
+  label: string;
+  points: readonly TrendPoint[];
+  unit?: string;
+  band?: TargetBand;
+  target?: number;
+}) {
+  if (points.length === 0) return null;
+  const sorted = [...points].sort((a, b) => a.measuredAt.getTime() - b.measuredAt.getTime());
+  const first = sorted[0]!;
+  const last = sorted[sorted.length - 1]!;
+  return (
+    <div className="rounded-[12px] border border-ink/10 bg-surface p-5">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="text-[11px] uppercase tracking-wide text-ink-muted">{label}</p>
+        <p className="font-display text-lg font-semibold text-ink">
+          {Number.isInteger(last.value) ? last.value : last.value.toFixed(1)}
+          {unit && <span className="ml-1 text-xs font-normal text-ink-muted">{unit}</span>}
+        </p>
+      </div>
+      <div className="mt-3">
+        <TrendChart points={points} unit={unit} band={band} target={target} heightClass="h-24" />
+      </div>
+      <p className="mt-2 flex justify-between text-[10px] text-ink-muted" aria-hidden>
+        <span>{fmtDate(first.measuredAt)}</span>
+        <span>
+          {sorted.length} {sorted.length === 1 ? 'medição' : 'medições'}
+        </span>
+        <span>{fmtDate(last.measuredAt)}</span>
+      </p>
+    </div>
+  );
 }
 
 export default async function ApresentacaoPage({ params }: { params: Promise<{ id: string }> }) {
@@ -169,6 +227,35 @@ export default async function ApresentacaoPage({ params }: { params: Promise<{ i
                   </div>
                 ))}
               </dl>
+            </div>
+          </div>
+
+          {/* Evolução — linhas com os pontos das medições */}
+          <div className="border-t border-ink/10 px-8 pb-8 pt-6 md:px-10">
+            <div className="flex items-baseline justify-between gap-4">
+              <h2 className="font-display text-base font-semibold text-ink">Evolução</h2>
+              {body.length === 1 && (
+                <p className="text-[11px] text-ink-muted">
+                  Ponto atual marcado — a linha se forma a partir da 2ª medição.
+                </p>
+              )}
+            </div>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <EvolutionChart
+                label="Peso"
+                points={seriesOf(body, 'peso')}
+                unit="kg"
+                band={faixaPeso ?? undefined}
+                target={metaPeso ?? undefined}
+              />
+              <EvolutionChart
+                label="IMC"
+                points={seriesOf(body, 'imc')}
+                band={HEALTHY_IMC}
+                target={TARGET_IMC}
+              />
+              <EvolutionChart label="Massa Muscular" points={seriesOf(body, 'massaMuscular')} unit="kg" />
+              <EvolutionChart label="% Gordura" points={seriesOf(body, 'pgc')} unit="%" />
             </div>
           </div>
 

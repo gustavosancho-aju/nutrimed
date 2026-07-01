@@ -21,6 +21,7 @@ export function TrendChart({
   unit,
   band,
   target,
+  heightClass = 'h-16',
 }: {
   points: readonly TrendPoint[];
   className?: string;
@@ -29,6 +30,8 @@ export function TrendChart({
   band?: TargetBand;
   /** Meta/alvo — linha pontilhada verde. */
   target?: number;
+  /** Altura do SVG (Tailwind), ex.: 'h-24' no modo apresentação. */
+  heightClass?: string;
 }) {
   if (points.length === 0) {
     return <p className="text-sm text-ink-muted">Sem medições para exibir.</p>;
@@ -63,7 +66,7 @@ export function TrendChart({
       <svg
         viewBox={`0 0 ${W} ${H}`}
         preserveAspectRatio="none"
-        className="h-16 w-full"
+        className={`${heightClass} w-full`}
         role="img"
         aria-label={`Evolução: ${values.map((v) => `${v}${unit ?? ''}`).join(', ')}${ariaExtra ? `. ${ariaExtra}` : ''}`}
       >
