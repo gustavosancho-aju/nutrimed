@@ -3,8 +3,11 @@ import { redirect, notFound } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { getEncryptionKey } from '@/lib/crypto-key';
-import { loadPatient, computeAge } from '@nutrimed/patients';
+import { loadPatient, computeAge, loadCurrentNutritionGoal } from '@nutrimed/patients';
 import { listConsultationsByPatient } from '@nutrimed/consent';
+import { getLinkStatus } from '@nutrimed/telegram-link';
+import { setGoalAction } from '@/lib/telegram-actions';
+import { TelegramLinkPanel } from '@/components/telegram-link-panel';
 
 /** Formata uma data ISO/Date para dd/mm/aaaa (pt-BR), no servidor (estático). */
 function formatDate(value: string | Date): string {
@@ -29,11 +32,20 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
 
   const { id } = await params;
   const db = await getDb();
-  const patient = await loadPatient(db, id, getEncryptionKey());
+  const key = getEncryptionKey();
+  const patient = await loadPatient(db, id, key);
   if (!patient || patient.userId !== user.id) notFound();
 
   const consultations = await listConsultationsByPatient(db, id);
   const age = computeAge(patient.birthDate, new Date());
+  const link = await getLinkStatus(db, id);
+  const goal = await loadCurrentNutritionGoal(db, id, key);
+  const goalFields = [
+    { name: 'kcal', label: 'Calorias (kcal)', value: goal?.values.kcal },
+    { name: 'protein', label: 'Proteína (g)', value: goal?.values.protein },
+    { name: 'carbs', label: 'Carbo (g)', value: goal?.values.carbs },
+    { name: 'fat', label: 'Gordura (g)', value: goal?.values.fat },
+  ];
 
   return (
     <main className="mx-auto min-h-screen max-w-3xl p-8">
@@ -83,6 +95,67 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
           >
             📊 Dashboard de evolução
           </Link>
+        </div>
+      </section>
+
+      {/* Assistente no Telegram + metas nutricionais (E12/12.4) */}
+      <section className="card-premium gold-hairline mt-8 p-7">
+        <h2 className="font-display text-base font-semibold text-ink">Assistente no Telegram</h2>
+        <p className="mt-1 text-sm text-ink-muted">
+          Vincule o Telegram do paciente e defina as metas. Ele envia a foto do prato e recebe a
+          estimativa nutricional frente às metas. O código de vínculo é o consentimento do paciente
+          (revogável a qualquer momento).
+        </p>
+        <div className="mt-4">
+          <TelegramLinkPanel patientId={patient.id} active={link?.granted ?? false} />
+        </div>
+
+        <div className="mt-6 border-t border-ink/10 pt-6">
+          <h3 className="text-sm font-semibold text-ink">Metas nutricionais</h3>
+          {goal ? (
+            <p className="mt-1 text-xs text-ink-muted">
+              Atuais (desde {formatDate(goal.effectiveFrom)}): ~{Math.round(goal.values.kcal)} kcal · P{' '}
+              {Math.round(goal.values.protein)} g · C {Math.round(goal.values.carbs)} g · G{' '}
+              {Math.round(goal.values.fat)} g
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-ink-muted">Nenhuma meta definida ainda.</p>
+          )}
+          <form action={setGoalAction} className="mt-3">
+            <input type="hidden" name="patientId" value={patient.id} />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {goalFields.map((f) => (
+                <label key={f.name} className="text-xs text-ink-muted">
+                  {f.label}
+                  <input
+                    name={f.name}
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    defaultValue={f.value ?? ''}
+                    className="mt-1 w-full rounded-[8px] border border-ink/15 bg-surface px-2.5 py-1.5 text-sm text-ink"
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap items-end gap-3">
+              <label className="text-xs text-ink-muted">
+                Vigência a partir de
+                <input
+                  name="effectiveFrom"
+                  type="date"
+                  defaultValue={goal?.effectiveFrom ?? ''}
+                  className="mt-1 block rounded-[8px] border border-ink/15 bg-surface px-2.5 py-1.5 text-sm text-ink"
+                />
+              </label>
+              <button
+                type="submit"
+                className="rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+              >
+                Salvar metas
+              </button>
+            </div>
+          </form>
         </div>
       </section>
 

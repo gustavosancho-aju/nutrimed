@@ -19,10 +19,13 @@
 | CJ-9 | **Base de conhecimento curada por persona** (FR21): uso de diretrizes/publicações de terceiros na KB exige licenciamento/atribuição? | FR21, R8 (qualidade da KB) | 🟡 Evolutivo |
 | CJ-10 | **Incidentes de segurança** (art. 48 LGPD): plano de comunicação ANPD/titulares proporcional ao piloto. | R2, NFR9 | 🟡 Evolutivo (rascunho antes do piloto; formalização durante) |
 | CJ-11 | **Importação de laudos por IA (E11/ADR-012)**: enviar um laudo (BIA/exames) a um extrator externo é transferência internacional de dado de saúde (liga a CJ-3) — quais salvaguardas/DPA e qual canal (API direta vs. Bedrock/Vertex vs. Document AI regional) atendem a residência BR? O design já exige **validação médica obrigatória** antes de persistir (ADR-012, NFR10) — isso é suficiente como salvaguarda de exatidão do dado clínico, ou cabe registro adicional do aceite do médico sobre os valores importados? | NFR9, NFR10, ADR-012, ADR-009 | 🟡 Evolutivo (bloqueante só quando a importação for ao ar com pacientes reais; entrada manual não depende disto — NFR13) |
+| CJ-12 | **Canal Telegram do paciente (E12/ADR-013)**: o bot de acompanhamento troca fotos/mensagens do paciente por um serviço externo (Telegram, fora do BR) — transferência internacional de dado de saúde do **titular paciente** (liga a CJ-3). O design prevê **consentimento por canal** (default NEGA, revogável), **minimização** (só `chat_id` ao Telegram; sem identificadores do paciente), **imagem não persistida** por default, e **termo de uso exibido no pareamento**. Isso é suficiente? O consentimento colhido via bot (ato de parear) é base legal válida para o titular paciente (liga a CJ-1/CJ-6)? Qual DPA/canal (Telegram vs. WhatsApp Business regional vs. app próprio) atende a residência BR na comercialização? A estimativa aproximada por foto + disclaimer (ADR-015) afasta caracterização de ato clínico autônomo (liga a CJ-4)? | NFR9, NFR10, NFR14, ADR-013, ADR-014, ADR-015, ADR-009 | 🔴 Bloqueante (para o canal do paciente ir ao ar com pacientes reais; o desenvolvimento/testes com fake não dependem disto) |
 
 ## Critério de saída (gate do piloto E10)
 
 O piloto com pacientes reais **não inicia** enquanto CJ-1…CJ-6 não tiverem parecer jurídico documentado e incorporado (atualizando ADR-009 e as stories de produto afetadas). Itens 🟡 têm dono e prazo definidos até o fim do piloto.
+
+Gate específico de canal: o **canal Telegram do paciente (E12)** não vai ao ar com pacientes reais enquanto **CJ-12** não tiver parecer (adicional a CJ-1…CJ-6, dos quais herda base legal/residência). O desenvolvimento e os testes com dados fictícios/fake (`FOOD_ESTIMATOR=fake`) **não dependem** de CJ-12.
 
 ## Referências
 

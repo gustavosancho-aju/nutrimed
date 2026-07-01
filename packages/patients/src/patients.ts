@@ -298,3 +298,289 @@ export function listLabExam(
 ): Promise<Measurement<LabExamValues>[]> {
   return listMeasurements<LabExamValues>(db, 'lab_exam', patientId, key);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// E12 — Metas nutricionais & registro diário de consumo (bot de Telegram)
+//
+// Metas (kcal/macros) são definidas pelo nutricionista e VERSIONADAS por append
+// (a vigente é a de maior effective_from <= o dia consultado — sem UPDATE
+// destrutivo, coerente com a cultura append-only do projeto). O consumo diário
+// vem das fotos de prato (uma linha por foto). Tudo cifrado (NFR9) e auditado
+// (NFR10), mesmo padrão de addBodyComposition. A estimativa é aproximada, não
+// prescrição, e sem meta o serviço NÃO inventa alvo (ADR-015).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Metas nutricionais alvo do dia (definidas pelo humano). */
+export interface NutritionGoalValues {
+  readonly kcal: number;
+  readonly protein: number;
+  readonly carbs: number;
+  readonly fat: number;
+}
+
+export interface NutritionGoal {
+  readonly id: string;
+  readonly patientId: string;
+  readonly setByUserId: string;
+  /** Vigência da meta em ISO `YYYY-MM-DD`. */
+  readonly effectiveFrom: string;
+  readonly values: NutritionGoalValues;
+  readonly createdAt: Date;
+}
+
+/** Confiança declarada da estimativa por foto (incerteza explícita — ADR-015). */
+export type FoodConfidence = 'low' | 'medium' | 'high';
+
+export interface FoodLogValues {
+  readonly kcal: number;
+  readonly protein: number;
+  readonly carbs: number;
+  readonly fat: number;
+  readonly confidence?: FoodConfidence;
+  readonly itemsLabel?: string;
+}
+
+export interface FoodLogEntry {
+  readonly id: string;
+  readonly patientId: string;
+  readonly eatenAt: Date;
+  readonly source: string;
+  /** Referência do Telegram (file_id) — nunca a imagem em si (ADR-013). */
+  readonly photoRef: string | null;
+  readonly values: FoodLogValues;
+  readonly modelVersion: string | null;
+  readonly createdAt: Date;
+}
+
+export interface FoodLogInput {
+  readonly eatenAt: Date;
+  readonly values: FoodLogValues;
+  readonly source?: string;
+  readonly photoRef?: string;
+  readonly modelVersion?: string;
+}
+
+/** Progresso do dia: consumo somado vs. meta vigente (null se não há meta). */
+export interface DailyProgress {
+  readonly day: string;
+  readonly consumed: NutritionGoalValues;
+  readonly goal: NutritionGoalValues | null;
+  readonly remaining: NutritionGoalValues | null;
+}
+
+interface NutritionGoalRow {
+  id: string;
+  patient_id: string;
+  set_by_user_id: string;
+  effective_from: string;
+  values_enc: string;
+  created_at: Date;
+}
+
+function toNutritionGoal(row: NutritionGoalRow, key: Buffer): NutritionGoal {
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    setByUserId: row.set_by_user_id,
+    effectiveFrom: row.effective_from,
+    values: JSON.parse(decryptField(row.values_enc, key)) as NutritionGoalValues,
+    createdAt: new Date(row.created_at),
+  };
+}
+
+/**
+ * Define uma meta nutricional (nova versão, append) cifrada e auditada.
+ * Não sobrescreve versões anteriores — preserva o histórico (qual meta valia em
+ * cada dia). `effectiveFrom` é ISO `YYYY-MM-DD`.
+ */
+export async function setNutritionGoal(
+  db: SqlExecutor,
+  patientId: string,
+  setByUserId: string,
+  effectiveFrom: string,
+  values: NutritionGoalValues,
+  key: Buffer,
+  origin: WriteOrigin = { action: 'nutrition-goal-set' },
+): Promise<string> {
+  const res = await db.query<{ id: string }>(
+    `INSERT INTO nutrition_goal (patient_id, set_by_user_id, effective_from, values_enc)
+     VALUES ($1, $2, $3::date, $4) RETURNING id`,
+    [patientId, setByUserId, effectiveFrom, encryptField(JSON.stringify(values), key)],
+  );
+  const goalId = res.rows[0]!.id;
+  await writeAudit(db, patientId, {
+    triggeredBy: origin.action,
+    kbSources: [],
+    modelVersion: origin.modelVersion ?? 'human-edit',
+  });
+  return goalId;
+}
+
+/**
+ * Meta vigente numa data (default = hoje, via `CURRENT_DATE` no banco — sem
+ * relógio implícito no app): a de maior `effective_from <= asOf`. `asOf` é ISO
+ * `YYYY-MM-DD`. Retorna null se o paciente ainda não tem meta definida.
+ */
+export async function loadCurrentNutritionGoal(
+  db: SqlExecutor,
+  patientId: string,
+  key: Buffer,
+  asOf?: string,
+): Promise<NutritionGoal | null> {
+  const res = await db.query<NutritionGoalRow>(
+    `SELECT id, patient_id, set_by_user_id, effective_from::text AS effective_from, values_enc, created_at
+     FROM nutrition_goal
+     WHERE patient_id = $1 AND effective_from <= COALESCE($2::date, CURRENT_DATE)
+     ORDER BY effective_from DESC, created_at DESC
+     LIMIT 1`,
+    [patientId, asOf ?? null],
+  );
+  const row = res.rows[0];
+  return row ? toNutritionGoal(row, key) : null;
+}
+
+/** Histórico completo de metas do paciente (mais recentes primeiro). */
+export async function listNutritionGoalHistory(
+  db: SqlExecutor,
+  patientId: string,
+  key: Buffer,
+): Promise<NutritionGoal[]> {
+  const res = await db.query<NutritionGoalRow>(
+    `SELECT id, patient_id, set_by_user_id, effective_from::text AS effective_from, values_enc, created_at
+     FROM nutrition_goal WHERE patient_id = $1
+     ORDER BY effective_from DESC, created_at DESC`,
+    [patientId],
+  );
+  return res.rows.map((r) => toNutritionGoal(r, key));
+}
+
+interface FoodLogRow {
+  id: string;
+  patient_id: string;
+  eaten_at: Date;
+  source: string;
+  photo_ref: string | null;
+  values_enc: string;
+  model_version: string | null;
+  created_at: Date;
+}
+
+function toFoodLogEntry(row: FoodLogRow, key: Buffer): FoodLogEntry {
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    eatenAt: new Date(row.eaten_at),
+    source: row.source,
+    photoRef: row.photo_ref,
+    values: JSON.parse(decryptField(row.values_enc, key)) as FoodLogValues,
+    modelVersion: row.model_version,
+    createdAt: new Date(row.created_at),
+  };
+}
+
+/**
+ * Registra o consumo de uma foto de prato (blob cifrado + auditado). A origem
+ * (`origin.action`, ex.: 'telegram-bot') e o `modelVersion` do estimador entram
+ * na trilha de auditoria para proveniência (NFR10). A imagem NÃO é persistida —
+ * só a estimativa e, opcionalmente, o `photoRef` (file_id — ADR-013).
+ */
+export async function addFoodLogEntry(
+  db: SqlExecutor,
+  patientId: string,
+  input: FoodLogInput,
+  key: Buffer,
+  origin: WriteOrigin = { action: 'food-log-add' },
+): Promise<string> {
+  const res = await db.query<{ id: string }>(
+    `INSERT INTO food_log_entry (patient_id, eaten_at, source, photo_ref, values_enc, model_version)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+    [
+      patientId,
+      input.eatenAt,
+      input.source ?? 'telegram',
+      input.photoRef ?? null,
+      encryptField(JSON.stringify(input.values), key),
+      input.modelVersion ?? null,
+    ],
+  );
+  const entryId = res.rows[0]!.id;
+  await writeAudit(db, patientId, {
+    triggeredBy: origin.action,
+    kbSources: [],
+    modelVersion: origin.modelVersion ?? input.modelVersion ?? 'human-edit',
+  });
+  return entryId;
+}
+
+/**
+ * Janela UTC `[início, fim)` do dia local `dayISO` (`YYYY-MM-DD`), dado o offset
+ * do fuso em minutos (local = UTC + offset; BR = -180). Explícito e testável —
+ * sem relógio nem fuso implícito (mesmo princípio de {@link computeAge}).
+ */
+function localDayRangeUtc(
+  dayISO: string,
+  tzOffsetMinutes: number,
+): { start: Date; end: Date } {
+  const wallClockMs = Date.parse(`${dayISO}T00:00:00Z`);
+  const startMs = wallClockMs - tzOffsetMinutes * 60_000;
+  return { start: new Date(startMs), end: new Date(startMs + 24 * 60 * 60 * 1000) };
+}
+
+/**
+ * Entradas de consumo do dia local `dayISO` (janela pelo offset explícito),
+ * decifradas e em ordem cronológica.
+ */
+export async function listFoodLogByDay(
+  db: SqlExecutor,
+  patientId: string,
+  dayISO: string,
+  tzOffsetMinutes: number,
+  key: Buffer,
+): Promise<FoodLogEntry[]> {
+  const { start, end } = localDayRangeUtc(dayISO, tzOffsetMinutes);
+  const res = await db.query<FoodLogRow>(
+    `SELECT id, patient_id, eaten_at, source, photo_ref, values_enc, model_version, created_at
+     FROM food_log_entry
+     WHERE patient_id = $1 AND eaten_at >= $2 AND eaten_at < $3
+     ORDER BY eaten_at ASC, id ASC`,
+    [patientId, start, end],
+  );
+  return res.rows.map((r) => toFoodLogEntry(r, key));
+}
+
+/**
+ * Progresso do dia: soma o consumo (kcal/macros) das fotos do dia e compara com
+ * a meta vigente naquele dia. Sem meta ⇒ `goal`/`remaining` = null (não inventa
+ * alvo — ADR-015).
+ */
+export async function sumFoodLogForDay(
+  db: SqlExecutor,
+  patientId: string,
+  dayISO: string,
+  tzOffsetMinutes: number,
+  key: Buffer,
+): Promise<DailyProgress> {
+  const entries = await listFoodLogByDay(db, patientId, dayISO, tzOffsetMinutes, key);
+  const consumed: NutritionGoalValues = entries.reduce(
+    (acc, e) => ({
+      kcal: acc.kcal + (Number(e.values.kcal) || 0),
+      protein: acc.protein + (Number(e.values.protein) || 0),
+      carbs: acc.carbs + (Number(e.values.carbs) || 0),
+      fat: acc.fat + (Number(e.values.fat) || 0),
+    }),
+    { kcal: 0, protein: 0, carbs: 0, fat: 0 },
+  );
+
+  const goal = await loadCurrentNutritionGoal(db, patientId, key, dayISO);
+  const goalValues = goal?.values ?? null;
+  const remaining: NutritionGoalValues | null = goalValues
+    ? {
+        kcal: goalValues.kcal - consumed.kcal,
+        protein: goalValues.protein - consumed.protein,
+        carbs: goalValues.carbs - consumed.carbs,
+        fat: goalValues.fat - consumed.fat,
+      }
+    : null;
+
+  return { day: dayISO, consumed, goal: goalValues, remaining };
+}

@@ -166,4 +166,75 @@ CREATE TABLE IF NOT EXISTS lab_exam (
 CREATE INDEX IF NOT EXISTS idx_lab_exam_patient_id ON lab_exam(patient_id);
 `,
   },
+  {
+    name: '0006_telegram_nutrition',
+    sql: `
+-- Bot de Telegram (E12): foto de prato → estimativa nutricional vs. metas.
+-- Valores/PII cifrados em repouso (NFR9, values_enc). Toda escrita é auditada (NFR10).
+-- Telegram é canal EXTERNO: o vínculo exige consentimento do paciente (ADR-013),
+-- default NEGA. Identidade por CÓDIGO DE PAREAMENTO (ADR-014) — sem busca por
+-- telefone (phone_enc tem IV aleatório, não é determinístico). A estimativa da
+-- foto é aproximada, não prescrição (ADR-015).
+
+-- Metas nutricionais por paciente, definidas pelo nutricionista. Versionadas
+-- (append-only, sem UPDATE destrutivo): a meta vigente é a de maior effective_from
+-- <= o dia consultado. values_enc = AES-256-GCM de JSON { kcal, protein, carbs, fat }.
+CREATE TABLE IF NOT EXISTS nutrition_goal (
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  patient_id     uuid NOT NULL REFERENCES patient(id),
+  set_by_user_id uuid NOT NULL REFERENCES app_user(id),
+  effective_from date NOT NULL,
+  values_enc     text NOT NULL,
+  created_at     timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_nutrition_goal_patient
+  ON nutrition_goal(patient_id, effective_from DESC);
+
+-- Registro diário de consumo (uma linha por foto de prato). photo_ref guarda a
+-- REFERÊNCIA do Telegram (file_id), NÃO a imagem — a foto não é persistida (ADR-013).
+-- values_enc = AES-256-GCM de JSON { kcal, protein, carbs, fat, confidence, itemsLabel }.
+CREATE TABLE IF NOT EXISTS food_log_entry (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  patient_id    uuid NOT NULL REFERENCES patient(id),
+  eaten_at      timestamptz NOT NULL,
+  source        text NOT NULL DEFAULT 'telegram',
+  photo_ref     text,
+  values_enc    text NOT NULL,
+  model_version text,
+  created_at    timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_food_log_patient_eaten
+  ON food_log_entry(patient_id, eaten_at);
+
+-- Vínculo chat_id do Telegram → paciente. consent_granted = gate do canal (default
+-- NEGA — ADR-013). O índice único parcial garante NO MÁXIMO 1 canal ativo por
+-- paciente, sem impedir o histórico de vínculos revogados.
+CREATE TABLE IF NOT EXISTS telegram_link (
+  chat_id           text PRIMARY KEY,
+  patient_id        uuid NOT NULL REFERENCES patient(id),
+  consent_granted   boolean NOT NULL DEFAULT false,
+  linked_by_user_id uuid REFERENCES app_user(id),
+  linked_at         timestamptz,
+  revoked_at        timestamptz,
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  updated_at        timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_telegram_link_patient_active
+  ON telegram_link(patient_id) WHERE revoked_at IS NULL;
+
+-- Código de pareamento efêmero (uso único). Guarda apenas o HASH (SHA-256) do
+-- código — nunca o código em claro (ADR-014). Busca por hash é determinística
+-- (é token efêmero de pareamento, não PII médica).
+CREATE TABLE IF NOT EXISTS telegram_pairing_code (
+  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  patient_id         uuid NOT NULL REFERENCES patient(id),
+  created_by_user_id uuid NOT NULL REFERENCES app_user(id),
+  code_hash          text NOT NULL,
+  expires_at         timestamptz NOT NULL,
+  consumed_at        timestamptz,
+  created_at         timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_pairing_code_hash ON telegram_pairing_code(code_hash);
+`,
+  },
 ];

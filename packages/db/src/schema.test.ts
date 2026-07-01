@@ -48,6 +48,7 @@ describe('Migrations 0001 — schema base (AC1, AC3)', () => {
       '0003_audit_provenance',
       '0004_clinical_note',
       '0005_patients_evolution',
+      '0006_telegram_nutrition',
     ]);
   });
 
@@ -160,6 +161,52 @@ describe('Migration 0005 — pacientes & evolução (Story 11.1)', () => {
       massaMuscular: 36.1,
       pgc: 24.3,
     });
+  });
+});
+
+describe('Migration 0006 — Telegram & nutrição (Story 12.1)', () => {
+  it('cria nutrition_goal, food_log_entry, telegram_link e telegram_pairing_code', async () => {
+    const res = await exec.query<{ table_name: string }>(
+      `SELECT table_name FROM information_schema.tables
+       WHERE table_schema = 'public' AND table_name = ANY($1)`,
+      [['nutrition_goal', 'food_log_entry', 'telegram_link', 'telegram_pairing_code']],
+    );
+    expect(res.rows.map((r) => r.table_name).sort()).toEqual([
+      'food_log_entry',
+      'nutrition_goal',
+      'telegram_link',
+      'telegram_pairing_code',
+    ]);
+  });
+
+  it('índice único parcial garante no máximo 1 canal Telegram ATIVO por paciente', async () => {
+    const userId = await insertUser('telegram@nutrimed.test');
+    const p = await exec.query<{ id: string }>(
+      'INSERT INTO patient (user_id, name_enc) VALUES ($1, $2) RETURNING id',
+      [userId, encryptField('Paciente Telegram', key)],
+    );
+    const patientId = p.rows[0]!.id;
+
+    await exec.query(
+      "INSERT INTO telegram_link (chat_id, patient_id, consent_granted, linked_at) VALUES ($1, $2, true, now())",
+      ['chat-1', patientId],
+    );
+    // Segundo vínculo ATIVO para o mesmo paciente é rejeitado pelo índice parcial.
+    await expect(
+      exec.query(
+        "INSERT INTO telegram_link (chat_id, patient_id, consent_granted, linked_at) VALUES ($1, $2, true, now())",
+        ['chat-2', patientId],
+      ),
+    ).rejects.toThrow();
+
+    // Após revogar o primeiro, reparear (novo chat) passa a ser permitido.
+    await exec.query("UPDATE telegram_link SET revoked_at = now() WHERE chat_id = 'chat-1'");
+    await expect(
+      exec.query(
+        "INSERT INTO telegram_link (chat_id, patient_id, consent_granted, linked_at) VALUES ($1, $2, true, now())",
+        ['chat-2', patientId],
+      ),
+    ).resolves.toBeDefined();
   });
 });
 

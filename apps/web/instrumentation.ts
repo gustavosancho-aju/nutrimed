@@ -26,4 +26,13 @@ export async function register(): Promise<void> {
     // na primeira consulta permanece como fallback.
     console.error('[instrumentation] warm-up do gateway WS do board falhou:', error);
   }
+
+  try {
+    // Bot de Telegram (E12/12.7): inicia long-polling (dev) ou registra o webhook
+    // (prod) no boot. Idempotente (singleton). Sem TELEGRAM_BOT_TOKEN ⇒ no-op.
+    const { getTelegramRuntime } = await import('./lib/telegram-runtime');
+    await getTelegramRuntime();
+  } catch (error) {
+    console.error('[instrumentation] warm-up do bot de Telegram falhou:', error);
+  }
 }

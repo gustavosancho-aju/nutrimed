@@ -10,8 +10,8 @@
 ## Estado: MVP funcional fim-a-fim (2026-06-11)
 
 **9 de 10 épicos com núcleo implementado e verificado ao vivo no browser** (falta E8 — vídeos).
-**E11 (Pacientes & Dashboard) COMPLETO** (4 fases: fundação + lista/ficha + dashboard 3 abas + importação de PDF), verificadas ao vivo.
-Suíte: **223 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS (21 pacotes).
+**E11 (Pacientes & Dashboard) COMPLETO** (4 fases) e **E12 (Bot de Telegram) COMPLETO** (9 stories: dados/metas/food-log · pareamento+consentimento · estimador de foto · bot/webhook · orientação IA · telemetria) — bot **@RafaNutriBot** verificado ao vivo.
+Suíte: **272 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS (24 pacotes).
 
 | Épico | Status | Épico | Status |
 |---|---|---|---|
@@ -21,6 +21,7 @@ Suíte: **223 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos 
 | E4 Motores (gate/dedup/pausa) | ✅ núcleo | E9 Documentação Clínica | ✅ |
 | E5 RAG namespaces + Reasoner | ✅ núcleo | E10 Observabilidade & Piloto | ✅ núcleo |
 | E9 Documentação Clínica | ✅ | E11 Pacientes & Dashboard | ✅ completo (4 fases) |
+| E12 Bot de Telegram (foto→nutrição vs metas) | ✅ completo (9 stories) | — | — |
 
 **Fluxo vivo:** login (`demo@nutrimed.test`/`nutrimed123`) → consulta → consentimento (default NEGA)
 → `/consultations/[id]`: transcrição AO VIVO + board (3 personas com retratos, feed com hierarquia
@@ -28,14 +29,14 @@ de segurança, Modo Foco tecla F) → "▶ Consulta simulada" (STT roteirizado) 
 (mic real → WS `/audio` → Deepgram) → contribuições reais do **claude-haiku-4-5** auditadas →
 síntese do Aurélio → nota clínica gerada/editável (cifrada+auditada) → telemetria (custo/gate/latência/ruído).
 
-## Monorepo (21 pacotes)
+## Monorepo (24 pacotes)
 
 ```
-apps/web                 Tela de consulta completa + gateway WS in-process + retratos
+apps/web                 Tela de consulta + ficha/dashboard + gateway WS + webhook do bot Telegram
 packages/shared-types    Protocolo WS v1 (contribution/ping/transcript)
 packages/domain          CLINICAL_VOCABULARY (boost STT)
 packages/crypto          AES-256-GCM (NFR9)
-packages/db              Migrations 0001–0005 · PGlite dev / pg prod (TLS)
+packages/db              Migrations 0001–0006 · PGlite dev / pg prod (TLS)
 packages/auth            scrypt + sessões DB-backed
 packages/consent         Gate de gravação FR20 (servidor, default NEGA)
 packages/audit           Trilha append-only com proveniência (NFR10)
@@ -52,6 +53,9 @@ packages/clinical-notes  E9: nota cifrada+auditada
 packages/telemetry       E10: custo/gate/latência/ruído + Quiet Board trigger
 packages/patients        E11: paciente cifrado + medições (bioimpedância/exames) + computeAge
 packages/lab-import      E11: extração de laudo PDF (ILabExtractor: Claude nativo + fake) — ADR-012
+packages/food-vision     E12: estimativa nutricional por foto (IFoodEstimator: Claude visão + fake) — ADR-015
+packages/telegram-link   E12: pareamento por código + gate de consentimento do canal (default NEGA) — ADR-013/014
+packages/telegram-bot    E12: lógica pura do bot (handlers de foto/comandos + orientação por IA)
 ```
 
 Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build` · `npm run dev`.
@@ -64,10 +68,11 @@ Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build`
 3. **POCs formais** 2.5 (STT) e 3.4 (LLM) — keys já no `.env`; e **3.5/ADR-010** (runtime).
 4. **QA gates formais** E2–E10 (E1 ✅ em `docs/qa/gates/`).
 5. `AskDoctorInput` (FR14 completo) · dedup semântico · CodeRabbit pre-PR.
-6. **Consultoria jurídica** CJ-1..CJ-6 (`docs/architecture/project-decisions/checklist-consultoria-juridica.md`)
-   — bloqueia o piloto com pacientes reais, não o dev.
-7. 🔐 **Rotacionar TODAS as keys** (Anthropic/Deepgram/Gemini — passaram pelo chat) antes de
-   qualquer ambiente compartilhado.
+6. **Consultoria jurídica** CJ-1..CJ-6 (+**CJ-12** para o canal Telegram do paciente, E12)
+   (`docs/architecture/project-decisions/checklist-consultoria-juridica.md`) — bloqueia o piloto com
+   pacientes reais, não o dev.
+7. 🔐 **Rotacionar TODAS as keys** (Anthropic/Deepgram/Gemini + **token do bot Telegram** — passaram
+   pelo chat) antes de qualquer ambiente compartilhado.
 
 ## Avisos operacionais (lições pagas)
 

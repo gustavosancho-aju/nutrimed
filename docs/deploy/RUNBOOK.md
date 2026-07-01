@@ -163,6 +163,46 @@ a aceitar conexões depois que alguém abre uma consulta. Isso afeta:
 
 ---
 
+## Fase 5 — Canal Telegram do paciente (E12, opcional)
+
+> Bot único (mesmo para todos os pacientes): foto do prato → estimativa nutricional vs. metas.
+> Transporte por webhook **entra na porta 3000 já exposta** (sem nova porta/processo — ADR-010);
+> `fly.toml`/`Dockerfile` **não mudam**. 🚫 **Gate CJ-12** (checklist jurídico): o canal **não vai ao
+> ar com pacientes reais** sem parecer — o dev/testes com `FOOD_ESTIMATOR=fake` não dependem disto.
+
+14. **🔐 Rotacionar o token do bot** se ele passou por chat/log (Fase 0): `@BotFather` → `/revoke` →
+    gerar novo. Escolha também um **secret de webhook** forte (string aleatória, ex.:
+    `node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"`).
+15. **Secrets de runtime** (sensíveis → `fly secrets`, nunca no `fly.toml`):
+    ```bash
+    flyctl secrets set \
+      TELEGRAM_BOT_TOKEN="<token-do-BotFather>" \
+      TELEGRAM_WEBHOOK_SECRET="<hex-aleatorio-do-passo-14>"
+    ```
+    - `ANTHROPIC_API_KEY` (já setada na Fase 3) serve à **visão da foto** e à orientação por IA.
+16. **Variáveis não-sensíveis** no `[env]` do `fly.toml` (vão ao runtime, não são segredo):
+    - `TELEGRAM_MODE=webhook`
+    - `PUBLIC_BASE_URL=https://<seu-app>.fly.dev` (base do `setWebhook`)
+    - `FOOD_ESTIMATOR` — **deixe em branco em prod** para usar a visão real do Claude; ou `fake` para
+      desligar a estimativa (sem custo) enquanto o canal não estiver liberado.
+17. **Registro do webhook é automático no boot** (`instrumentation.ts` → `getTelegramRuntime()` →
+    `setWebhook(PUBLIC_BASE_URL + /api/telegram/webhook, secret_token)`, idempotente). **Verificar:**
+    ```bash
+    curl -s "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
+    ```
+    deve mostrar a `url` do seu app e `pending_update_count` baixo, sem `last_error_message`.
+18. **Teste fim-a-fim:** na ficha do paciente → "Assistente no Telegram" → **Gerar código** e definir
+    **metas**; o paciente envia `/start CÓDIGO` ao bot, depois a **foto do prato** → recebe a estimativa
+    vs. meta. Confira `flyctl logs`: aparece `[telegram] foto processada — pacientes ativos: N, custo de
+    visão acumulado ~US$X` e **nenhum conteúdo clínico/PII** (NFR9 — só contadores/custo).
+19. **Rollback do canal:** para desligar o webhook (sem afetar o resto do app):
+    ```bash
+    curl -s "https://api.telegram.org/bot<TOKEN>/deleteWebhook"
+    ```
+    e remova/zere `TELEGRAM_BOT_TOKEN` nos secrets (o runtime vira no-op sem token).
+
+---
+
 ## Fica para depois (com ponteiros — não bloqueia o primeiro deploy técnico)
 
 > Blueprint §9, Fases 2–4. Ordem sugerida.

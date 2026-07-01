@@ -6,3 +6,4 @@ export {
   type ConsultationReport,
   type InstanceSummary,
 } from './telemetry';
+export { TelegramTelemetry, type TelegramTelemetryReport } from './telegram-telemetry';
