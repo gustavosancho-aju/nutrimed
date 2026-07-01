@@ -27,16 +27,16 @@ export function ContributionCard({ item }: { item: BoardContributionItem }) {
     <article
       aria-label={`Contribuição de ${PERSONA_LABEL[contribution.personaId] ?? contribution.personaId}`}
       data-severity={contribution.severity}
-      className={`rounded-lg border p-4 ${critical ? 'border-amber-400 bg-amber-50' : 'border-gray-200 bg-white'}`}
+      className={`rounded-lg border p-4 ${critical ? 'border-attn/40 bg-attn-bg' : 'border-ink/10 bg-surface'}`}
     >
       <header className="flex items-center justify-between">
-        <span className="text-sm font-semibold text-gray-900">
+        <span className="text-sm font-semibold text-ink">
           {PERSONA_LABEL[contribution.personaId] ?? contribution.personaId}
         </span>
-        <span className="text-xs text-gray-600">{TYPE_LABEL[contribution.type] ?? contribution.type}</span>
+        <span className="text-xs text-ink-muted">{TYPE_LABEL[contribution.type] ?? contribution.type}</span>
       </header>
-      <p className="mt-2 text-sm text-gray-800">{contribution.text}</p>
-      <footer className="mt-3 border-t border-gray-200/70 pt-2">
+      <p className="mt-2 text-sm text-ink/90">{contribution.text}</p>
+      <footer className="mt-3 border-t border-ink/10 pt-2">
         <DisclaimerNote variant="card" />
       </footer>
     </article>

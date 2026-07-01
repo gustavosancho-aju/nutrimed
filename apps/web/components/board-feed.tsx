@@ -22,9 +22,9 @@ export function BoardFeed({
 
   return (
     <section aria-label="Board de especialistas" className="space-y-3">
-      <h3 className="text-sm font-semibold text-gray-700">Board de especialistas</h3>
+      <h3 className="font-display text-sm font-semibold text-ink">Board de especialistas</h3>
       {contributions.length === 0 ? (
-        <p className="rounded-md border border-dashed border-gray-300 p-4 text-sm text-gray-500">
+        <p className="rounded-md border border-dashed border-ink/15 p-4 text-sm text-ink-muted">
           Os especialistas estão ouvindo… contribuições aparecem aqui quando houver algo
           clinicamente relevante.
         </p>

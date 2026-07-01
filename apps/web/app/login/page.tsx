@@ -9,15 +9,14 @@ export default function LoginPage() {
   return (
     <main className="surface-deep-gradient flex min-h-screen items-center justify-center p-4">
       <div className="w-full max-w-sm">
-        {/* marca acima do card — serif + filete champagne */}
+        {/* marca acima do card — serif + eyebrow dourado + filete UNIC */}
         <div className="mb-8 text-center">
-          <h1 className="font-display text-4xl font-semibold tracking-tight text-white">
+          <div className="gold-hairline mx-auto mb-5 w-24" />
+          <h1 className="font-display text-5xl font-medium tracking-tight text-white">
             NutriMed
           </h1>
-          <p className="mt-2 text-sm tracking-wide text-white/60">
-            Board de especialistas clínicos
-          </p>
-          <div className="gold-hairline mx-auto mt-5 w-32" />
+          <p className="brand-eyebrow mt-3 text-white/70">Board de especialistas clínicos</p>
+          <div className="gold-hairline mx-auto mt-5 w-24" />
         </div>
 
         <form action={action} className="card-premium space-y-5 p-8">

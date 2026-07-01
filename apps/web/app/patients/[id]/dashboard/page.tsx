@@ -140,8 +140,8 @@ export default async function DashboardPage({
               </div>
             )}
             {heightM !== null && pesoBand && (
-              <div className="rounded-[12px] border border-emerald-300/40 bg-emerald-400/5 p-5">
-                <p className="text-xs uppercase tracking-wide text-emerald-700">
+              <div className="rounded-[12px] border border-secondary/25 bg-secondary/[0.06] p-5">
+                <p className="text-xs uppercase tracking-wide text-secondary">
                   Parâmetros ideais (referência)
                 </p>
                 <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">

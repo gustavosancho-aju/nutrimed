@@ -7,7 +7,7 @@
  * - Texto centralizado em UMA fonte (`DISCLAIMER_TEXT`) — sem duplicação
  *   divergente (AC6). Tom de sugestão, nunca de comando (frontend-spec §4.4).
  * - Acessível (AC5): `role="note"`, ícone decorativo escondido do leitor de
- *   tela (`aria-hidden`), contraste AA (gray-600 sobre branco ≥ 7:1), sem
+ *   tela (`aria-hidden`), contraste AA (ink-muted sobre marfim ≥ 7:1), sem
  *   nenhuma animação — `prefers-reduced-motion` é respeitado por construção.
  */
 
@@ -24,7 +24,7 @@ export interface DisclaimerNoteProps {
 
 export function DisclaimerNote({ variant = 'card' }: DisclaimerNoteProps) {
   return (
-    <p role="note" aria-label="Aviso: a IA assiste, o médico decide" className="text-xs text-gray-600">
+    <p role="note" aria-label="Aviso: a IA assiste, o médico decide" className="text-xs text-ink-muted">
       <span aria-hidden="true">ⓘ </span>
       {DISCLAIMER_TEXT}
       {variant === 'chrome' ? ' — NutriMed' : null}

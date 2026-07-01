@@ -1,41 +1,41 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
-  <!-- Fundo "papel clínico" bege com véus jade — direção Clinical Quiet Luxury.
+  <!-- Fundo "papel clínico" marfim com véus sálvia — identidade UNIC.
        Rede de células conectadas (nutrologia/metabolismo) em traço fino, opacidade
        baixa: presença científica sem competir com o conteúdo. -->
   <defs>
     <radialGradient id="veilTL" cx="12%" cy="0%" r="65%">
-      <stop offset="0%" stop-color="#cfe8e2" stop-opacity="0.55"/>
-      <stop offset="100%" stop-color="#cfe8e2" stop-opacity="0"/>
+      <stop offset="0%" stop-color="#dbe0c8" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#dbe0c8" stop-opacity="0"/>
     </radialGradient>
     <radialGradient id="veilBR" cx="92%" cy="100%" r="60%">
-      <stop offset="0%" stop-color="#d8e9e0" stop-opacity="0.5"/>
-      <stop offset="100%" stop-color="#d8e9e0" stop-opacity="0"/>
+      <stop offset="0%" stop-color="#e2e6cf" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#e2e6cf" stop-opacity="0"/>
     </radialGradient>
     <radialGradient id="cellFill" cx="38%" cy="35%" r="70%">
       <stop offset="0%" stop-color="#ffffff" stop-opacity="0.7"/>
-      <stop offset="100%" stop-color="#9fc6bb" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#b3bd94" stop-opacity="0.14"/>
     </radialGradient>
     <linearGradient id="goldLine" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#c4ad7d" stop-opacity="0"/>
-      <stop offset="50%" stop-color="#c4ad7d" stop-opacity="0.35"/>
-      <stop offset="100%" stop-color="#c4ad7d" stop-opacity="0"/>
+      <stop offset="0%" stop-color="#c2a24e" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#c2a24e" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#c2a24e" stop-opacity="0"/>
     </linearGradient>
   </defs>
 
-  <rect width="1920" height="1080" fill="#fbfaf7"/>
+  <rect width="1920" height="1080" fill="#faf8f1"/>
   <rect width="1920" height="1080" fill="url(#veilTL)"/>
   <rect width="1920" height="1080" fill="url(#veilBR)"/>
 
   <!-- blobs orgânicos (membranas) — muito suaves -->
   <path d="M-120,260 C80,120 360,180 420,360 C470,520 300,640 120,600 C-40,560 -220,400 -120,260 Z"
-        fill="#2a6f63" opacity="0.035"/>
+        fill="#5c6b3f" opacity="0.035"/>
   <path d="M2040,820 C1860,960 1580,920 1520,740 C1470,580 1640,440 1820,490 C1980,535 2160,720 2040,820 Z"
-        fill="#2a6f63" opacity="0.04"/>
+        fill="#5c6b3f" opacity="0.04"/>
   <path d="M1700,-80 C1840,40 1820,220 1660,260 C1520,295 1400,180 1450,40 C1490,-70 1600,-160 1700,-80 Z"
-        fill="#c4ad7d" opacity="0.05"/>
+        fill="#c2a24e" opacity="0.05"/>
 
   <!-- rede de células conectadas — quadrante superior esquerdo -->
-  <g stroke="#2a6f63" stroke-width="1" fill="none" opacity="0.16">
+  <g stroke="#5c6b3f" stroke-width="1" fill="none" opacity="0.16">
     <path d="M180,140 C260,180 320,150 410,210"/>
     <path d="M410,210 C480,260 560,230 640,300"/>
     <path d="M180,140 C160,250 230,330 320,370"/>
@@ -46,20 +46,20 @@
     <path d="M85,330 C150,380 240,390 320,370"/>
   </g>
   <g opacity="0.9">
-    <circle cx="180" cy="140" r="22" fill="url(#cellFill)" stroke="#2a6f63" stroke-opacity="0.22"/>
-    <circle cx="180" cy="140" r="7" fill="#2a6f63" opacity="0.14"/>
-    <circle cx="410" cy="210" r="30" fill="url(#cellFill)" stroke="#2a6f63" stroke-opacity="0.2"/>
-    <circle cx="410" cy="210" r="10" fill="#2a6f63" opacity="0.12"/>
-    <circle cx="640" cy="300" r="18" fill="url(#cellFill)" stroke="#2a6f63" stroke-opacity="0.22"/>
-    <circle cx="640" cy="300" r="6" fill="#2a6f63" opacity="0.14"/>
-    <circle cx="320" cy="370" r="26" fill="url(#cellFill)" stroke="#2a6f63" stroke-opacity="0.18"/>
-    <circle cx="320" cy="370" r="8" fill="#2a6f63" opacity="0.12"/>
-    <circle cx="590" cy="520" r="14" fill="url(#cellFill)" stroke="#2a6f63" stroke-opacity="0.2"/>
-    <circle cx="85" cy="330" r="12" fill="url(#cellFill)" stroke="#2a6f63" stroke-opacity="0.2"/>
+    <circle cx="180" cy="140" r="22" fill="url(#cellFill)" stroke="#5c6b3f" stroke-opacity="0.22"/>
+    <circle cx="180" cy="140" r="7" fill="#5c6b3f" opacity="0.14"/>
+    <circle cx="410" cy="210" r="30" fill="url(#cellFill)" stroke="#5c6b3f" stroke-opacity="0.2"/>
+    <circle cx="410" cy="210" r="10" fill="#5c6b3f" opacity="0.12"/>
+    <circle cx="640" cy="300" r="18" fill="url(#cellFill)" stroke="#5c6b3f" stroke-opacity="0.22"/>
+    <circle cx="640" cy="300" r="6" fill="#5c6b3f" opacity="0.14"/>
+    <circle cx="320" cy="370" r="26" fill="url(#cellFill)" stroke="#5c6b3f" stroke-opacity="0.18"/>
+    <circle cx="320" cy="370" r="8" fill="#5c6b3f" opacity="0.12"/>
+    <circle cx="590" cy="520" r="14" fill="url(#cellFill)" stroke="#5c6b3f" stroke-opacity="0.2"/>
+    <circle cx="85" cy="330" r="12" fill="url(#cellFill)" stroke="#5c6b3f" stroke-opacity="0.2"/>
   </g>
 
   <!-- rede de células — quadrante inferior direito -->
-  <g stroke="#2a6f63" stroke-width="1" fill="none" opacity="0.14">
+  <g stroke="#5c6b3f" stroke-width="1" fill="none" opacity="0.14">
     <path d="M1500,860 C1580,820 1660,850 1720,790"/>
     <path d="M1720,790 C1800,730 1860,760 1880,680"/>
     <path d="M1500,860 C1460,940 1530,1010 1620,1000"/>
@@ -69,23 +69,23 @@
     <path d="M1340,950 C1390,910 1450,890 1500,860"/>
   </g>
   <g opacity="0.9">
-    <circle cx="1500" cy="860" r="24" fill="url(#cellFill)" stroke="#2a6f63" stroke-opacity="0.2"/>
-    <circle cx="1500" cy="860" r="8" fill="#2a6f63" opacity="0.12"/>
-    <circle cx="1720" cy="790" r="32" fill="url(#cellFill)" stroke="#2a6f63" stroke-opacity="0.18"/>
-    <circle cx="1720" cy="790" r="11" fill="#2a6f63" opacity="0.1"/>
-    <circle cx="1880" cy="680" r="16" fill="url(#cellFill)" stroke="#2a6f63" stroke-opacity="0.2"/>
-    <circle cx="1620" cy="1000" r="20" fill="url(#cellFill)" stroke="#2a6f63" stroke-opacity="0.18"/>
-    <circle cx="1620" cy="1000" r="7" fill="#2a6f63" opacity="0.12"/>
-    <circle cx="1850" cy="920" r="12" fill="url(#cellFill)" stroke="#2a6f63" stroke-opacity="0.2"/>
-    <circle cx="1340" cy="950" r="10" fill="url(#cellFill)" stroke="#2a6f63" stroke-opacity="0.2"/>
+    <circle cx="1500" cy="860" r="24" fill="url(#cellFill)" stroke="#5c6b3f" stroke-opacity="0.2"/>
+    <circle cx="1500" cy="860" r="8" fill="#5c6b3f" opacity="0.12"/>
+    <circle cx="1720" cy="790" r="32" fill="url(#cellFill)" stroke="#5c6b3f" stroke-opacity="0.18"/>
+    <circle cx="1720" cy="790" r="11" fill="#5c6b3f" opacity="0.1"/>
+    <circle cx="1880" cy="680" r="16" fill="url(#cellFill)" stroke="#5c6b3f" stroke-opacity="0.2"/>
+    <circle cx="1620" cy="1000" r="20" fill="url(#cellFill)" stroke="#5c6b3f" stroke-opacity="0.18"/>
+    <circle cx="1620" cy="1000" r="7" fill="#5c6b3f" opacity="0.12"/>
+    <circle cx="1850" cy="920" r="12" fill="url(#cellFill)" stroke="#5c6b3f" stroke-opacity="0.2"/>
+    <circle cx="1340" cy="950" r="10" fill="url(#cellFill)" stroke="#5c6b3f" stroke-opacity="0.2"/>
   </g>
 
   <!-- células esparsas soltas (ritmo) -->
-  <circle cx="980" cy="120" r="9" fill="url(#cellFill)" stroke="#2a6f63" stroke-opacity="0.14"/>
-  <circle cx="1240" cy="240" r="14" fill="url(#cellFill)" stroke="#2a6f63" stroke-opacity="0.12"/>
-  <circle cx="780" cy="900" r="12" fill="url(#cellFill)" stroke="#2a6f63" stroke-opacity="0.12"/>
-  <circle cx="240" cy="820" r="16" fill="url(#cellFill)" stroke="#2a6f63" stroke-opacity="0.1"/>
-  <circle cx="1100" cy="1010" r="8" fill="url(#cellFill)" stroke="#2a6f63" stroke-opacity="0.12"/>
+  <circle cx="980" cy="120" r="9" fill="url(#cellFill)" stroke="#5c6b3f" stroke-opacity="0.14"/>
+  <circle cx="1240" cy="240" r="14" fill="url(#cellFill)" stroke="#5c6b3f" stroke-opacity="0.12"/>
+  <circle cx="780" cy="900" r="12" fill="url(#cellFill)" stroke="#5c6b3f" stroke-opacity="0.12"/>
+  <circle cx="240" cy="820" r="16" fill="url(#cellFill)" stroke="#5c6b3f" stroke-opacity="0.1"/>
+  <circle cx="1100" cy="1010" r="8" fill="url(#cellFill)" stroke="#5c6b3f" stroke-opacity="0.12"/>
 
   <!-- filete champagne diagonal — assinatura discreta -->
   <path d="M1080,40 C1280,140 1420,150 1640,120" stroke="url(#goldLine)" stroke-width="1.2" fill="none"/>

@@ -86,18 +86,18 @@ export function ConsultationLobby({
   if (started) return null;
 
   return (
-    <section aria-label="Preparação da consulta" className="mx-auto max-w-md space-y-4 rounded-lg border border-gray-200 p-6">
-      <h2 className="text-lg font-semibold text-gray-900">Antes de começar</h2>
+    <section aria-label="Preparação da consulta" className="card-premium mx-auto max-w-md space-y-4 p-6">
+      <h2 className="font-display text-lg font-semibold text-ink">Antes de começar</h2>
 
       {/* Etapa 1 — microfone (AC1/AC2) */}
-      <div data-testid="mic-step" data-status={micStatus} className="rounded-md border border-gray-200 p-3">
+      <div data-testid="mic-step" data-status={micStatus} className="rounded-md border border-ink/10 p-3">
         {micStatus === 'checking' ? (
-          <p className="text-sm text-gray-600">Verificando microfone…</p>
+          <p className="text-sm text-ink-muted">Verificando microfone…</p>
         ) : micStatus === 'ok' ? (
-          <p className="text-sm text-green-700">🎙️ Microfone pronto.</p>
+          <p className="text-sm font-medium text-success">🎙️ Microfone pronto.</p>
         ) : (
           <div className="space-y-2">
-            <p className="text-sm text-amber-800">
+            <p className="text-sm text-attn">
               {micStatus === 'denied'
                 ? 'Permissão de microfone negada. Libere o acesso ao microfone nas permissões do navegador (ícone de cadeado na barra de endereço) e tente de novo.'
                 : 'Nenhum microfone disponível. Conecte um microfone e tente de novo.'}
@@ -105,7 +105,7 @@ export function ConsultationLobby({
             <button
               type="button"
               onClick={() => void runMicCheck()}
-              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+              className="rounded-md border border-ink/15 px-3 py-1.5 text-sm text-ink transition-colors hover:bg-surface-muted"
             >
               Tentar de novo
             </button>
@@ -114,18 +114,18 @@ export function ConsultationLobby({
       </div>
 
       {/* Etapa 2 — consentimento do SERVIDOR (AC3 — Story 1.4) */}
-      <div data-testid="gate-step" data-status={gate} className="rounded-md border border-gray-200 p-3">
+      <div data-testid="gate-step" data-status={gate} className="rounded-md border border-ink/10 p-3">
         {gate === 'checking' ? (
-          <p className="text-sm text-gray-600">Verificando autorização de gravação…</p>
+          <p className="text-sm text-ink-muted">Verificando autorização de gravação…</p>
         ) : gate === 'authorized' ? (
-          <p className="text-sm text-green-700">🟢 Gravação autorizada pelo servidor.</p>
+          <p className="text-sm font-medium text-success">🟢 Gravação autorizada pelo servidor.</p>
         ) : gate === 'blocked' ? (
-          <p className="text-sm text-amber-800">
+          <p className="text-sm text-attn">
             🔒 Sem consentimento de gravação registrado. Registre o consentimento na página da
             consulta antes de iniciar.
           </p>
         ) : (
-          <p className="text-sm text-red-700">Falha ao consultar a autorização. Recarregue a página.</p>
+          <p className="text-sm text-attn-critical">Falha ao consultar a autorização. Recarregue a página.</p>
         )}
       </div>
 
@@ -133,7 +133,7 @@ export function ConsultationLobby({
         type="button"
         onClick={start}
         disabled={!ready}
-        className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white enabled:hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
+        className="w-full rounded-[10px] bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity enabled:hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
       >
         Iniciar consulta
       </button>
