@@ -1,1 +1,9 @@
-export { generateNoteDraft, saveNote, loadNote, type ClinicalNote } from './notes';
+export {
+  generateNoteDraft,
+  saveNote,
+  loadNote,
+  saveSynthesis,
+  listSyntheses,
+  type ClinicalNote,
+  type BoardSynthesis,
+} from './notes';

@@ -237,4 +237,24 @@ CREATE TABLE IF NOT EXISTS telegram_pairing_code (
 CREATE INDEX IF NOT EXISTS idx_pairing_code_hash ON telegram_pairing_code(code_hash);
 `,
   },
+  {
+    name: '0007_board_synthesis',
+    sql: `
+-- Sínteses do board persistidas (histórico da consulta). Cada síntese do
+-- Aurélio (E6) vira uma linha cifrada (NFR9) no momento em que é gerada — o
+-- histórico sobrevive a restart/fim da consulta. A transcrição segue EFÊMERA
+-- por minimização LGPD (retenção é a questão CJ-2); o registro permanente da
+-- consulta continua sendo a nota clínica validada pelo médico (NFR10).
+
+CREATE TABLE IF NOT EXISTS board_synthesis (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  consultation_id uuid NOT NULL REFERENCES consultation(id),
+  content_enc     text NOT NULL,
+  model_version   text,
+  created_at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_board_synthesis_consultation
+  ON board_synthesis(consultation_id, created_at);
+`,
+  },
 ];

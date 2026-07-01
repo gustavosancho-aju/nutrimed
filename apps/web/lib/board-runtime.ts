@@ -10,7 +10,10 @@ import { DeepgramSttProvider } from '@nutrimed/stt-deepgram';
 import { FakeLlmProvider, type ISttProvider, type SttSession, type TranscriptSegment, type ILlmProvider } from '@nutrimed/providers';
 import { CLINICAL_VOCABULARY } from '@nutrimed/domain';
 import { TelemetryRegistry, type GateDecisionKind, type UiEventKind } from '@nutrimed/telemetry';
+import { saveSynthesis } from '@nutrimed/clinical-notes';
+import type { SqlExecutor } from '@nutrimed/db';
 import { getDb } from './db';
+import { getEncryptionKey } from './crypto-key';
 
 /**
  * Runtime do board no processo do Next (demo do walking skeleton — E3).
@@ -113,6 +116,18 @@ function makeLlm(onUsage?: (u: { inputTokens: number; outputTokens: number }) =>
   return { llm: new FakeLlmProvider('paulo', 'atencao'), label: 'fake (sem ANTHROPIC_API_KEY)' };
 }
 
+/**
+ * Persistência do histórico do board: toda SÍNTESE do Aurélio é gravada
+ * (cifrada + auditada) no momento em que sai — sobrevive a restart/fim da
+ * consulta. Fire-and-forget com log: falha de persistência não derruba o board.
+ */
+function persistSynthesisEvents(db: SqlExecutor, consultationId: string, event: FullBoardEvent): void {
+  if (event.contribution.type !== 'sintese') return;
+  saveSynthesis(db, consultationId, event.contribution.text, getEncryptionKey(), event.contribution.modelVersion).catch(
+    (error) => console.error('[board] falha ao salvar síntese:', error),
+  );
+}
+
 /** Wiring comum de telemetria por consulta (E10). */
 function telemetryHooks(runtime: BoardRuntime, consultationId: string) {
   const t = runtime.telemetry;
@@ -160,7 +175,10 @@ export async function startDemoBoard(consultationId: string): Promise<{ llmLabel
   });
   // histórico de contribuições da sessão (insumo da nota clínica — E9)
   const events: FullBoardEvent[] = [];
-  orchestrator.subscribe((event) => events.push(event));
+  orchestrator.subscribe((event) => {
+    events.push(event);
+    persistSynthesisEvents(db, consultationId, event); // histórico salvo (cifrado+auditado)
+  });
   orchestrator.start();
   runtime.active.set(consultationId, { session, orchestrator, events });
   return { llmLabel: label };
@@ -262,7 +280,10 @@ export async function startLiveBoard(consultationId: string): Promise<void> {
     }
   });
   const events: FullBoardEvent[] = [];
-  orchestrator.subscribe((event) => events.push(event));
+  orchestrator.subscribe((event) => {
+    events.push(event);
+    persistSynthesisEvents(db, consultationId, event); // histórico salvo (cifrado+auditado)
+  });
   orchestrator.start();
   runtime.active.set(consultationId, { session, orchestrator, events });
 }

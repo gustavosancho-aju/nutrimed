@@ -90,6 +90,61 @@ export async function saveNote(
   });
 }
 
+// ── Sínteses do board persistidas (histórico da consulta) ──────────────────
+
+export interface BoardSynthesis {
+  readonly id: string;
+  readonly consultationId: string;
+  readonly content: string;
+  readonly modelVersion: string | null;
+  readonly createdAt: Date;
+}
+
+/**
+ * Persiste uma síntese do board (cifrada + auditada) no momento em que é
+ * gerada — o histórico da consulta sobrevive a restart. Append-only por design
+ * (cada síntese é um registro; nada é sobrescrito).
+ */
+export async function saveSynthesis(
+  db: SqlExecutor,
+  consultationId: string,
+  content: string,
+  encryptionKey: Buffer,
+  modelVersion?: string,
+): Promise<string> {
+  const res = await db.query<{ id: string }>(
+    'INSERT INTO board_synthesis (consultation_id, content_enc, model_version) VALUES ($1, $2, $3) RETURNING id',
+    [consultationId, encryptField(content, encryptionKey), modelVersion ?? null],
+  );
+  await writeAudit(db, consultationId, {
+    triggeredBy: 'board-synthesis',
+    kbSources: [],
+    modelVersion: modelVersion ?? 'unknown',
+  });
+  return res.rows[0]!.id;
+}
+
+/** Sínteses salvas da consulta, decifradas, em ordem cronológica. */
+export async function listSyntheses(
+  db: SqlExecutor,
+  consultationId: string,
+  encryptionKey: Buffer,
+): Promise<BoardSynthesis[]> {
+  const res = await db.query<{ id: string; content_enc: string; model_version: string | null; created_at: Date }>(
+    `SELECT id, content_enc, model_version, created_at
+     FROM board_synthesis WHERE consultation_id = $1
+     ORDER BY created_at ASC, id ASC`,
+    [consultationId],
+  );
+  return res.rows.map((r) => ({
+    id: r.id,
+    consultationId,
+    content: decryptField(r.content_enc, encryptionKey),
+    modelVersion: r.model_version,
+    createdAt: new Date(r.created_at),
+  }));
+}
+
 /** Carrega e decifra a nota da consulta (null se ainda não existe). */
 export async function loadNote(
   db: SqlExecutor,

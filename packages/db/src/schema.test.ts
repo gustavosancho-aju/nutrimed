@@ -49,6 +49,7 @@ describe('Migrations 0001 — schema base (AC1, AC3)', () => {
       '0004_clinical_note',
       '0005_patients_evolution',
       '0006_telegram_nutrition',
+      '0007_board_synthesis',
     ]);
   });
 
