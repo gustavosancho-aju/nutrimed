@@ -1,6 +1,7 @@
 import type {
   ILlmProvider,
   LlmCompletionRequest,
+  TextCompletionRequest,
   PersonaContribution,
   PersonaId,
   ContributionType,
@@ -162,6 +163,42 @@ export class AnthropicLlmProvider implements ILlmProvider {
       kbSources: req.context.map((c) => c.id),
       modelVersion: data.model ?? this.config.model ?? DEFAULT_MODEL,
     };
+  }
+
+  /**
+   * B3 — completion de texto livre (CaseState/case review): mesma Messages API,
+   * sem o contrato JSON de contribuição. Também reporta usage (custo E10).
+   */
+  async completeText(req: TextCompletionRequest): Promise<{ text: string; modelVersion?: string }> {
+    const doFetch = this.config.fetchImpl ?? fetch;
+    const response = await doFetch(this.config.endpoint ?? DEFAULT_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': this.config.apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: this.config.model ?? DEFAULT_MODEL,
+        max_tokens: req.maxTokens ?? 400,
+        system: req.system,
+        messages: [{ role: 'user', content: req.prompt }],
+      }),
+    });
+    const data = (await response.json()) as AnthropicResponse;
+    if (!response.ok) {
+      throw new AnthropicLlmError(
+        `Messages API falhou (${response.status}): ${data.error?.message ?? 'sem detalhe'}`,
+        'api',
+      );
+    }
+    this.config.onUsage?.({
+      inputTokens: data.usage?.input_tokens ?? 0,
+      outputTokens: data.usage?.output_tokens ?? 0,
+    });
+    const text = data.content?.find((b) => b.type === 'text')?.text;
+    if (!text) throw new AnthropicLlmError('Resposta sem bloco de texto.', 'parse');
+    return { text, modelVersion: data.model ?? this.config.model ?? DEFAULT_MODEL };
   }
 }
 

@@ -9,8 +9,10 @@ import type {
   SttSession,
   TranscriptSegment,
   LlmCompletionRequest,
+  TextCompletionRequest,
   PersonaContribution,
 } from '@nutrimed/providers';
+import { FakeTextCompleter } from '@nutrimed/providers';
 import { startConsultationSession } from '@nutrimed/session';
 import { NamespacedKnowledgeStore, ingest } from '@nutrimed/kb';
 import { FullBoardOrchestrator, type FullBoardEvent } from './full-board';
@@ -68,6 +70,8 @@ class EchoLlm {
   calls: LlmCompletionRequest[] = [];
   /** B1: simula o modelo declarando "nada novo". */
   skipIf: ((req: LlmCompletionRequest) => boolean) | null = null;
+  /** B3: completeText opcional (CaseState) — atribuído por teste quando necessário. */
+  completeText?: (req: TextCompletionRequest) => Promise<{ text: string; modelVersion?: string }>;
   async complete(req: LlmCompletionRequest): Promise<PersonaContribution> {
     this.calls.push(req);
     if (req.allowSkip && this.skipIf?.(req)) {
@@ -124,15 +128,28 @@ describe('FullBoardOrchestrator — board completo (E6)', () => {
     await db.close();
   });
 
-  async function setup(opts: { now?: () => number; pauseMs?: number; onDecision?: (kind: string) => void } = {}) {
+  async function setup(
+    opts: {
+      now?: () => number;
+      pauseMs?: number;
+      onDecision?: (kind: string) => void;
+      caseStateEveryNFinals?: number;
+      textScript?: readonly string[];
+    } = {},
+  ) {
     const stt = new PushSttProvider();
     const session = await startConsultationSession(exec, consultationId, stt);
     const llm = new EchoLlm();
+    if (opts.textScript) {
+      const completer = new FakeTextCompleter(opts.textScript);
+      llm.completeText = (req) => completer.completeText(req);
+    }
     const board = new FullBoardOrchestrator(exec, session, llm, makeStore(), {
       pauseMs: opts.pauseMs ?? 0, // pausa imediata por default (testes determinísticos)
       tickMs: 100000, // tick manual via flush — sem timer interferindo
       now: opts.now,
       onDecision: opts.onDecision,
+      caseStateEveryNFinals: opts.caseStateEveryNFinals,
     });
     const events: FullBoardEvent[] = [];
     board.subscribe((e) => events.push(e));
@@ -333,6 +350,47 @@ describe('FullBoardOrchestrator — board completo (E6)', () => {
     expect(llm.calls.length).toBeGreaterThan(callsAfterFirst); // critical SEMPRE reanalisa
     expect(events.length).toBe(emitted); // mas texto idêntico não repete no feed
     expect(decisions).toContain('semantic-duplicate');
+    board.stop();
+    await session.stop();
+  });
+
+  it('B3 — CaseState entra no prompt das personas e da síntese', async () => {
+    let t = 0;
+    const STATE =
+      '{"hypotheses":["hipotireoidismo subclínico"],"investigated":["TSH pedido"],"patientReports":["cansaço"],"pending":{}}';
+    const { stt, session, board, llm } = await setup({
+      now: () => (t += 3000),
+      caseStateEveryNFinals: 1, // update a cada final (determinístico no teste)
+      textScript: [STATE],
+    });
+
+    stt.push('Bom dia, vamos retomar o acompanhamento.'); // neutro — só alimenta o CaseState
+    await flush();
+    await board.flush();
+    await flush(); // update fire-and-forget do tracker resolve
+
+    stt.push('Paciente com platô no peso e muito cansaço.'); // dispara Yara/Aurélio
+    await flush();
+    await board.flush();
+
+    const contributionCall = llm.calls.find((c) => !c.system.includes('SÍNTESE'));
+    expect(contributionCall!.transcript).toContain('ESTADO DO CASO');
+    expect(contributionCall!.transcript).toContain('hipotireoidismo subclínico');
+
+    await board.synthesizeNow();
+    const synthCall = llm.calls[llm.calls.length - 1]!;
+    expect(synthCall.transcript).toContain('ESTADO DO CASO');
+    board.stop();
+    await session.stop();
+  });
+
+  it('B3 — provider sem completeText: board funciona igual (degradação graciosa)', async () => {
+    let t = 0;
+    const { stt, session, board, events } = await setup({ now: () => (t += 3000) }); // sem textScript
+    stt.push('Vou prescrever sibutramina.');
+    await flush();
+    await board.flush();
+    expect(events.length).toBeGreaterThan(0); // pipeline intacto, sem CaseState
     board.stop();
     await session.stop();
   });

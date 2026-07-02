@@ -73,6 +73,8 @@ export interface ReasonInput {
   readonly k?: number;
   /** B1: contribuições já exibidas nesta consulta (o modelo não deve repeti-las). */
   readonly previousContributions?: readonly PriorContribution[];
+  /** B3: bloco compacto do ESTADO DO CASO (CaseStateTracker) — progressão da consulta inteira. */
+  readonly caseState?: string;
 }
 
 export class PersonaReasoner {
@@ -91,7 +93,9 @@ export class PersonaReasoner {
     const contribution = await this.llm.complete({
       system: buildPersonaSystem(profile),
       context,
-      transcript: input.transcript,
+      // B3: o estado do caso dá ao modelo a PROGRESSÃO da consulta inteira,
+      // não só a janela curta de transcript
+      transcript: input.caseState ? `${input.caseState}\n\n${input.transcript}` : input.transcript,
       priorContributions: priors,
       allowSkip: true, // sem nada novo, o modelo devolve {"skip":true} e nada é exibido
     });

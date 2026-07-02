@@ -16,6 +16,7 @@ import {
 } from '@nutrimed/engines';
 import { PersonaReasoner, PERSONA_PROFILES, buildPersonaSystem } from '@nutrimed/kb';
 import type { IKnowledgeRetriever } from '@nutrimed/providers';
+import { CaseStateTracker } from './case-state';
 
 /**
  * Board COMPLETO (E6 — Stories 6.1/6.2/6.3): as 3 personas simultâneas (FR2)
@@ -54,6 +55,10 @@ export interface FullBoardConfig extends GatekeeperConfig {
   readonly onDecision?: (kind: string) => void;
   /** Telemetria (E10): latência gatilho→publicação por contribuição (§11). */
   readonly onContributionLatency?: (latencyMs: number) => void;
+  /** B3: atualiza o CaseState a cada N finais (default 6). */
+  readonly caseStateEveryNFinals?: number;
+  /** B3: telemetria — update do CaseState concluído. */
+  readonly onCaseStateUpdate?: () => void;
 }
 
 interface RoundEntry {
@@ -77,6 +82,8 @@ export class FullBoardOrchestrator {
   private readonly seenTopics = new Map<string, string>();
   /** B2 — pós-LLM: similaridade contra TODOS os textos já exibidos. */
   private readonly semanticDedup = new SemanticDeduplicator();
+  /** B3 — memória estruturada do caso (desliga sozinha sem completeText). */
+  private readonly caseState: CaseStateTracker;
   /** Tipos por tópico p/ detecção de divergência (FR7). */
   private readonly topicTypes = new Map<string, Map<PersonaId, string>>();
   private unsubscribe: (() => void) | null = null;
@@ -97,6 +104,10 @@ export class FullBoardOrchestrator {
   ) {
     this.gate = new BoardGatekeeper(config);
     this.reasoner = new PersonaReasoner(retriever, llm);
+    this.caseState = new CaseStateTracker(llm, {
+      everyNFinals: config.caseStateEveryNFinals,
+      onUpdate: config.onCaseStateUpdate,
+    });
     this.now = config.now ?? Date.now;
     this.config = {
       tickMs: config.tickMs ?? 1000,
@@ -150,6 +161,9 @@ export class FullBoardOrchestrator {
   private async onFinalSegment(text: string, at: number): Promise<void> {
     this.recentFinals.push(text);
     if (this.recentFinals.length > 8) this.recentFinals.shift();
+    this.caseState.onFinalSegment(text); // B3: alimenta a memória do caso
+    // fire-and-forget: o update roda em paralelo à fala (o tracker impede 2 em voo)
+    void this.caseState.maybeUpdate();
 
     // 3 personas monitoram o MESMO segmento — sem invocação (FR2)
     for (const match of this.detector.detect(text, at)) {
@@ -161,6 +175,7 @@ export class FullBoardOrchestrator {
   }
 
   private async tick(): Promise<void> {
+    await this.caseState.maybeUpdate(); // B3: no-op se <N finais ou update em voo
     const now = this.now();
     for (const candidate of this.gate.release(now)) {
       this.config2.onDecision?.('deliver'); // liberado da pausa/fila (E10)
@@ -197,6 +212,7 @@ export class FullBoardOrchestrator {
         query: candidate.segmentText,
         transcript: this.recentFinals.join(' '),
         previousContributions: this.history.slice(-20), // cap de tokens (B1)
+        caseState: this.caseState.renderForPrompt() || undefined, // B3
       });
       if (contribution.skip) {
         // o modelo declarou não ter nada novo — sem audit, sem emit (B1)
@@ -260,7 +276,8 @@ export class FullBoardOrchestrator {
           'Se houver divergência entre os colegas, exponha-a com transparência e modere. ' +
           'Termine SEMPRE devolvendo a decisão ao médico (ex.: "a conduta é sua").',
         context: [],
-        transcript: `Transcrição recente: ${this.recentFinals.join(' ')}\n\nContribuições do board:\n${summary}`,
+        // B3: a síntese do Aurélio finalmente enxerga o caso INTEIRO (antes: só a janela curta)
+        transcript: `${this.caseState.renderForPrompt() ? `${this.caseState.renderForPrompt()}\n\n` : ''}Transcrição recente: ${this.recentFinals.join(' ')}\n\nContribuições do board:\n${summary}`,
         // B1: sínteses anteriores + contribuições da consulta inteira — evita
         // síntese repetida e dá ao Aurélio a progressão do caso
         priorContributions: this.history

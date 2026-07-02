@@ -17,6 +17,7 @@ export type {
   SttOpenOptions,
   ILlmProvider,
   LlmCompletionRequest,
+  TextCompletionRequest,
   IKnowledgeRetriever,
   IVideoAssetProvider,
 } from './interfaces';
@@ -25,6 +26,7 @@ export type {
 export {
   FakeSttProvider,
   FakeLlmProvider,
+  FakeTextCompleter,
   FakeKnowledgeRetriever,
   FakeVideoAssetProvider,
 } from './fakes';

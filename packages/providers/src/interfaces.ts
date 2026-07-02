@@ -53,9 +53,22 @@ export interface LlmCompletionRequest {
   readonly allowSkip?: boolean;
 }
 
+/** Requisição de completion de TEXTO LIVRE (uso interno — não vira card do board). */
+export interface TextCompletionRequest {
+  readonly system: string;
+  readonly prompt: string;
+  readonly maxTokens?: number;
+}
+
 /** LLM que produz a contribuição de uma persona a partir do contexto recuperado. */
 export interface ILlmProvider {
   complete(req: LlmCompletionRequest): Promise<PersonaContribution>;
+  /**
+   * ADITIVO/OPCIONAL (B3): completion de texto livre para usos internos
+   * (CaseState, case review). Implementações antigas/fakes sem este método
+   * continuam válidas — consumidores DEVEM degradar graciosamente.
+   */
+  completeText?(req: TextCompletionRequest): Promise<{ text: string; modelVersion?: string }>;
 }
 
 /**

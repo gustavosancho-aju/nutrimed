@@ -10,6 +10,7 @@ import type {
   SttSession,
   ILlmProvider,
   LlmCompletionRequest,
+  TextCompletionRequest,
   IKnowledgeRetriever,
   IVideoAssetProvider,
 } from './interfaces';
@@ -80,6 +81,25 @@ export class FakeLlmProvider implements ILlmProvider {
       triggeredBy: req.transcript,
       kbSources: req.context.map((chunk) => chunk.id),
     };
+  }
+}
+
+/**
+ * Completador de texto fake (B3): respostas roteirizadas em ordem para o
+ * `completeText` opcional de ILlmProvider (CaseState/case review). Grava as
+ * requisições para verificação em teste. Roteiro esgotado ⇒ repete a última.
+ */
+export class FakeTextCompleter {
+  readonly requests: TextCompletionRequest[] = [];
+  private cursor = 0;
+
+  constructor(private readonly script: readonly string[]) {}
+
+  async completeText(req: TextCompletionRequest): Promise<{ text: string; modelVersion?: string }> {
+    this.requests.push(req);
+    const text = this.script[Math.min(this.cursor, this.script.length - 1)] ?? '';
+    this.cursor += 1;
+    return { text, modelVersion: 'fake-text-v1' };
   }
 }
 
