@@ -40,6 +40,8 @@ interface BoardRuntime {
   kb: NamespacedKnowledgeStore;
   telemetry: TelemetryRegistry;
   active: Map<string, { session: ConsultationSession; orchestrator: FullBoardOrchestrator; events: FullBoardEvent[] }>;
+  /** Último final por consulta (diagnóstico A5 — "recebendo há Xs"). */
+  lastFinalAt: Map<string, number>;
 }
 
 const globalForBoard = globalThis as unknown as { __nutrimedBoard?: Promise<BoardRuntime> };
@@ -58,7 +60,7 @@ async function init(): Promise<BoardRuntime> {
   ];
   const seedPath = seedCandidates.find((p) => existsSync(p)) ?? seedCandidates[0]!;
   ingest(kb, seedSources(readFileSync(seedPath, 'utf8')), 'seed-v1');
-  return { gateway, kb, telemetry: new TelemetryRegistry(), active: new Map() };
+  return { gateway, kb, telemetry: new TelemetryRegistry(), active: new Map(), lastFinalAt: new Map() };
 }
 
 export function getBoardRuntime(): Promise<BoardRuntime> {
@@ -179,6 +181,7 @@ function wireSessionBroadcast(
     if (event.type === 'segment') {
       if (event.segment.isFinal) {
         lastFinalAt = Date.now();
+        runtime.lastFinalAt.set(consultationId, lastFinalAt);
         runtime.telemetry.sttSegment(consultationId);
         persistFinal(event.segment.text);
       }
@@ -286,6 +289,42 @@ export async function getNoteInputs(consultationId: string): Promise<{
       text: s.content,
       modelVersion: s.modelVersion ?? undefined,
     })),
+  };
+}
+
+/** Snapshot do pipeline para o modo diagnóstico (A5). Só booleanos/contadores
+ * — NUNCA valores de secrets nem conteúdo clínico. */
+export interface PipelineStatusReport {
+  readonly active: boolean;
+  readonly sttStatus: 'idle' | 'live' | 'degraded' | 'ended';
+  readonly finalsCount: number;
+  readonly lastFinalAgoMs: number | null;
+  readonly audioSinkRegistered: boolean;
+  readonly boardClients: number;
+  readonly deepgramConfigured: boolean;
+  readonly anthropicConfigured: boolean;
+  readonly persistedFinals: number;
+}
+
+export async function getPipelineStatus(consultationId: string): Promise<PipelineStatusReport> {
+  const runtime = await getBoardRuntime();
+  const db = await getDb();
+  const active = runtime.active.get(consultationId);
+  const lastFinalAt = runtime.lastFinalAt.get(consultationId) ?? null;
+  const persisted = await db.query<{ count: string | number }>(
+    'SELECT COUNT(*) AS count FROM transcript_segment WHERE consultation_id = $1',
+    [consultationId],
+  );
+  return {
+    active: Boolean(active),
+    sttStatus: active ? active.session.getSnapshot().status : 'idle',
+    finalsCount: active ? active.session.getSnapshot().finalSegments.length : 0,
+    lastFinalAgoMs: lastFinalAt ? Date.now() - lastFinalAt : null,
+    audioSinkRegistered: runtime.gateway.hasAudioSink(consultationId),
+    boardClients: runtime.gateway.clientCount(consultationId),
+    deepgramConfigured: Boolean(process.env.DEEPGRAM_API_KEY),
+    anthropicConfigured: Boolean(process.env.ANTHROPIC_API_KEY),
+    persistedFinals: Number(persisted.rows[0]?.count ?? 0),
   };
 }
 

@@ -8,6 +8,7 @@ import { grantConsentAction, revokeConsentAction } from '@/lib/consent-actions';
 import { startDemoBoardAction, requestSynthesisAction } from '@/lib/board-actions';
 import { saveNoteAction } from '@/lib/note-actions';
 import { NoteGeneratorForm } from '@/components/note-generator-form';
+import { DiagnosticsPanel } from '@/components/diagnostics-panel';
 import { getBoardRuntime, getTelemetryReport, BOARD_WS_PORT } from '@/lib/board-runtime';
 import { getEncryptionKey } from '@/lib/crypto-key';
 import { loadNote, listSyntheses } from '@nutrimed/clinical-notes';
@@ -198,6 +199,9 @@ export default async function ConsultationPage({
           {telemetry ? (
             <TelemetryReport report={telemetry.report} summary={telemetry.summary} />
           ) : null}
+
+          {/* A5 — triagem do pipeline em 30s (médico/suporte) */}
+          <DiagnosticsPanel consultationId={id} />
         </div>
       )}
       </div>

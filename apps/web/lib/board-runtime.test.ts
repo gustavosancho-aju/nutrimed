@@ -83,6 +83,21 @@ describe('startLiveBoard (A1 — gate de consentimento antes do sink)', () => {
     });
   });
 
+  it('A5 — getPipelineStatus: snapshot com booleanos/contadores, sem sessão ativa', async () => {
+    const status = await runtimeModule.getPipelineStatus(consultationId);
+    expect(status).toMatchObject({
+      active: false,
+      sttStatus: 'idle',
+      finalsCount: 0,
+      audioSinkRegistered: false,
+      deepgramConfigured: true, // env fake setado no beforeAll
+    });
+    expect(status.persistedFinals).toBeGreaterThanOrEqual(2); // segmentos do teste A4
+    expect(typeof status.boardClients).toBe('number');
+    // nenhum valor de secret no payload
+    expect(JSON.stringify(status)).not.toContain('dg-test-key');
+  });
+
   it('A4 — consulta sem transcript nem sínteses → null (mensagem no-transcript)', async () => {
     const user = await holder.db!.query<{ id: string }>(
       "INSERT INTO app_user (email, display_name, password_hash) VALUES ('m2@t.dev', 'Med2', 'x') RETURNING id",
