@@ -429,6 +429,7 @@ export async function startLiveBoard(consultationId: string): Promise<void> {
       maxPerMinutePerDoctor: 2,
       onDecision: hooks.onDecision,
       onContributionLatency: hooks.onContributionLatency,
+      caseReviewMs: 90_000, // B4: análise periódica do caso (piloto) — só em pausa natural
     });
     runtime.gateway.bind(consultationId, orchestrator);
     wireSessionBroadcast(runtime, consultationId, session, db);

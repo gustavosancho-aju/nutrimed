@@ -17,6 +17,7 @@ import {
 import { PersonaReasoner, PERSONA_PROFILES, buildPersonaSystem } from '@nutrimed/kb';
 import type { IKnowledgeRetriever } from '@nutrimed/providers';
 import { CaseStateTracker } from './case-state';
+import { CASE_REVIEW_SYSTEM, parseCaseReview } from './case-review';
 
 /**
  * Board COMPLETO (E6 — Stories 6.1/6.2/6.3): as 3 personas simultâneas (FR2)
@@ -59,6 +60,13 @@ export interface FullBoardConfig extends GatekeeperConfig {
   readonly caseStateEveryNFinals?: number;
   /** B3: telemetria — update do CaseState concluído. */
   readonly onCaseStateUpdate?: () => void;
+  /**
+   * B4: intervalo mínimo entre reviews periódicos do caso (só em pausa
+   * natural). Default: DESLIGADO. Piloto sugerido: 90_000.
+   */
+  readonly caseReviewMs?: number;
+  /** B4: telemetria — desfecho de cada review. */
+  readonly onCaseReview?: (outcome: 'skip' | 'contribution' | 'discarded') => void;
 }
 
 interface RoundEntry {
@@ -89,11 +97,16 @@ export class FullBoardOrchestrator {
   private unsubscribe: (() => void) | null = null;
   private ticker: ReturnType<typeof setInterval> | null = null;
   private lastContributionAt = 0;
+  /** B4 — case review periódico. */
+  private lastSpeechAt = 0;
+  private lastCaseReviewAt = 0;
+  private caseReviewInFlight = false;
   private synthesized = false;
   private pending: Promise<void> = Promise.resolve();
   private readonly now: () => number;
   private readonly config: Required<Pick<FullBoardConfig, 'tickMs' | 'synthesisMinPersonas' | 'synthesisQuietMs'>>;
   private readonly config2: Pick<FullBoardConfig, 'onDecision' | 'onContributionLatency'>;
+  private readonly configReview: Pick<FullBoardConfig, 'caseReviewMs' | 'onCaseReview' | 'pauseMs'>;
 
   constructor(
     private readonly db: SqlExecutor,
@@ -115,6 +128,11 @@ export class FullBoardOrchestrator {
       synthesisQuietMs: config.synthesisQuietMs ?? 12_000,
     };
     this.config2 = { onDecision: config.onDecision, onContributionLatency: config.onContributionLatency };
+    this.configReview = {
+      caseReviewMs: config.caseReviewMs,
+      onCaseReview: config.onCaseReview,
+      pauseMs: config.pauseMs,
+    };
   }
 
   /** Liga as 3 personas sobre o stream (FR2) + tick de release/síntese. */
@@ -125,6 +143,7 @@ export class FullBoardOrchestrator {
       const text = event.segment.text;
       const at = this.now();
       this.gate.pauseGate.onSpeech(at);
+      this.lastSpeechAt = at; // B4: review só em pausa natural
       this.pending = this.pending.then(() => this.onFinalSegment(text, at));
     });
     this.ticker = setInterval(() => {
@@ -190,6 +209,88 @@ export class FullBoardOrchestrator {
       now - this.lastContributionAt >= this.config.synthesisQuietMs
     ) {
       await this.synthesize('auto');
+    }
+    await this.maybeCaseReview(now); // B4
+  }
+
+  /** Executa um tick imediatamente (testes/ferramentas de operação). */
+  async tickNow(): Promise<void> {
+    this.pending = this.pending.then(() => this.tick());
+    return this.pending;
+  }
+
+  /**
+   * B4 — case review periódico: em pausa natural, 1 chamada de LLM roteia
+   * entre as 3 personas ("alguém tem algo NOVO?") ou skip. O output passa
+   * pelos MESMOS guarda-corpos das contribuições (dedup semântico, rate-limit,
+   * auditoria) — nada de conduta automática.
+   */
+  private async maybeCaseReview(now: number): Promise<void> {
+    const intervalMs = this.configReview.caseReviewMs;
+    if (!intervalMs || typeof this.llm.completeText !== 'function' || this.caseReviewInFlight) return;
+    if (this.recentFinals.length === 0) return; // consulta ainda sem fala
+    if (now - this.lastSpeechAt < (this.configReview.pauseMs ?? 2500)) return; // fora de pausa
+    if (now - this.lastCaseReviewAt < intervalMs) return;
+    this.caseReviewInFlight = true;
+    this.lastCaseReviewAt = now;
+    try {
+      const scopes = (Object.values(PERSONA_PROFILES) as Array<(typeof PERSONA_PROFILES)['aurelio']>)
+        .map((p) => `- ${p.personaId} (${p.displayName}): ${p.scope}`)
+        .join('\n');
+      const said = this.history
+        .slice(-20)
+        .map((h) => `- [${PERSONA_PROFILES[h.personaId].displayName}] ${h.text}`)
+        .join('\n');
+      const caseBlock = this.caseState.renderForPrompt();
+      const res = await this.llm.completeText!({
+        system: CASE_REVIEW_SYSTEM,
+        prompt:
+          `Especialistas e escopos:\n${scopes}\n\n` +
+          (caseBlock ? `${caseBlock}\n\n` : '') +
+          `Últimas falas:\n${this.recentFinals.slice(-4).join(' ')}\n\n` +
+          `O board JÁ disse nesta consulta:\n${said || '- (nada ainda)'}`,
+        maxTokens: 300,
+      });
+      const parsed = parseCaseReview(res.text);
+      if (!parsed || 'skip' in parsed) {
+        this.configReview.onCaseReview?.('skip');
+        return;
+      }
+      if (this.semanticDedup.isDuplicate(parsed.text).duplicate) {
+        this.configReview.onCaseReview?.('discarded');
+        return;
+      }
+      if (!this.gate.rateLimiter.allow(parsed.personaId, parsed.severity, now)) {
+        this.configReview.onCaseReview?.('discarded');
+        return;
+      }
+      const eventId = randomUUID();
+      await writeAudit(this.db, eventId, {
+        triggeredBy: 'case-review',
+        kbSources: [],
+        modelVersion: res.modelVersion ?? 'unknown',
+      });
+      this.round.push({
+        contribution: { ...parsed, modelVersion: res.modelVersion },
+        topicKey: `case-review-${parsed.personaId}`,
+      });
+      this.lastContributionAt = this.now();
+      this.synthesized = false;
+      this.emit({
+        type: 'contribution',
+        id: eventId,
+        consultationId: this.session.consultationId,
+        contribution: { ...parsed, modelVersion: res.modelVersion },
+        personaIds: [parsed.personaId],
+        divergent: false,
+        triggeredBy: 'case-review',
+        at: this.now(),
+      });
+      this.configReview.onCaseReview?.('contribution');
+    } catch {
+      // review nunca derruba a consulta — próximo intervalo tenta de novo
+    } finally {
+      this.caseReviewInFlight = false;
     }
   }
 

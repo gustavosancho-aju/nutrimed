@@ -135,6 +135,8 @@ describe('FullBoardOrchestrator — board completo (E6)', () => {
       onDecision?: (kind: string) => void;
       caseStateEveryNFinals?: number;
       textScript?: readonly string[];
+      caseReviewMs?: number;
+      onCaseReview?: (outcome: 'skip' | 'contribution' | 'discarded') => void;
     } = {},
   ) {
     const stt = new PushSttProvider();
@@ -150,6 +152,8 @@ describe('FullBoardOrchestrator — board completo (E6)', () => {
       now: opts.now,
       onDecision: opts.onDecision,
       caseStateEveryNFinals: opts.caseStateEveryNFinals,
+      caseReviewMs: opts.caseReviewMs,
+      onCaseReview: opts.onCaseReview,
     });
     const events: FullBoardEvent[] = [];
     board.subscribe((e) => events.push(e));
@@ -391,6 +395,108 @@ describe('FullBoardOrchestrator — board completo (E6)', () => {
     await flush();
     await board.flush();
     expect(events.length).toBeGreaterThan(0); // pipeline intacto, sem CaseState
+    board.stop();
+    await session.stop();
+  });
+
+  it('B4 — case review em pausa: contribuição roteada é emitida com triggeredBy case-review e auditada', async () => {
+    let t = 1000;
+    const outcomes: string[] = [];
+    const { stt, session, board, events } = await setup({
+      now: () => t,
+      caseReviewMs: 90_000,
+      textScript: [
+        '{"personaId":"yara","type":"hipotese","severity":"normal","text":"Considere investigar cortisol diante do padrão de ganho de peso central relatado."}',
+      ],
+      onCaseReview: (o) => outcomes.push(o),
+    });
+
+    stt.push('Bom dia, a circunferência abdominal segue aumentando aos poucos.'); // sem palavra-gatilho
+    await flush();
+    await board.flush();
+    expect(events).toHaveLength(0); // regex não pegou — é o gap que o review cobre
+
+    t = 200_000; // pausa longa + intervalo de review vencido
+    await board.tickNow();
+
+    expect(outcomes).toEqual(['contribution']);
+    expect(events).toHaveLength(1);
+    expect(events[0]!.triggeredBy).toBe('case-review');
+    expect(events[0]!.contribution.personaId).toBe('yara');
+    const trail = await getAuditTrail(exec, events[0]!.id);
+    expect(trail[0]!.triggeredBy).toBe('case-review');
+    board.stop();
+    await session.stop();
+  });
+
+  it('B4 — review com skip: nada emitido; respeita o intervalo mínimo entre reviews', async () => {
+    let t = 1000;
+    const outcomes: string[] = [];
+    const { stt, session, board, events, llm } = await setup({
+      now: () => t,
+      caseReviewMs: 90_000,
+      textScript: ['{"skip":true}', '{"skip":true}'],
+      onCaseReview: (o) => outcomes.push(o),
+    });
+    stt.push('Conversa neutra sem gatilhos.');
+    await flush();
+    await board.flush();
+
+    t = 100_000;
+    await board.tickNow();
+    expect(outcomes).toEqual(['skip']);
+    expect(events).toHaveLength(0);
+
+    t = 110_000; // só 10s depois — intervalo de 90s NÃO venceu
+    await board.tickNow();
+    expect(outcomes).toEqual(['skip']); // nenhum review novo
+    expect(llm.calls).toHaveLength(0); // e nenhum LLM de contribuição rodou
+    board.stop();
+    await session.stop();
+  });
+
+  it('B4 — review NÃO roda fora de pausa natural nem sem caseReviewMs', async () => {
+    let t = 1000;
+    const outcomes: string[] = [];
+    const { stt, session, board } = await setup({
+      now: () => t,
+      pauseMs: 5000,
+      caseReviewMs: 90_000,
+      textScript: ['{"skip":true}'],
+      onCaseReview: (o) => outcomes.push(o),
+    });
+    stt.push('Fala recente.'); // lastSpeechAt = t
+    await flush();
+    await board.flush();
+
+    t += 2000; // ainda DENTRO da conversa (pauseMs 5000)
+    await board.tickNow();
+    expect(outcomes).toHaveLength(0); // não interrompe o médico falando
+    board.stop();
+    await session.stop();
+  });
+
+  it('B4 — texto do review similar ao já exibido é DESCARTADO (dedup pós)', async () => {
+    let t = 0;
+    const outcomes: string[] = [];
+    const { stt, session, board, events } = await setup({
+      now: () => (t += 3000),
+      caseReviewMs: 1, // intervalo mínimo — o teste controla via pausa
+      textScript: [
+        // parafraseia o chunk da Yara que o EchoLlm ecoa na 1ª contribuição
+        '{"personaId":"yara","type":"sugestao","severity":"normal","text":"Cansaço com ganho de peso e platô: hipótese tireoidiana, sugerir TSH e T4 livre."}',
+      ],
+      onCaseReview: (o) => outcomes.push(o),
+    });
+    stt.push('Paciente com platô no peso e muito cansaço.'); // Yara contribui via trigger
+    await flush();
+    await board.flush();
+    const emitted = events.length;
+    expect(emitted).toBeGreaterThan(0);
+
+    await board.tickNow(); // review devolve paráfrase do que a Yara já disse
+    expect(outcomes).toEqual(['discarded']);
+    expect(events).toHaveLength(emitted);
     board.stop();
     await session.stop();
   });
