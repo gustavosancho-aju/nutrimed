@@ -62,6 +62,51 @@ describe('AnthropicLlmProvider (Claude Haiku — Stories 3.1/3.4)', () => {
     expect((init.headers as Record<string, string>)['x-api-key']).toBe('sk-ant-test');
   });
 
+  it('B1 — priors entram no prompt e allowSkip instrui o {"skip":true}', async () => {
+    const doFetch = fakeFetch(okResponse);
+    const provider = new AnthropicLlmProvider({ apiKey: 'sk-ant-test', personaId: 'paulo', fetchImpl: doFetch });
+
+    await provider.complete({
+      system: 'Você é o Dr. Paulo.',
+      context: [],
+      transcript: 'Paciente segue com palpitação.',
+      priorContributions: ['[Dr. Paulo Tavares (Cardiologia)] Vale checar PA e FC.'],
+      allowSkip: true,
+    });
+
+    const [, init] = doFetch.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string);
+    expect(body.messages[0].content).toContain('Contribuições JÁ FEITAS pelo board');
+    expect(body.messages[0].content).toContain('Vale checar PA e FC.');
+    expect(body.system).toContain('{"skip":true}');
+  });
+
+  it('B1 — sem priors/allowSkip o prompt fica como antes (aditivo)', async () => {
+    const doFetch = fakeFetch(okResponse);
+    const provider = new AnthropicLlmProvider({ apiKey: 'sk-ant-test', personaId: 'paulo', fetchImpl: doFetch });
+    await provider.complete({ system: 's', context: [], transcript: 't' });
+    const [, init] = doFetch.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string);
+    expect(body.messages[0].content).not.toContain('Contribuições JÁ FEITAS');
+    expect(body.system).not.toContain('{"skip":true}');
+  });
+
+  it('B1 — resposta {"skip":true} vira contribuição com skip (sem texto exigido)', async () => {
+    const doFetch = fakeFetch({
+      model: 'claude-haiku-4-5-20251001',
+      content: [{ type: 'text', text: '{"skip":true}' }],
+    });
+    const provider = new AnthropicLlmProvider({ apiKey: 'sk-ant-test', personaId: 'yara', fetchImpl: doFetch });
+    const contribution = await provider.complete({
+      system: 's',
+      context: [],
+      transcript: 't',
+      allowSkip: true,
+    });
+    expect(contribution.skip).toBe(true);
+    expect(contribution.personaId).toBe('yara');
+  });
+
   it('erro da API vira AnthropicLlmError tipado', async () => {
     const provider = new AnthropicLlmProvider({
       apiKey: 'k',
@@ -87,6 +132,11 @@ describe('parseContribution — parse tolerante do JSON do modelo', () => {
   it('aceita cercas de código e normaliza type/severity inválidos', () => {
     const parsed = parseContribution('```json\n{"type":"x","severity":"y","text":"ok"}\n```');
     expect(parsed).toMatchObject({ type: 'sugestao', severity: 'normal', text: 'ok' });
+  });
+
+  it('B1 — parse reconhece {"skip":true} antes de exigir texto', () => {
+    expect(parseContribution('{"skip":true}')).toMatchObject({ skip: true });
+    expect(parseContribution('```json\n{"skip":true}\n```')).toMatchObject({ skip: true });
   });
 
   it('rejeita JSON inválido e contribuição sem texto', () => {

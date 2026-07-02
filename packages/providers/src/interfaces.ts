@@ -44,6 +44,13 @@ export interface LlmCompletionRequest {
   readonly system: string;
   readonly context: readonly KbChunk[];
   readonly transcript: string;
+  /**
+   * ADITIVO (B1 — anti-repetição): contribuições JÁ exibidas nesta consulta,
+   * formatadas ("[Dr. Paulo] texto"). O modelo é instruído a não repeti-las.
+   */
+  readonly priorContributions?: readonly string[];
+  /** ADITIVO (B1): autoriza o modelo a responder {"skip":true} quando não há nada novo. */
+  readonly allowSkip?: boolean;
 }
 
 /** LLM que produz a contribuição de uma persona a partir do contexto recuperado. */

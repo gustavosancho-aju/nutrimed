@@ -59,6 +59,11 @@ export interface PersonaContribution {
   readonly kbSources?: readonly string[];
   /** Versão do modelo que gerou (proveniência NFR10 — Story 1.5). */
   readonly modelVersion?: string;
+  /**
+   * ADITIVO (B1): o modelo declarou não ter nada NOVO a acrescentar. Quando
+   * true, os demais campos são placeholder — o orchestrator descarta sem exibir.
+   */
+  readonly skip?: true;
 }
 
 /** Referência a um clipe pré-renderizado do catálogo de vídeo (ADR-007). */

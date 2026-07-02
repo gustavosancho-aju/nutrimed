@@ -65,6 +65,11 @@ export class FullBoardOrchestrator {
   private readonly reasoner: PersonaReasoner;
   private readonly recentFinals: string[] = [];
   private readonly round: RoundEntry[] = [];
+  /**
+   * B1 — memória da consulta INTEIRA (nunca limpa, diferente de `round`):
+   * tudo que o board já exibiu, realimentado ao LLM contra repetição.
+   */
+  private readonly history: { personaId: PersonaId; text: string }[] = [];
   /** Tipos por tópico p/ detecção de divergência (FR7). */
   private readonly topicTypes = new Map<string, Map<PersonaId, string>>();
   private unsubscribe: (() => void) | null = null;
@@ -172,7 +177,13 @@ export class FullBoardOrchestrator {
         personaId: candidate.personaId,
         query: candidate.segmentText,
         transcript: this.recentFinals.join(' '),
+        previousContributions: this.history.slice(-20), // cap de tokens (B1)
       });
+      if (contribution.skip) {
+        // o modelo declarou não ter nada novo — sem audit, sem emit (B1)
+        this.config2.onDecision?.('llm-skip');
+        return;
+      }
       const divergent = this.registerAndCheckDivergence(candidate, contribution);
       const eventId = randomUUID();
       await writeAudit(this.db, eventId, {
@@ -225,6 +236,11 @@ export class FullBoardOrchestrator {
           'Termine SEMPRE devolvendo a decisão ao médico (ex.: "a conduta é sua").',
         context: [],
         transcript: `Transcrição recente: ${this.recentFinals.join(' ')}\n\nContribuições do board:\n${summary}`,
+        // B1: sínteses anteriores + contribuições da consulta inteira — evita
+        // síntese repetida e dá ao Aurélio a progressão do caso
+        priorContributions: this.history
+          .slice(-20)
+          .map((h) => `[${PERSONA_PROFILES[h.personaId].displayName}] ${h.text}`),
       });
       const kbSources = entries.flatMap((e) => e.contribution.kbSources ?? []);
       const eventId = randomUUID();
@@ -251,6 +267,8 @@ export class FullBoardOrchestrator {
   }
 
   private emit(event: FullBoardEvent): void {
+    // B1: TUDO que o board exibe entra na memória da consulta (anti-repetição)
+    this.history.push({ personaId: event.contribution.personaId, text: event.contribution.text });
     for (const listener of this.listeners) listener(event);
   }
 }

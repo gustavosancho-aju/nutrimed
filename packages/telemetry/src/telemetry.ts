@@ -15,7 +15,9 @@ export type GateDecisionKind =
   | 'rejected-score'
   | 'duplicate'
   | 'held-for-pause'
-  | 'rate-limited';
+  | 'rate-limited'
+  /** B1: o LLM declarou não ter nada novo — descartado sem exibir (anti-repetição). */
+  | 'llm-skip';
 
 export type UiEventKind = 'focus-on' | 'focus-off' | 'silence' | 'unsilence' | 'dismiss' | 'pin' | 'undo-dismiss';
 
@@ -146,7 +148,7 @@ export class TelemetryRegistry {
     const sttUsd = durationMinutes * PRICING.sttPerMinute;
     const sorted = [...rec.latenciesMs].sort((a, b) => a - b);
     const decisions = Object.fromEntries(
-      (['deliver', 'rejected-score', 'duplicate', 'held-for-pause', 'rate-limited'] as const).map(
+      (['deliver', 'rejected-score', 'duplicate', 'held-for-pause', 'rate-limited', 'llm-skip'] as const).map(
         (k) => [k, rec.decisions.get(k) ?? 0],
       ),
     ) as Record<GateDecisionKind, number>;

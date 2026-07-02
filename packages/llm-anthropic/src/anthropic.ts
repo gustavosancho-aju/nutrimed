@@ -60,13 +60,17 @@ export function anthropicConfigFromEnv(
   return { apiKey, personaId };
 }
 
-function outputInstructions(longForm: boolean): string {
+function outputInstructions(longForm: boolean, allowSkip: boolean): string {
   return (
     'Responda APENAS com um objeto JSON válido (sem cercas de código), no formato: ' +
     '{"type":"atencao|sugestao|hipotese|sintese","severity":"normal|critical","text":"...","relevanceScore":0.0}. ' +
     (longForm
       ? 'O campo text deve conter o DOCUMENTO COMPLETO em markdown, com todas as seções e quebras de linha escapadas no JSON, em português do Brasil.'
-      : 'O campo text deve ser curto (1-3 frases), em português do Brasil, em tom de sugestão.')
+      : 'O campo text deve ser curto (1-3 frases), em português do Brasil, em tom de sugestão.') +
+    (allowSkip
+      ? ' IMPORTANTE: se você NÃO tem nada NOVO e útil a acrescentar — algo que você ou um colega do board ' +
+        'já disse nesta consulta, MESMO COM OUTRAS PALAVRAS, não é novo — responda APENAS {"skip":true}.'
+      : '')
   );
 }
 
@@ -93,6 +97,12 @@ export class AnthropicLlmProvider implements ILlmProvider {
       req.context.length > 0
         ? `\n\nBase de conhecimento relevante:\n${req.context.map((c) => `- [${c.id}] ${c.text}`).join('\n')}`
         : '';
+    // B1 — anti-repetição: o modelo VÊ o que o board já disse nesta consulta
+    const priorsBlock = req.priorContributions?.length
+      ? `\n\nContribuições JÁ FEITAS pelo board nesta consulta (NÃO repita nenhuma, nem com outras palavras):\n${req.priorContributions
+          .map((p) => `- ${p}`)
+          .join('\n')}`
+      : '';
 
     const response = await doFetch(this.config.endpoint ?? DEFAULT_ENDPOINT, {
       method: 'POST',
@@ -104,11 +114,11 @@ export class AnthropicLlmProvider implements ILlmProvider {
       body: JSON.stringify({
         model: this.config.model ?? DEFAULT_MODEL,
         max_tokens: this.config.maxTokens ?? 300,
-        system: `${req.system}\n\n${outputInstructions(this.config.longForm ?? false)}`,
+        system: `${req.system}\n\n${outputInstructions(this.config.longForm ?? false, req.allowSkip ?? false)}`,
         messages: [
           {
             role: 'user',
-            content: `Transcrição recente da consulta:\n"""${req.transcript}"""${kbContext}`,
+            content: `Transcrição recente da consulta:\n"""${req.transcript}"""${kbContext}${priorsBlock}`,
           },
         ],
       }),
@@ -131,6 +141,17 @@ export class AnthropicLlmProvider implements ILlmProvider {
     if (!text) throw new AnthropicLlmError('Resposta sem bloco de texto.', 'parse');
 
     const parsed = parseContribution(text);
+    if (parsed.skip) {
+      // B1: o modelo declarou não ter nada novo — o orchestrator descarta
+      return {
+        personaId: this.config.personaId,
+        type: 'sugestao',
+        severity: 'normal',
+        text: '',
+        skip: true,
+        modelVersion: data.model ?? this.config.model ?? DEFAULT_MODEL,
+      };
+    }
     return {
       personaId: this.config.personaId,
       type: parsed.type,
@@ -149,6 +170,7 @@ interface ParsedContribution {
   severity: ContributionSeverity;
   text: string;
   relevanceScore?: number;
+  skip?: true;
 }
 
 /** Parse tolerante do JSON do modelo (aceita cercas de código por robustez). */
@@ -159,6 +181,9 @@ export function parseContribution(raw: string): ParsedContribution {
     obj = JSON.parse(cleaned) as Record<string, unknown>;
   } catch {
     throw new AnthropicLlmError(`JSON inválido do modelo: ${raw.slice(0, 120)}`, 'parse');
+  }
+  if (obj.skip === true) {
+    return { type: 'sugestao', severity: 'normal', text: '', skip: true };
   }
   const text = typeof obj.text === 'string' ? obj.text.trim() : '';
   if (!text) throw new AnthropicLlmError('Contribuição sem texto.', 'parse');

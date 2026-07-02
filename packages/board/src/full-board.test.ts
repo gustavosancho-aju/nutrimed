@@ -66,8 +66,13 @@ class PushSttProvider implements ISttProvider {
 
 class EchoLlm {
   calls: LlmCompletionRequest[] = [];
+  /** B1: simula o modelo declarando "nada novo". */
+  skipIf: ((req: LlmCompletionRequest) => boolean) | null = null;
   async complete(req: LlmCompletionRequest): Promise<PersonaContribution> {
     this.calls.push(req);
+    if (req.allowSkip && this.skipIf?.(req)) {
+      return { personaId: 'aurelio', type: 'sugestao', severity: 'normal', text: '', skip: true };
+    }
     return {
       personaId: 'aurelio',
       type: 'sugestao',
@@ -117,7 +122,7 @@ describe('FullBoardOrchestrator — board completo (E6)', () => {
     await db.close();
   });
 
-  async function setup(opts: { now?: () => number; pauseMs?: number } = {}) {
+  async function setup(opts: { now?: () => number; pauseMs?: number; onDecision?: (kind: string) => void } = {}) {
     const stt = new PushSttProvider();
     const session = await startConsultationSession(exec, consultationId, stt);
     const llm = new EchoLlm();
@@ -125,6 +130,7 @@ describe('FullBoardOrchestrator — board completo (E6)', () => {
       pauseMs: opts.pauseMs ?? 0, // pausa imediata por default (testes determinísticos)
       tickMs: 100000, // tick manual via flush — sem timer interferindo
       now: opts.now,
+      onDecision: opts.onDecision,
     });
     const events: FullBoardEvent[] = [];
     board.subscribe((e) => events.push(e));
@@ -211,6 +217,67 @@ describe('FullBoardOrchestrator — board completo (E6)', () => {
     await flush();
     await board.flush();
     expect(events.every((e) => e.divergent === false)).toBe(true);
+    board.stop();
+    await session.stop();
+  });
+
+  it('B1 — a 2ª chamada do LLM recebe o histórico com a 1ª contribuição (anti-repetição)', async () => {
+    let t = 0;
+    const { stt, session, board, llm, events } = await setup({ now: () => (t += 3000) });
+
+    stt.push('Vou prescrever sibutramina.');
+    await flush();
+    await board.flush();
+    const firstText = events[0]!.contribution.text;
+    // 1ª chamada: consulta ainda sem histórico
+    expect(llm.calls[0]!.priorContributions ?? []).toHaveLength(0);
+    expect(llm.calls[0]!.allowSkip).toBe(true);
+
+    stt.push('Paciente com platô no peso e muito cansaço.');
+    await flush();
+    await board.flush();
+
+    const laterCall = llm.calls[llm.calls.length - 1]!;
+    expect(laterCall.priorContributions!.length).toBeGreaterThan(0);
+    expect(laterCall.priorContributions!.some((p) => p.includes(firstText))).toBe(true);
+    board.stop();
+    await session.stop();
+  });
+
+  it('B1 — {"skip":true} do modelo: nada emitido, nada auditado, decisão llm-skip', async () => {
+    let t = 0;
+    const decisions: string[] = [];
+    const { stt, session, board, llm, events } = await setup({
+      now: () => (t += 3000),
+      onDecision: (kind) => decisions.push(kind),
+    });
+    llm.skipIf = () => true;
+
+    const auditBefore = await exec.query<{ n: string }>('SELECT COUNT(*) AS n FROM audit_log');
+    stt.push('Vou prescrever sibutramina.');
+    await flush();
+    await board.flush();
+
+    expect(events).toHaveLength(0);
+    expect(decisions).toContain('llm-skip');
+    const auditAfter = await exec.query<{ n: string }>('SELECT COUNT(*) AS n FROM audit_log');
+    expect(Number(auditAfter.rows[0]!.n)).toBe(Number(auditBefore.rows[0]!.n)); // sem trilha fantasma
+    board.stop();
+    await session.stop();
+  });
+
+  it('B1 — a síntese do Aurélio recebe o histórico da consulta inteira', async () => {
+    let t = 0;
+    const { stt, session, board, llm } = await setup({ now: () => (t += 3000) });
+    stt.push('GLP-1 prescrito.');
+    stt.push('Paciente com platô e cansaço.');
+    await flush();
+    await board.flush();
+
+    await board.synthesizeNow();
+    const synthCall = llm.calls[llm.calls.length - 1]!;
+    expect(synthCall.system).toContain('SÍNTESE');
+    expect(synthCall.priorContributions!.length).toBeGreaterThanOrEqual(2);
     board.stop();
     await session.stop();
   });

@@ -51,8 +51,16 @@ export function buildPersonaSystem(profile: PersonaProfile): string {
     `REGRAS INEGOCIÁVEIS: (1) NUNCA opine fora do seu escopo — se o tema pertence a outra especialidade, ` +
     `não contribua sobre ele; (2) ancore-se APENAS no contexto de conhecimento fornecido — não invente diretrizes; ` +
     `(3) responda em português do Brasil, em 1-3 frases, em tom de sugestão ("vale checar", "considere"), ` +
-    `nunca de comando — a conduta é sempre do médico.`
+    `nunca de comando — a conduta é sempre do médico; ` +
+    `(4) NÃO repita contribuições já feitas pelo board (mesmo com outras palavras) — analise a PROGRESSÃO ` +
+    `da conversa e só contribua com o que é NOVO e útil agora.`
   );
+}
+
+/** Contribuição anterior do board (B1 — memória anti-repetição). */
+export interface PriorContribution {
+  readonly personaId: PersonaId;
+  readonly text: string;
 }
 
 export interface ReasonInput {
@@ -63,6 +71,8 @@ export interface ReasonInput {
   readonly transcript: string;
   /** Chunks a recuperar (default 3). */
   readonly k?: number;
+  /** B1: contribuições já exibidas nesta consulta (o modelo não deve repeti-las). */
+  readonly previousContributions?: readonly PriorContribution[];
 }
 
 export class PersonaReasoner {
@@ -75,11 +85,17 @@ export class PersonaReasoner {
     const profile = PERSONA_PROFILES[input.personaId];
     // FR21: recuperação SÓ no namespace da persona
     const context = await this.retriever.retrieve(input.personaId, input.query, input.k ?? 3);
+    const priors = (input.previousContributions ?? []).map(
+      (c) => `[${PERSONA_PROFILES[c.personaId].displayName}] ${c.text}`,
+    );
     const contribution = await this.llm.complete({
       system: buildPersonaSystem(profile),
       context,
       transcript: input.transcript,
+      priorContributions: priors,
+      allowSkip: true, // sem nada novo, o modelo devolve {"skip":true} e nada é exibido
     });
+    if (contribution.skip) return { ...contribution, personaId: input.personaId };
     return {
       ...contribution,
       personaId: input.personaId, // a persona é decisão do board, não do modelo
