@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { startLiveBoardAction, stopLiveBoardAction } from '@/lib/board-actions';
 import { ACTION_ERROR_MESSAGES } from '@/lib/action-result';
-import { checkMicrophone, createAudioSource, type AudioSource } from '@/lib/microphone';
+import { checkMicrophone, createAudioSource, pickRecorderMime, type AudioSource } from '@/lib/microphone';
 
 /**
  * Consulta AO VIVO com microfone real (E3 final / Story 2.2 REUSE).
@@ -44,17 +44,11 @@ export function LiveMicButton({
   const start = useCallback(async () => {
     setState('starting');
     setError(null);
+    let micStream: MediaStream | null = null;
+    const stopMic = () => micStream?.getTracks().forEach((t) => t.stop());
     try {
-      // 1) servidor arma o pipeline (Deepgram + sessão + board) — gate 1.4 incluso.
-      // Resultado tipado: em produção o Next mascara mensagens de throw.
-      const result = await startLiveBoardAction(consultationId);
-      if (!result.ok) {
-        setError(ACTION_ERROR_MESSAGES[result.code]);
-        setState('error');
-        return;
-      }
-
-      // 2) microfone (Story 2.2 — pede permissão 1x e reusa o stream)
+      // 1) microfone PRIMEIRO (Story 2.2): feedback imediato ao médico e nenhum
+      // pipeline órfão no servidor se a permissão for negada.
       const mic = await checkMicrophone(navigator.mediaDevices);
       if (mic.status !== 'ok' || !mic.stream) {
         setError(
@@ -63,12 +57,34 @@ export function LiveMicButton({
             : 'Nenhum microfone disponível.',
         );
         setState('error');
-        await stopLiveBoardAction(consultationId).catch(() => {});
+        return;
+      }
+      micStream = mic.stream;
+
+      // 2) formato de gravação compatível com o STT (Safari/iOS não tem WebM/Opus
+      // e o mp4/AAC transcreve silenciosamente NADA — melhor avisar antes).
+      const mime = pickRecorderMime();
+      if (!mime.supported) {
+        stopMic();
+        setError(
+          'Este navegador não grava áudio em formato compatível com a transcrição — use Chrome ou Edge no computador.',
+        );
+        setState('error');
         return;
       }
 
-      // 3) captura → WS /audio (só áudio binário; eventos do board vão no /board)
-      const source: AudioSource = createAudioSource(mic.stream);
+      // 3) servidor arma o pipeline (Deepgram + sessão + board) — gate 1.4 incluso.
+      // Resultado tipado: em produção o Next mascara mensagens de throw.
+      const result = await startLiveBoardAction(consultationId);
+      if (!result.ok) {
+        stopMic();
+        setError(ACTION_ERROR_MESSAGES[result.code]);
+        setState('error');
+        return;
+      }
+
+      // 4) captura → WS /audio (só áudio binário; eventos do board vão no /board)
+      const source: AudioSource = createAudioSource(mic.stream, undefined, undefined, mime.mimeType);
       const ws = new WebSocket(
         `${wsBaseUrl}/audio?consultationId=${encodeURIComponent(consultationId)}&token=${encodeURIComponent(token)}`,
       );
@@ -85,7 +101,11 @@ export function LiveMicButton({
         setState('live');
       };
       ws.onerror = () => {
-        setError('Falha no canal de áudio.');
+        // não deixa mic/pipeline ligados com a UI em erro
+        pumping = false;
+        source.stop();
+        void stopLiveBoardAction(consultationId).catch(() => {});
+        setError('Falha no canal de áudio — verifique a rede e tente novamente.');
         setState('error');
       };
       ws.onclose = () => {
@@ -98,6 +118,7 @@ export function LiveMicButton({
         ws.close();
       };
     } catch (err) {
+      stopMic();
       if (isStaleDeployError(err)) {
         setError('O sistema foi atualizado enquanto esta página estava aberta — recarregue a página e tente de novo.');
         setState('stale-deploy');
