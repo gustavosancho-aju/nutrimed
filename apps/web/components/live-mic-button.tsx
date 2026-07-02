@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { startLiveBoardAction, stopLiveBoardAction } from '@/lib/board-actions';
+import { ACTION_ERROR_MESSAGES } from '@/lib/action-result';
 import { checkMicrophone, createAudioSource, type AudioSource } from '@/lib/microphone';
 
 /**
@@ -13,7 +14,12 @@ import { checkMicrophone, createAudioSource, type AudioSource } from '@/lib/micr
  * O gate de consentimento (1.4) é exigido pelo servidor ao criar a sessão.
  */
 
-type LiveState = 'idle' | 'starting' | 'live' | 'error';
+type LiveState = 'idle' | 'starting' | 'live' | 'error' | 'stale-deploy';
+
+/** Deploy no meio da sessão: a referência da server action ficou órfã no cliente. */
+function isStaleDeployError(err: unknown): boolean {
+  return err instanceof Error && /Server Action|Failed to find/i.test(err.message);
+}
 
 export function LiveMicButton({
   consultationId,
@@ -39,8 +45,14 @@ export function LiveMicButton({
     setState('starting');
     setError(null);
     try {
-      // 1) servidor arma o pipeline (Deepgram + sessão + board) — gate 1.4 incluso
-      await startLiveBoardAction(consultationId);
+      // 1) servidor arma o pipeline (Deepgram + sessão + board) — gate 1.4 incluso.
+      // Resultado tipado: em produção o Next mascara mensagens de throw.
+      const result = await startLiveBoardAction(consultationId);
+      if (!result.ok) {
+        setError(ACTION_ERROR_MESSAGES[result.code]);
+        setState('error');
+        return;
+      }
 
       // 2) microfone (Story 2.2 — pede permissão 1x e reusa o stream)
       const mic = await checkMicrophone(navigator.mediaDevices);
@@ -86,6 +98,11 @@ export function LiveMicButton({
         ws.close();
       };
     } catch (err) {
+      if (isStaleDeployError(err)) {
+        setError('O sistema foi atualizado enquanto esta página estava aberta — recarregue a página e tente de novo.');
+        setState('stale-deploy');
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Falha ao iniciar a consulta ao vivo.');
       setState('error');
     }
@@ -112,6 +129,15 @@ export function LiveMicButton({
         </button>
       )}
       {error ? <p className="max-w-[220px] text-right text-[10px] text-red-300">{error}</p> : null}
+      {state === 'stale-deploy' ? (
+        <button
+          type="button"
+          onClick={() => location.reload()}
+          className="rounded-md border border-white/25 px-2 py-1 text-[10px] font-semibold text-white hover:bg-white/10"
+        >
+          ↻ Recarregar página
+        </button>
+      ) : null}
     </div>
   );
 }

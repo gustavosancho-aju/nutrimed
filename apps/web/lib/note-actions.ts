@@ -8,6 +8,7 @@ import { getCurrentUser } from './auth';
 import { getDb } from './db';
 import { getEncryptionKey } from './crypto-key';
 import { getNoteInputs } from './board-runtime';
+import { toActionResult, type ActionResult } from './action-result';
 
 /**
  * Server actions da nota clínica (E9 — FR17). Toda escrita é cifrada (NFR9)
@@ -22,28 +23,44 @@ async function requireConsultation(formData: FormData): Promise<string> {
   return consultationId;
 }
 
-/** Gera o rascunho da nota a partir da consulta encerrada/ativa (AC1). */
-export async function generateNoteAction(formData: FormData): Promise<void> {
-  const consultationId = await requireConsultation(formData);
-  const inputs = await getNoteInputs(consultationId);
-  if (!inputs || inputs.finals.length === 0) {
-    throw new Error('Sem transcrição nesta sessão — inicie a consulta antes de gerar a nota.');
+/**
+ * Gera o rascunho da nota a partir da consulta encerrada/ativa (AC1).
+ * Assinatura compatível com useActionState — retorna ActionResult (nunca lança)
+ * para a mensagem de erro chegar legível ao médico em produção.
+ */
+export async function generateNoteAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { ok: false, code: 'unauthenticated' };
+    const consultationId = String(formData.get('consultationId') ?? '');
+    if (!consultationId) return { ok: false, code: 'invalid-input' };
+    const inputs = await getNoteInputs(consultationId);
+    if (!inputs || inputs.finals.length === 0) {
+      return { ok: false, code: 'no-transcript' };
+    }
+    const llm = process.env.ANTHROPIC_API_KEY
+      ? new AnthropicLlmProvider({
+          apiKey: process.env.ANTHROPIC_API_KEY,
+          personaId: 'aurelio',
+          maxTokens: 1000,
+          longForm: true, // nota completa em markdown, sem limite de 1-3 frases
+        })
+      : new FakeLlmProvider('aurelio', 'sintese');
+    const draft = await generateNoteDraft(llm, inputs.finals, inputs.contributions);
+    const db = await getDb();
+    await saveNote(db, consultationId, draft, getEncryptionKey(), {
+      action: 'generate',
+      modelVersion: process.env.ANTHROPIC_API_KEY ? 'claude-haiku-4-5' : 'fake-llm',
+    });
+    revalidatePath(`/consultations/${consultationId}`);
+    return { ok: true };
+  } catch (err) {
+    console.error('[nota] generateNoteAction falhou:', err);
+    return toActionResult(err);
   }
-  const llm = process.env.ANTHROPIC_API_KEY
-    ? new AnthropicLlmProvider({
-        apiKey: process.env.ANTHROPIC_API_KEY,
-        personaId: 'aurelio',
-        maxTokens: 1000,
-        longForm: true, // nota completa em markdown, sem limite de 1-3 frases
-      })
-    : new FakeLlmProvider('aurelio', 'sintese');
-  const draft = await generateNoteDraft(llm, inputs.finals, inputs.contributions);
-  const db = await getDb();
-  await saveNote(db, consultationId, draft, getEncryptionKey(), {
-    action: 'generate',
-    modelVersion: process.env.ANTHROPIC_API_KEY ? 'claude-haiku-4-5' : 'fake-llm',
-  });
-  revalidatePath(`/consultations/${consultationId}`);
 }
 
 /** Salva a edição do médico (AC2) — auditada como human-edit. */

@@ -1,5 +1,5 @@
 import 'server-only';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BoardGateway } from '@nutrimed/board-gateway';
 import { FullBoardOrchestrator, type FullBoardEvent } from '@nutrimed/board';
@@ -45,7 +45,12 @@ async function init(): Promise<BoardRuntime> {
   const gateway = new BoardGateway(db, { port: BOARD_WS_PORT });
   // E5: ingere a SEED real por persona (R8 — trocar pela curadoria = re-ingestão)
   const kb = new NamespacedKnowledgeStore();
-  const seedPath = join(process.cwd(), '..', '..', 'docs', 'personas-knowledge-base-seed.md');
+  // cwd varia: apps/web (next start) vs raiz do repo (vitest) — aceita ambos.
+  const seedCandidates = [
+    join(process.cwd(), '..', '..', 'docs', 'personas-knowledge-base-seed.md'),
+    join(process.cwd(), 'docs', 'personas-knowledge-base-seed.md'),
+  ];
+  const seedPath = seedCandidates.find((p) => existsSync(p)) ?? seedCandidates[0]!;
   ingest(kb, seedSources(readFileSync(seedPath, 'utf8')), 'seed-v1');
   return { gateway, kb, telemetry: new TelemetryRegistry(), active: new Map() };
 }
@@ -254,38 +259,50 @@ export async function startLiveBoard(consultationId: string): Promise<void> {
   }
 
   const audio = createAudioQueue();
-  runtime.gateway.registerAudioSink(consultationId, audio.sink);
-
-  const stt = new DeepgramSttProvider({ apiKey: process.env.DEEPGRAM_API_KEY });
-  const session = await startConsultationSession(db, consultationId, stt, {
-    audio: audio.iterable,
-    vocabularyBoost: CLINICAL_VOCABULARY,
-  });
-  const hooks = telemetryHooks(runtime, consultationId);
-  runtime.telemetry.sessionStarted(consultationId);
-  const { llm } = makeLlm(hooks.onUsage);
-  const orchestrator = new FullBoardOrchestrator(db, session, llm, runtime.kb, {
-    pauseMs: 2500,
-    tickMs: 1000,
-    synthesisQuietMs: 20_000,
-    maxPerMinutePerDoctor: 2,
-    onDecision: hooks.onDecision,
-    onContributionLatency: hooks.onContributionLatency,
-  });
-  runtime.gateway.bind(consultationId, orchestrator);
-  session.subscribe((event) => {
-    if (event.type === 'segment') {
-      if (event.segment.isFinal) runtime.telemetry.sttSegment(consultationId);
-      runtime.gateway.broadcastTranscript(consultationId, event.segment.text, event.segment.isFinal);
-    }
-  });
-  const events: FullBoardEvent[] = [];
-  orchestrator.subscribe((event) => {
-    events.push(event);
-    persistSynthesisEvents(db, consultationId, event); // histórico salvo (cifrado+auditado)
-  });
-  orchestrator.start();
-  runtime.active.set(consultationId, { session, orchestrator, events });
+  let session: ConsultationSession | undefined;
+  let orchestrator: FullBoardOrchestrator | undefined;
+  try {
+    // O gate de consentimento (FR20) roda AQUI — antes de qualquer sink existir.
+    // O client só conecta o WS /audio depois que esta action retorna, então
+    // registrar o sink após a sessão não perde áudio e elimina o sink órfão.
+    const stt = new DeepgramSttProvider({ apiKey: process.env.DEEPGRAM_API_KEY });
+    session = await startConsultationSession(db, consultationId, stt, {
+      audio: audio.iterable,
+      vocabularyBoost: CLINICAL_VOCABULARY,
+    });
+    runtime.gateway.registerAudioSink(consultationId, audio.sink);
+    const hooks = telemetryHooks(runtime, consultationId);
+    runtime.telemetry.sessionStarted(consultationId);
+    const { llm } = makeLlm(hooks.onUsage);
+    orchestrator = new FullBoardOrchestrator(db, session, llm, runtime.kb, {
+      pauseMs: 2500,
+      tickMs: 1000,
+      synthesisQuietMs: 20_000,
+      maxPerMinutePerDoctor: 2,
+      onDecision: hooks.onDecision,
+      onContributionLatency: hooks.onContributionLatency,
+    });
+    runtime.gateway.bind(consultationId, orchestrator);
+    session.subscribe((event) => {
+      if (event.type === 'segment') {
+        if (event.segment.isFinal) runtime.telemetry.sttSegment(consultationId);
+        runtime.gateway.broadcastTranscript(consultationId, event.segment.text, event.segment.isFinal);
+      }
+    });
+    const events: FullBoardEvent[] = [];
+    orchestrator.subscribe((event) => {
+      events.push(event);
+      persistSynthesisEvents(db, consultationId, event); // histórico salvo (cifrado+auditado)
+    });
+    orchestrator.start();
+    runtime.active.set(consultationId, { session, orchestrator, events });
+  } catch (error) {
+    // rollback completo: nada fica órfão (sink, sessão STT ou orchestrator)
+    runtime.gateway.unregisterAudioSink(consultationId);
+    orchestrator?.stop();
+    await session?.stop().catch(() => {});
+    throw error;
+  }
 }
 
 /** Encerra a consulta ao vivo (para STT e board; preserva transcript p/ a nota). */

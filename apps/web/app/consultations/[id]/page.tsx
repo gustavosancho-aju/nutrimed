@@ -6,7 +6,8 @@ import { getCurrentUser, SESSION_COOKIE } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { grantConsentAction, revokeConsentAction } from '@/lib/consent-actions';
 import { startDemoBoardAction, requestSynthesisAction } from '@/lib/board-actions';
-import { generateNoteAction, saveNoteAction } from '@/lib/note-actions';
+import { saveNoteAction } from '@/lib/note-actions';
+import { NoteGeneratorForm } from '@/components/note-generator-form';
 import { getBoardRuntime, getTelemetryReport, BOARD_WS_PORT } from '@/lib/board-runtime';
 import { getEncryptionKey } from '@/lib/crypto-key';
 import { loadNote, listSyntheses } from '@nutrimed/clinical-notes';
@@ -141,15 +142,7 @@ export default async function ConsultationPage({
                   repouso e auditada.
                 </p>
               </div>
-              <form action={generateNoteAction}>
-                <input type="hidden" name="consultationId" value={id} />
-                <button
-                  type="submit"
-                  className="rounded-[10px] border border-ink/15 px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-surface-muted"
-                >
-                  ✨ {note ? 'Regenerar rascunho' : 'Gerar nota da consulta'}
-                </button>
-              </form>
+              <NoteGeneratorForm consultationId={id} hasNote={Boolean(note)} />
             </div>
 
             {note ? (

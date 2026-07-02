@@ -120,6 +120,16 @@ export class BoardGateway {
     this.audioSinks.delete(consultationId);
   }
 
+  /** Há sink de áudio ativo para a consulta? (diagnóstico E2/E3) */
+  hasAudioSink(consultationId: string): boolean {
+    return this.audioSinks.has(consultationId);
+  }
+
+  /** Clientes conectados no canal /board da consulta (diagnóstico). */
+  clientCount(consultationId: string): number {
+    return this.clients.get(consultationId)?.size ?? 0;
+  }
+
   private async onConnection(socket: WebSocket, url: string): Promise<void> {
     const parsed = new URL(url, 'http://localhost');
     const pathname = parsed.pathname;
