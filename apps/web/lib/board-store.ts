@@ -27,6 +27,17 @@ export interface TranscriptState {
   readonly partial: string | null;
 }
 
+/** Saúde do pipeline de transcrição visível ao médico (A3). */
+export interface PipelineState {
+  /** Espelho do SessionStatus do servidor ('idle' = nada iniciado ainda). */
+  readonly stt: 'idle' | 'live' | 'degraded' | 'ended';
+  readonly wsConnected: boolean;
+  /** Reconexão do /board esgotou as tentativas — exige recarregar. */
+  readonly wsGaveUp: boolean;
+  /** Último transcript (parcial ou final) recebido — insumo do watchdog. */
+  readonly lastTranscriptAt: number | null;
+}
+
 interface BoardState {
   contributions: BoardContributionItem[];
   pinned: Set<string>;
@@ -38,9 +49,13 @@ interface BoardState {
   /** Represadas pelo Modo Foco (contador no banner). */
   heldByFocus: number;
   transcript: TranscriptState;
+  pipeline: PipelineState;
 
   addContribution(item: BoardContributionItem): void;
   addTranscript(text: string, isFinal: boolean): void;
+  setSttStatus(stt: PipelineState['stt']): void;
+  setWsConnected(connected: boolean): void;
+  setWsGaveUp(): void;
   togglePin(id: string): void;
   dismiss(id: string): void;
   undoDismiss(): void;
@@ -58,6 +73,7 @@ export const useBoardStore = create<BoardState>((set) => ({
   focusMode: false,
   heldByFocus: 0,
   transcript: { finals: [], partial: null },
+  pipeline: { stt: 'idle', wsConnected: false, wsGaveUp: false, lastTranscriptAt: null },
 
   addContribution: (item) =>
     set((state) => {
@@ -76,7 +92,15 @@ export const useBoardStore = create<BoardState>((set) => ({
       transcript: isFinal
         ? { finals: [...state.transcript.finals, text], partial: null }
         : { ...state.transcript, partial: text },
+      pipeline: { ...state.pipeline, lastTranscriptAt: Date.now() },
     })),
+
+  setSttStatus: (stt) => set((state) => ({ pipeline: { ...state.pipeline, stt } })),
+
+  setWsConnected: (connected) =>
+    set((state) => ({ pipeline: { ...state.pipeline, wsConnected: connected } })),
+
+  setWsGaveUp: () => set((state) => ({ pipeline: { ...state.pipeline, wsGaveUp: true } })),
 
   togglePin: (id) =>
     set((state) => {
@@ -122,6 +146,7 @@ export const useBoardStore = create<BoardState>((set) => ({
       focusMode: false,
       heldByFocus: 0,
       transcript: { finals: [], partial: null },
+      pipeline: { stt: 'idle', wsConnected: false, wsGaveUp: false, lastTranscriptAt: null },
     }),
 }));
 

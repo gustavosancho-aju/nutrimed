@@ -1,9 +1,11 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { startLiveBoardAction, stopLiveBoardAction } from '@/lib/board-actions';
 import { ACTION_ERROR_MESSAGES } from '@/lib/action-result';
 import { checkMicrophone, createAudioSource, pickRecorderMime, type AudioSource } from '@/lib/microphone';
+import { useBoardStore } from '@/lib/board-store';
+import { isTranscriptSilent } from '@/lib/pipeline-watchdog';
 
 /**
  * Consulta AO VIVO com microfone real (E3 final / Story 2.2 REUSE).
@@ -32,7 +34,29 @@ export function LiveMicButton({
 }) {
   const [state, setState] = useState<LiveState>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
+
+  // Watchdog (A3): "ao vivo" mas NENHUM transcript (nem parcial) em 10s —
+  // era exatamente a falha silenciosa que o médico viu em produção.
+  useEffect(() => {
+    if (state !== 'live') {
+      setWarning(null);
+      return;
+    }
+    const liveSince = Date.now();
+    const timer = setInterval(() => {
+      const last = useBoardStore.getState().pipeline.lastTranscriptAt;
+      if (isTranscriptSilent(liveSince, last, Date.now())) {
+        setWarning(
+          'Ao vivo há 10s sem nenhuma fala transcrita — fale mais perto do microfone ou abra o Diagnóstico.',
+        );
+      } else if (last && last >= liveSince) {
+        setWarning(null);
+      }
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [state]);
 
   const stop = useCallback(async () => {
     cleanupRef.current?.();
@@ -150,6 +174,9 @@ export function LiveMicButton({
         </button>
       )}
       {error ? <p className="max-w-[220px] text-right text-[10px] text-red-300">{error}</p> : null}
+      {warning && !error ? (
+        <p className="max-w-[220px] text-right text-[10px] text-amber-300">{warning}</p>
+      ) : null}
       {state === 'stale-deploy' ? (
         <button
           type="button"

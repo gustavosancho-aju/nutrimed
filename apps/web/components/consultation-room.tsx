@@ -10,6 +10,7 @@ import { SuggestionFeed } from './suggestion-feed';
 import { DoctorStrip } from './doctor-strip';
 import { AlertVignette } from './alert-vignette';
 import { LiveMicButton } from './live-mic-button';
+import { PipelineStatusBadge } from './pipeline-status-badge';
 
 /**
  * Tela de Consulta (E7 — frontend-spec §4): grid 2 colunas — área principal
@@ -86,6 +87,7 @@ export function ConsultationRoom({
           </span>
         </h2>
         <div className="flex items-center gap-3">
+          <PipelineStatusBadge />
           <span
             title="⚠️ atenção · 💡 sugestão · 🔍 hipótese · 📋 síntese"
             className="cursor-help text-xs text-white/50"

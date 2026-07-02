@@ -31,6 +31,9 @@ export interface UseBoardStreamOptions {
 export function useBoardStream(consultationId: string, opts: UseBoardStreamOptions = {}) {
   const addContribution = useBoardStore((s) => s.addContribution);
   const addTranscript = useBoardStore((s) => s.addTranscript);
+  const setSttStatus = useBoardStore((s) => s.setSttStatus);
+  const setWsConnected = useBoardStore((s) => s.setWsConnected);
+  const setWsGaveUp = useBoardStore((s) => s.setWsGaveUp);
 
   useEffect(() => {
     const factory: BrowserSocketFactory =
@@ -52,6 +55,7 @@ export function useBoardStream(consultationId: string, opts: UseBoardStreamOptio
       socket = factory(url);
       socket.addEventListener('open', () => {
         retries = 0;
+        setWsConnected(true);
       });
       socket.addEventListener('message', (event) => {
         if (typeof event.data !== 'string') return;
@@ -61,6 +65,10 @@ export function useBoardStream(consultationId: string, opts: UseBoardStreamOptio
             addTranscript(message.text, message.isFinal); // transcrição ao vivo (E7)
             return;
           }
+          if (message.v === 1 && message.type === 'status') {
+            setSttStatus(message.stt); // saúde do pipeline (A3)
+            return;
+          }
           const item = toContributionItem(message);
           if (item) addContribution(item);
         } catch {
@@ -68,7 +76,12 @@ export function useBoardStream(consultationId: string, opts: UseBoardStreamOptio
         }
       });
       socket.addEventListener('close', () => {
-        if (disposed || retries >= maxRetries) return;
+        setWsConnected(false);
+        if (disposed) return;
+        if (retries >= maxRetries) {
+          setWsGaveUp(); // reconexão esgotada — a UI pede recarga (A3)
+          return;
+        }
         retries += 1;
         retryTimer = setTimeout(connect, retryDelayMs * retries);
       });
@@ -84,6 +97,9 @@ export function useBoardStream(consultationId: string, opts: UseBoardStreamOptio
     consultationId,
     addContribution,
     addTranscript,
+    setSttStatus,
+    setWsConnected,
+    setWsGaveUp,
     opts.baseUrl,
     opts.token,
     opts.socketFactory,

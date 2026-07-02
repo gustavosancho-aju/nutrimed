@@ -42,6 +42,8 @@ export class BoardGateway {
   /** Sinks de áudio por consulta (mic real — canal /audio, separado do board §7). */
   private readonly audioSinks = new Map<string, { push(chunk: Uint8Array): void; end(): void }>();
   private readonly unbinders = new Map<string, () => void>();
+  /** Último status por consulta — reenviado a clientes que (re)conectam tarde. */
+  private readonly lastStatus = new Map<string, BoardServerMessage>();
   private readonly heartbeat: ReturnType<typeof setInterval>;
   private readonly now: () => number;
 
@@ -101,6 +103,26 @@ export class BoardGateway {
       isFinal,
       at: this.now(),
     } satisfies BoardServerMessage);
+    for (const socket of this.clients.get(consultationId) ?? []) {
+      if (socket.readyState === WebSocket.OPEN) socket.send(payload);
+    }
+  }
+
+  /**
+   * Status do pipeline de transcrição (A3): broadcast + cache para replay.
+   * `degraded` invisível foi uma das causas do "médico não conseguiu" — o
+   * cliente PRECISA saber quando o STT caiu/recuperou.
+   */
+  broadcastStatus(consultationId: string, stt: 'live' | 'degraded' | 'ended', lastFinalAt: number | null): void {
+    const message: BoardServerMessage = {
+      v: BOARD_PROTOCOL_VERSION,
+      type: 'status',
+      stt,
+      lastFinalAt,
+      at: this.now(),
+    };
+    this.lastStatus.set(consultationId, message);
+    const payload = JSON.stringify(message);
     for (const socket of this.clients.get(consultationId) ?? []) {
       if (socket.readyState === WebSocket.OPEN) socket.send(payload);
     }
@@ -181,6 +203,9 @@ export class BoardGateway {
     socket.on('close', () => {
       set.delete(socket);
     });
+    // replay do último status: quem conecta/reconecta tarde vê o estado atual
+    const status = this.lastStatus.get(consultationId);
+    if (status) socket.send(JSON.stringify(status));
   }
 
   private broadcast(event: BoardContributionEvent): void {

@@ -152,6 +152,26 @@ describe('BoardGateway (Story 3.2 — ADR-003)', () => {
     ws.close();
   });
 
+  it('A3 — broadcastStatus chega ao cliente conectado', async () => {
+    const { ws } = await connect(gateway.port, `consultationId=${consultationId}&token=${token}`);
+    const received = nextMessage(ws);
+    gateway.broadcastStatus(consultationId, 'degraded', 1234);
+    expect(await received).toMatchObject({ v: 1, type: 'status', stt: 'degraded', lastFinalAt: 1234 });
+    ws.close();
+  });
+
+  it('A3 — cliente que conecta DEPOIS recebe o último status (replay)', async () => {
+    gateway.broadcastStatus(consultationId, 'live', 5678);
+    // listener ANTES do open: o replay pode chegar no mesmo flush do handshake
+    const ws = new WebSocket(
+      `ws://127.0.0.1:${gateway.port}/board?consultationId=${consultationId}&token=${token}`,
+    );
+    const received = nextMessage(ws);
+    const message = await received;
+    expect(message).toMatchObject({ v: 1, type: 'status', stt: 'live', lastFinalAt: 5678 });
+    ws.close();
+  });
+
   it('AC4 — heartbeat ping chega ao cliente conectado', async () => {
     const fast = new BoardGateway(exec, { port: 0, heartbeatMs: 30, now: () => 999 });
     const { ws } = await connect(fast.port, `consultationId=${consultationId}&token=${token}`);

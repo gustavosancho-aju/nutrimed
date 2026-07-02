@@ -133,6 +133,34 @@ function persistSynthesisEvents(db: SqlExecutor, consultationId: string, event: 
   );
 }
 
+/**
+ * Wiring comum sessão→gateway (A3): transcript ao vivo + STATUS do pipeline
+ * (live/degraded/ended) visível ao cliente — degradação silenciosa do STT foi
+ * uma das causas do incidente de produção. Rastreia lastFinalAt por consulta.
+ */
+function wireSessionBroadcast(
+  runtime: BoardRuntime,
+  consultationId: string,
+  session: ConsultationSession,
+): void {
+  let lastFinalAt: number | null = null;
+  session.subscribe((event) => {
+    if (event.type === 'segment') {
+      if (event.segment.isFinal) {
+        lastFinalAt = Date.now();
+        runtime.telemetry.sttSegment(consultationId);
+      }
+      runtime.gateway.broadcastTranscript(consultationId, event.segment.text, event.segment.isFinal);
+      return;
+    }
+    if (event.type === 'status') {
+      runtime.gateway.broadcastStatus(consultationId, event.status, lastFinalAt);
+    }
+  });
+  // prime: quem abrir o /board já sabe que o pipeline está vivo (replay no gateway)
+  runtime.gateway.broadcastStatus(consultationId, 'live', null);
+}
+
 /** Wiring comum de telemetria por consulta (E10). */
 function telemetryHooks(runtime: BoardRuntime, consultationId: string) {
   const t = runtime.telemetry;
@@ -172,12 +200,7 @@ export async function startDemoBoard(consultationId: string): Promise<{ llmLabel
   });
   runtime.gateway.bind(consultationId, orchestrator);
   // transcrição ao vivo p/ o painel (texto via WS — áudio nunca passa aqui, §7)
-  session.subscribe((event) => {
-    if (event.type === 'segment') {
-      if (event.segment.isFinal) runtime.telemetry.sttSegment(consultationId);
-      runtime.gateway.broadcastTranscript(consultationId, event.segment.text, event.segment.isFinal);
-    }
-  });
+  wireSessionBroadcast(runtime, consultationId, session);
   // histórico de contribuições da sessão (insumo da nota clínica — E9)
   const events: FullBoardEvent[] = [];
   orchestrator.subscribe((event) => {
@@ -283,12 +306,7 @@ export async function startLiveBoard(consultationId: string): Promise<void> {
       onContributionLatency: hooks.onContributionLatency,
     });
     runtime.gateway.bind(consultationId, orchestrator);
-    session.subscribe((event) => {
-      if (event.type === 'segment') {
-        if (event.segment.isFinal) runtime.telemetry.sttSegment(consultationId);
-        runtime.gateway.broadcastTranscript(consultationId, event.segment.text, event.segment.isFinal);
-      }
-    });
+    wireSessionBroadcast(runtime, consultationId, session);
     const events: FullBoardEvent[] = [];
     orchestrator.subscribe((event) => {
       events.push(event);
