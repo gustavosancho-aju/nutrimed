@@ -257,4 +257,25 @@ CREATE INDEX IF NOT EXISTS idx_board_synthesis_consultation
   ON board_synthesis(consultation_id, created_at);
 `,
   },
+  {
+    name: '0008_transcript_segment',
+    sql: `
+-- Transcript persistido incrementalmente (A4). Revisa a postura do 0007: um
+-- deploy/restart no MEIO da consulta apagava o transcript em memória e a nota
+-- clínica ficava impossível ("Sem transcrição nesta sessão" — incidente de
+-- 2026-07-01). Cada segmento FINAL vira uma linha cifrada (NFR9) no momento em
+-- que chega. Retenção/descarte pós-nota segue sendo a questão jurídica CJ-2.
+
+CREATE TABLE IF NOT EXISTS transcript_segment (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  consultation_id uuid NOT NULL REFERENCES consultation(id),
+  seq             int NOT NULL,
+  content_enc     text NOT NULL,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (consultation_id, seq)
+);
+CREATE INDEX IF NOT EXISTS idx_transcript_segment_consultation
+  ON transcript_segment(consultation_id, seq);
+`,
+  },
 ];

@@ -64,4 +64,30 @@ describe('startLiveBoard (A1 — gate de consentimento antes do sink)', () => {
     expect(runtime.gateway.hasAudioSink(consultationId)).toBe(false);
     expect(runtime.active.has(consultationId)).toBe(false);
   });
+
+  it('A4 — getNoteInputs cai no BANCO quando a sessão não está ativa (pós-restart/deploy)', async () => {
+    const key = Buffer.alloc(32, 7); // mesma chave do mock de getEncryptionKey
+    const { saveTranscriptSegment, saveSynthesis } = await import('@nutrimed/clinical-notes');
+    await saveTranscriptSegment(holder.db!, consultationId, 0, 'Paciente relata palpitação.', key);
+    await saveTranscriptSegment(holder.db!, consultationId, 1, 'Vamos revisar a medicação.', key);
+    await saveSynthesis(holder.db!, consultationId, 'Síntese que sobreviveu ao restart.', key, 'claude-haiku-4-5');
+
+    const inputs = await runtimeModule.getNoteInputs(consultationId);
+    expect(inputs).not.toBeNull();
+    expect(inputs!.finals).toEqual(['Paciente relata palpitação.', 'Vamos revisar a medicação.']);
+    expect(inputs!.contributions).toHaveLength(1);
+    expect(inputs!.contributions[0]).toMatchObject({
+      personaId: 'aurelio',
+      type: 'sintese',
+      text: 'Síntese que sobreviveu ao restart.',
+    });
+  });
+
+  it('A4 — consulta sem transcript nem sínteses → null (mensagem no-transcript)', async () => {
+    const user = await holder.db!.query<{ id: string }>(
+      "INSERT INTO app_user (email, display_name, password_hash) VALUES ('m2@t.dev', 'Med2', 'x') RETURNING id",
+    );
+    const emptyConsultation = await createConsultation(holder.db!, user.rows[0]!.id, 'Vazio', Buffer.alloc(32, 7));
+    expect(await runtimeModule.getNoteInputs(emptyConsultation)).toBeNull();
+  });
 });

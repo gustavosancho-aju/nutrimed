@@ -145,6 +145,54 @@ export async function listSyntheses(
   }));
 }
 
+// ── Transcript persistido incrementalmente (A4) ────────────────────────────
+
+/**
+ * Persiste um segmento FINAL do transcript (cifrado — NFR9). Chamado a cada
+ * final da sessão (fire-and-forget no runtime): a nota clínica sobrevive a
+ * deploy/restart no meio da consulta. SEM writeAudit por segmento de propósito
+ * (inundaria o audit_log — a sessão audita uma única vez em transcript-persist-start);
+ * a trilha da NOTA continua em saveNote.
+ */
+export async function saveTranscriptSegment(
+  db: SqlExecutor,
+  consultationId: string,
+  seq: number,
+  text: string,
+  encryptionKey: Buffer,
+): Promise<void> {
+  await db.query(
+    `INSERT INTO transcript_segment (consultation_id, seq, content_enc) VALUES ($1, $2, $3)
+     ON CONFLICT (consultation_id, seq) DO NOTHING`,
+    [consultationId, seq, encryptField(text, encryptionKey)],
+  );
+}
+
+/** Marca (auditada) o início da persistência de transcript da sessão — 1x por sessão. */
+export async function auditTranscriptPersistStart(
+  db: SqlExecutor,
+  consultationId: string,
+): Promise<void> {
+  await writeAudit(db, consultationId, {
+    triggeredBy: 'transcript-persist-start',
+    kbSources: [],
+    modelVersion: 'n/a',
+  });
+}
+
+/** Segmentos finais persistidos da consulta, decifrados, em ordem (seq). */
+export async function listTranscriptFinals(
+  db: SqlExecutor,
+  consultationId: string,
+  encryptionKey: Buffer,
+): Promise<string[]> {
+  const res = await db.query<{ content_enc: string }>(
+    'SELECT content_enc FROM transcript_segment WHERE consultation_id = $1 ORDER BY seq ASC',
+    [consultationId],
+  );
+  return res.rows.map((r) => decryptField(r.content_enc, encryptionKey));
+}
+
 /** Carrega e decifra a nota da consulta (null se ainda não existe). */
 export async function loadNote(
   db: SqlExecutor,

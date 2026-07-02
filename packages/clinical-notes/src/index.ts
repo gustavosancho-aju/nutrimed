@@ -4,6 +4,9 @@ export {
   loadNote,
   saveSynthesis,
   listSyntheses,
+  saveTranscriptSegment,
+  listTranscriptFinals,
+  auditTranscriptPersistStart,
   type ClinicalNote,
   type BoardSynthesis,
 } from './notes';

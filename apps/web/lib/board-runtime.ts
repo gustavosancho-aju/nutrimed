@@ -10,7 +10,13 @@ import { DeepgramSttProvider } from '@nutrimed/stt-deepgram';
 import { FakeLlmProvider, type ISttProvider, type SttSession, type TranscriptSegment, type ILlmProvider } from '@nutrimed/providers';
 import { CLINICAL_VOCABULARY } from '@nutrimed/domain';
 import { TelemetryRegistry, type GateDecisionKind, type UiEventKind } from '@nutrimed/telemetry';
-import { saveSynthesis } from '@nutrimed/clinical-notes';
+import {
+  saveSynthesis,
+  saveTranscriptSegment,
+  listTranscriptFinals,
+  listSyntheses,
+  auditTranscriptPersistStart,
+} from '@nutrimed/clinical-notes';
 import type { SqlExecutor } from '@nutrimed/db';
 import { getDb } from './db';
 import { getEncryptionKey } from './crypto-key';
@@ -142,13 +148,39 @@ function wireSessionBroadcast(
   runtime: BoardRuntime,
   consultationId: string,
   session: ConsultationSession,
+  db: SqlExecutor,
 ): void {
   let lastFinalAt: number | null = null;
+  // A4: cada final é persistido cifrado no ato (fila encadeada preserva a
+  // ordem) — a nota clínica sobrevive a deploy/restart no meio da consulta
+  // (incidente 23:52). O seq continua do máximo existente: reinício da mesma
+  // consulta NUNCA colide nem apaga a fala anterior.
+  let nextSeq: Promise<number> = db
+    .query<{ max: number | null }>(
+      'SELECT MAX(seq) AS max FROM transcript_segment WHERE consultation_id = $1',
+      [consultationId],
+    )
+    .then((r) => (r.rows[0]?.max ?? -1) + 1)
+    .catch(() => 0);
+  const persistFinal = (text: string) => {
+    nextSeq = nextSeq.then(async (seq) => {
+      try {
+        await saveTranscriptSegment(db, consultationId, seq, text, getEncryptionKey());
+      } catch (error) {
+        console.error('[board] falha ao persistir segmento:', error);
+      }
+      return seq + 1;
+    });
+  };
+  auditTranscriptPersistStart(db, consultationId).catch((error) =>
+    console.error('[board] falha ao auditar início da persistência:', error),
+  );
   session.subscribe((event) => {
     if (event.type === 'segment') {
       if (event.segment.isFinal) {
         lastFinalAt = Date.now();
         runtime.telemetry.sttSegment(consultationId);
+        persistFinal(event.segment.text);
       }
       runtime.gateway.broadcastTranscript(consultationId, event.segment.text, event.segment.isFinal);
       return;
@@ -200,7 +232,7 @@ export async function startDemoBoard(consultationId: string): Promise<{ llmLabel
   });
   runtime.gateway.bind(consultationId, orchestrator);
   // transcrição ao vivo p/ o painel (texto via WS — áudio nunca passa aqui, §7)
-  wireSessionBroadcast(runtime, consultationId, session);
+  wireSessionBroadcast(runtime, consultationId, session, db);
   // histórico de contribuições da sessão (insumo da nota clínica — E9)
   const events: FullBoardEvent[] = [];
   orchestrator.subscribe((event) => {
@@ -218,17 +250,42 @@ export async function requestSynthesis(consultationId: string): Promise<void> {
   await runtime.active.get(consultationId)?.orchestrator.synthesizeNow();
 }
 
-/** Insumos da nota clínica (E9): transcript acumulado + contribuições do board. */
+/**
+ * Insumos da nota clínica (E9): transcript acumulado + contribuições do board.
+ * A4: o banco é a fonte durável — sessão ativa usa o superset (banco pode
+ * conter fala de ANTES de um reinício da mesma consulta); sem sessão ativa
+ * (pós-restart/deploy — o incidente das 23:52), cai integralmente no banco.
+ */
 export async function getNoteInputs(consultationId: string): Promise<{
   finals: string[];
   contributions: FullBoardEvent['contribution'][];
 } | null> {
   const runtime = await getBoardRuntime();
+  const db = await getDb();
+  const key = getEncryptionKey();
+  const dbFinals = await listTranscriptFinals(db, consultationId, key);
+
   const active = runtime.active.get(consultationId);
-  if (!active) return null;
+  if (active) {
+    const memFinals = active.session.getSnapshot().finalSegments.map((s) => s.text);
+    return {
+      finals: dbFinals.length >= memFinals.length ? dbFinals : memFinals,
+      contributions: active.events.map((e) => e.contribution),
+    };
+  }
+
+  // pós-restart: transcript do banco + sínteses persistidas como contribuições
+  const syntheses = await listSyntheses(db, consultationId, key);
+  if (dbFinals.length === 0 && syntheses.length === 0) return null;
   return {
-    finals: active.session.getSnapshot().finalSegments.map((s) => s.text),
-    contributions: active.events.map((e) => e.contribution),
+    finals: dbFinals,
+    contributions: syntheses.map((s) => ({
+      personaId: 'aurelio' as const,
+      type: 'sintese' as const,
+      severity: 'normal' as const,
+      text: s.content,
+      modelVersion: s.modelVersion ?? undefined,
+    })),
   };
 }
 
@@ -306,7 +363,7 @@ export async function startLiveBoard(consultationId: string): Promise<void> {
       onContributionLatency: hooks.onContributionLatency,
     });
     runtime.gateway.bind(consultationId, orchestrator);
-    wireSessionBroadcast(runtime, consultationId, session);
+    wireSessionBroadcast(runtime, consultationId, session, db);
     const events: FullBoardEvent[] = [];
     orchestrator.subscribe((event) => {
       events.push(event);
