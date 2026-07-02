@@ -24,9 +24,10 @@ primary_region = "gru"   # São Paulo — critério eliminatório de residência
   BOARD_WS_PORT = "3001"
   NODE_ENV = "production"
   NEXT_TELEMETRY_DISABLED = "1"
-  # URL pública do WS para o browser (consumida por NEXT_PUBLIC_BOARD_WS_URL no client).
-  # Mesmo host do app, porta do board exposta abaixo. Ajuste o domínio ao seu app real.
-  NEXT_PUBLIC_BOARD_WS_URL = "wss://nutrimed.fly.dev:3001"
+  # A6: WS na MESMA porta do HTTP (custom server → 443 no Fly). Redes de
+  # clínica bloqueiam portas altas; sem NEXT_PUBLIC_BOARD_WS_URL o client
+  # deriva wss://<host da página>. O listener legado da 3001 segue na transição.
+  BOARD_WS_MODE = "attached"
 
 # --- HTTP do Next (porta 3000) ---------------------------------------------
 [http_service]
@@ -39,8 +40,10 @@ primary_region = "gru"   # São Paulo — critério eliminatório de residência
   processes = ["app"]
 
   [http_service.concurrency]
-    # Muitas sessões por processo (ADR-010 Decisão 3). Calibrar com a POC de carga (3.4).
-    type = "requests"
+    # A6: com o WS na 443, conexões LONGAS passam por aqui — "connections"
+    # (não "requests") para não estrangular o proxy com WS abertos.
+    # Calibrar com a POC de carga (3.4).
+    type = "connections"
     soft_limit = 200
     hard_limit = 250
 

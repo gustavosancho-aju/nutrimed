@@ -1,5 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import type { Server as HttpServer } from 'node:http';
+import type { IncomingMessage, Server as HttpServer } from 'node:http';
+import type { Duplex } from 'node:stream';
 import type { SqlExecutor } from '@nutrimed/db';
 import { validateSession } from '@nutrimed/auth';
 import type { BoardContributionEvent } from '@nutrimed/board';
@@ -32,6 +33,13 @@ export interface BoardGatewayOptions {
   /** Porta própria OU server HTTP existente (upgrade). */
   readonly port?: number;
   readonly server?: HttpServer;
+  /**
+   * A6 — modo DETACHED (`noServer`): nenhum listener próprio; o dono do server
+   * HTTP roteia upgrades de /board e /audio para {@link BoardGateway.handleUpgrade}.
+   * É o modo do custom server na porta 443 (redes de clínica bloqueiam a 3001).
+   * NUNCA usar `{server}` com o server do Next — interceptaria TODOS os upgrades.
+   */
+  readonly detached?: boolean;
   readonly heartbeatMs?: number;
   readonly now?: () => number;
 }
@@ -52,9 +60,11 @@ export class BoardGateway {
     opts: BoardGatewayOptions = {},
   ) {
     this.now = opts.now ?? Date.now;
-    this.wss = opts.server
-      ? new WebSocketServer({ server: opts.server })
-      : new WebSocketServer({ port: opts.port ?? 0 });
+    this.wss = opts.detached
+      ? new WebSocketServer({ noServer: true })
+      : opts.server
+        ? new WebSocketServer({ server: opts.server })
+        : new WebSocketServer({ port: opts.port ?? 0 });
 
     this.wss.on('connection', (socket, request) => {
       void this.onConnection(socket, request.url ?? '');
@@ -69,6 +79,17 @@ export class BoardGateway {
   get port(): number {
     const address = this.wss.address();
     return typeof address === 'object' && address ? address.port : 0;
+  }
+
+  /**
+   * A6 — completa o handshake WS de um upgrade roteado pelo dono do server
+   * HTTP (custom server na 443 ou listener legado da 3001). Só faz sentido em
+   * modo detached; a auth/roteamento por pathname segue em onConnection.
+   */
+  handleUpgrade(request: IncomingMessage, socket: Duplex, head: Buffer): void {
+    this.wss.handleUpgrade(request, socket, head, (ws) => {
+      this.wss.emit('connection', ws, request);
+    });
   }
 
   /**

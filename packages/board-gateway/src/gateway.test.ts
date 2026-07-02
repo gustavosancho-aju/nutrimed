@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomBytes } from 'node:crypto';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { WebSocket } from 'ws';
 import { PGlite } from '@electric-sql/pglite';
 import { runMigrations, type SqlExecutor } from '@nutrimed/db';
@@ -170,6 +172,32 @@ describe('BoardGateway (Story 3.2 — ADR-003)', () => {
     const message = await received;
     expect(message).toMatchObject({ v: 1, type: 'status', stt: 'live', lastFinalAt: 5678 });
     ws.close();
+  });
+
+  it('A6 — modo detached: upgrade roteado por server HTTP externo completa o handshake (auth igual)', async () => {
+    const detached = new BoardGateway(exec, { detached: true, heartbeatMs: 60_000 });
+    const http = createServer((_req, res) => {
+      res.writeHead(404);
+      res.end();
+    });
+    http.on('upgrade', (req, socket, head) => detached.handleUpgrade(req, socket, head));
+    await new Promise<void>((resolve) => http.listen(0, '127.0.0.1', resolve));
+    const port = (http.address() as AddressInfo).port;
+
+    // auth continua valendo no modo detached
+    const bad = new WebSocket(`ws://127.0.0.1:${port}/board?consultationId=${consultationId}&token=invalido`);
+    expect(await waitClose(bad)).toBe(4401);
+
+    const source = makeEventSource();
+    detached.bind(consultationId, source.orchestrator);
+    const { ws } = await connect(port, `consultationId=${consultationId}&token=${token}`);
+    const received = nextMessage(ws);
+    source.emit(contributionEvent(consultationId, 'evt-detached'));
+    expect(await received).toMatchObject({ v: 1, type: 'contribution', id: 'evt-detached' });
+
+    ws.close();
+    await detached.close();
+    await new Promise<void>((resolve) => http.close(() => resolve()));
   });
 
   it('AC4 — heartbeat ping chega ao cliente conectado', async () => {

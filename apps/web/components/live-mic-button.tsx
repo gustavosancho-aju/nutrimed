@@ -6,6 +6,7 @@ import { ACTION_ERROR_MESSAGES } from '@/lib/action-result';
 import { checkMicrophone, createAudioSource, pickRecorderMime, type AudioSource } from '@/lib/microphone';
 import { useBoardStore } from '@/lib/board-store';
 import { isTranscriptSilent } from '@/lib/pipeline-watchdog';
+import { resolveWsBase } from '@/lib/ws-url';
 
 /**
  * Consulta AO VIVO com microfone real (E3 final / Story 2.2 REUSE).
@@ -110,7 +111,7 @@ export function LiveMicButton({
       // 4) captura → WS /audio (só áudio binário; eventos do board vão no /board)
       const source: AudioSource = createAudioSource(mic.stream, undefined, undefined, mime.mimeType);
       const ws = new WebSocket(
-        `${wsBaseUrl}/audio?consultationId=${encodeURIComponent(consultationId)}&token=${encodeURIComponent(token)}`,
+        `${resolveWsBase(wsBaseUrl)}/audio?consultationId=${encodeURIComponent(consultationId)}&token=${encodeURIComponent(token)}`,
       );
       ws.binaryType = 'arraybuffer';
 

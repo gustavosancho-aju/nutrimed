@@ -69,6 +69,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV BOARD_WS_PORT=3001
 ENV HOSTNAME=0.0.0.0
+# A6: WS na MESMA porta do HTTP (custom server) — redes de clínica bloqueiam
+# portas fora da 443. Rollback: BOARD_WS_MODE=port + CMD `next start`.
+ENV BOARD_WS_MODE=attached
 
 # usuário não-root
 RUN groupadd --system --gid 1001 nodejs \
@@ -98,6 +101,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 WORKDIR /app/apps/web
-# `next start` mantém o processo vivo; o BoardGateway vive no mesmo processo
-# (singleton globalThis.__nutrimedBoard). Ver RUNBOOK para o aviso de warm-up do WS.
-CMD ["node_modules/.bin/next", "start", "-p", "3000", "-H", "0.0.0.0"]
+# A6: custom server (server.mjs) = Next + upgrades WS (/board e /audio) na
+# MESMA porta. O BoardGateway vive no mesmo processo (globalThis.__nutrimedBoard);
+# o listener legado na 3001 segue ativo na transição. Rollback = CMD antigo:
+#   CMD ["node_modules/.bin/next", "start", "-p", "3000", "-H", "0.0.0.0"]
+CMD ["node", "server.mjs"]

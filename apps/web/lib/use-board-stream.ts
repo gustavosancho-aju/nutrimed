@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import type { BoardServerMessage } from '@nutrimed/shared-types';
 import { useBoardStore, toContributionItem } from './board-store';
+import { resolveWsBase } from './ws-url';
 
 /**
  * `useBoardStream` (Story 3.3 — frontend-spec §11.2): conecta ao WS do board
@@ -38,7 +39,8 @@ export function useBoardStream(consultationId: string, opts: UseBoardStreamOptio
   useEffect(() => {
     const factory: BrowserSocketFactory =
       opts.socketFactory ?? ((url) => new WebSocket(url) as unknown as BrowserSocketLike);
-    const base = opts.baseUrl ?? process.env.NEXT_PUBLIC_BOARD_WS_URL ?? 'ws://localhost:3001';
+    // baseUrl vazio ⇒ mesma origem (modo attached, A6)
+    const base = resolveWsBase(opts.baseUrl || process.env.NEXT_PUBLIC_BOARD_WS_URL);
     const url = `${base}/board?consultationId=${encodeURIComponent(consultationId)}${
       opts.token ? `&token=${encodeURIComponent(opts.token)}` : ''
     }`;

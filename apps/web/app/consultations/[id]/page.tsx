@@ -36,7 +36,12 @@ export default async function ConsultationPage({
 
   await getBoardRuntime();
   const sessionToken = (await cookies()).get(SESSION_COOKIE)?.value ?? '';
-  const wsBaseUrl = process.env.NEXT_PUBLIC_BOARD_WS_URL ?? `ws://localhost:${BOARD_WS_PORT}`;
+  // A6: em modo attached o WS vai pela MESMA origem/porta da página ('' ⇒
+  // o cliente deriva wss://host). Fora dele, env explícita ou dev local (3001).
+  const wsBaseUrl =
+    process.env.BOARD_WS_MODE === 'attached'
+      ? (process.env.NEXT_PUBLIC_BOARD_WS_URL ?? '')
+      : (process.env.NEXT_PUBLIC_BOARD_WS_URL ?? `ws://localhost:${BOARD_WS_PORT}`);
   const note = authorized ? await loadNote(db, id, getEncryptionKey()) : null;
   const syntheses = authorized ? await listSyntheses(db, id, getEncryptionKey()) : [];
   const telemetry = authorized ? await getTelemetryReport(id) : null;

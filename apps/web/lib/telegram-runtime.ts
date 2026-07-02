@@ -171,6 +171,17 @@ async function init(): Promise<TelegramRuntime | null> {
   const mode = process.env.TELEGRAM_MODE ?? (process.env.NODE_ENV === 'production' ? 'webhook' : 'polling');
 
   if (mode === 'polling') {
+    // GUARDA: long-polling chama deleteWebhook — com o token de PROD isso
+    // derruba o webhook de produção (lição paga em 2026-07-02). Em produção,
+    // polling NUNCA liga; para dev do bot, use um bot de teste do @BotFather.
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[telegram] TELEGRAM_MODE=polling IGNORADO em NODE_ENV=production — use webhook.');
+      return {
+        secretToken,
+        telemetry,
+        process: (update: unknown) => processUpdate(token, deps, telemetry, update),
+      };
+    }
     void pollLoop(token, deps, telemetry);
     console.log('[telegram] long-polling iniciado (dev).');
   } else {

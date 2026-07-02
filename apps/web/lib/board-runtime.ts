@@ -44,13 +44,42 @@ interface BoardRuntime {
   lastFinalAt: Map<string, number>;
 }
 
-const globalForBoard = globalThis as unknown as { __nutrimedBoard?: Promise<BoardRuntime> };
+const globalForBoard = globalThis as unknown as {
+  __nutrimedBoard?: Promise<BoardRuntime>;
+  /** A6: handshake com o server.mjs (fora do bundle) — roteia upgrades /board e /audio. */
+  __nutrimedBoardUpgrade?: (request: unknown, socket: unknown, head: unknown) => void;
+};
 
 export const BOARD_WS_PORT = Number(process.env.BOARD_WS_PORT ?? 3001);
+/** A6: 'attached' = WS na MESMA porta do HTTP (custom server, 443 no Fly);
+ *  'port' (default) = listener próprio na 3001 (dev local com `next dev`). */
+const BOARD_WS_MODE = process.env.BOARD_WS_MODE === 'attached' ? 'attached' : 'port';
 
 async function init(): Promise<BoardRuntime> {
   const db = await getDb();
-  const gateway = new BoardGateway(db, { port: BOARD_WS_PORT });
+  let gateway: BoardGateway;
+  if (BOARD_WS_MODE === 'attached') {
+    gateway = new BoardGateway(db, { detached: true });
+    const g = gateway;
+    globalForBoard.__nutrimedBoardUpgrade = (request, socket, head) =>
+      g.handleUpgrade(
+        request as Parameters<BoardGateway['handleUpgrade']>[0],
+        socket as Parameters<BoardGateway['handleUpgrade']>[1],
+        head as Parameters<BoardGateway['handleUpgrade']>[2],
+      );
+    // TRANSIÇÃO: a URL antiga (wss://...:3001) continua funcionando por 1-2
+    // deploys — clientes com a página aberta não quebram. Remover depois.
+    const { createServer } = await import('node:http');
+    const legacy = createServer((_req, res) => {
+      res.writeHead(426, { 'content-type': 'text/plain' });
+      res.end('upgrade required');
+    });
+    legacy.on('upgrade', (request, socket, head) => g.handleUpgrade(request, socket, head));
+    legacy.on('error', (error) => console.error('[board] listener legado 3001:', error));
+    legacy.listen(BOARD_WS_PORT, '0.0.0.0');
+  } else {
+    gateway = new BoardGateway(db, { port: BOARD_WS_PORT });
+  }
   // E5: ingere a SEED real por persona (R8 — trocar pela curadoria = re-ingestão)
   const kb = new NamespacedKnowledgeStore();
   // cwd varia: apps/web (next start) vs raiz do repo (vitest) — aceita ambos.
