@@ -7,6 +7,9 @@ import {
   TriggerDetector,
   scoreMatch,
   BoardGatekeeper,
+  SemanticDeduplicator,
+  keywordSet,
+  jaccard,
   type Candidate,
   type GatekeeperConfig,
   type TriggerMatch,
@@ -70,6 +73,10 @@ export class FullBoardOrchestrator {
    * tudo que o board já exibiu, realimentado ao LLM contra repetição.
    */
   private readonly history: { personaId: PersonaId; text: string }[] = [];
+  /** B2 — pré-LLM: 1º segmento que rendeu contribuição por persona+tópico (consulta inteira). */
+  private readonly seenTopics = new Map<string, string>();
+  /** B2 — pós-LLM: similaridade contra TODOS os textos já exibidos. */
+  private readonly semanticDedup = new SemanticDeduplicator();
   /** Tipos por tópico p/ detecção de divergência (FR7). */
   private readonly topicTypes = new Map<string, Map<PersonaId, string>>();
   private unsubscribe: (() => void) | null = null;
@@ -172,6 +179,18 @@ export class FullBoardOrchestrator {
   }
 
   private async produce(candidate: Candidate): Promise<void> {
+    // B2 pré-LLM (economia): mesma persona+tópico já contribuiu na consulta e o
+    // novo segmento NÃO traz vocabulário novo ⇒ nem chama o LLM. `critical`
+    // NUNCA é cortado aqui (recall > precisão — o modelo decide via skip).
+    const topicSeenKey = `${candidate.personaId}:${candidate.topicKey}`;
+    const firstSegment = this.seenTopics.get(topicSeenKey);
+    if (firstSegment && candidate.severity !== 'critical') {
+      const similarity = jaccard(keywordSet(candidate.segmentText), keywordSet(firstSegment));
+      if (similarity >= 0.5) {
+        this.config2.onDecision?.('semantic-duplicate');
+        return;
+      }
+    }
     try {
       const contribution = await this.reasoner.reason({
         personaId: candidate.personaId,
@@ -184,6 +203,12 @@ export class FullBoardOrchestrator {
         this.config2.onDecision?.('llm-skip');
         return;
       }
+      // B2 pós-LLM (garantia): texto gerado similar a QUALQUER já exibido ⇒ descarta
+      if (this.semanticDedup.isDuplicate(contribution.text).duplicate) {
+        this.config2.onDecision?.('semantic-duplicate');
+        return;
+      }
+      this.seenTopics.set(topicSeenKey, firstSegment ?? candidate.segmentText);
       const divergent = this.registerAndCheckDivergence(candidate, contribution);
       const eventId = randomUUID();
       await writeAudit(this.db, eventId, {
@@ -267,8 +292,9 @@ export class FullBoardOrchestrator {
   }
 
   private emit(event: FullBoardEvent): void {
-    // B1: TUDO que o board exibe entra na memória da consulta (anti-repetição)
+    // B1/B2: TUDO que o board exibe entra na memória da consulta (anti-repetição)
     this.history.push({ personaId: event.contribution.personaId, text: event.contribution.text });
+    this.semanticDedup.register(event.contribution.text);
     for (const listener of this.listeners) listener(event);
   }
 }

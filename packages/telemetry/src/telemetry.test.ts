@@ -27,6 +27,7 @@ describe('TelemetryRegistry (E10)', () => {
     t.gateDecision('c1', 'rate-limited');
     t.gateDecision('c1', 'duplicate');
     t.gateDecision('c1', 'llm-skip');
+    t.gateDecision('c1', 'semantic-duplicate');
 
     const report = t.report('c1');
     expect(report.gate).toEqual({
@@ -36,6 +37,7 @@ describe('TelemetryRegistry (E10)', () => {
       'held-for-pause': 1,
       'rate-limited': 1,
       'llm-skip': 1,
+      'semantic-duplicate': 1,
     });
   });
 

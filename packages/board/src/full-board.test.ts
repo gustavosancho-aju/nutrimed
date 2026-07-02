@@ -77,7 +77,9 @@ class EchoLlm {
       personaId: 'aurelio',
       type: 'sugestao',
       severity: 'normal',
-      text: `eco: ${req.transcript.slice(0, 60)}`,
+      // eco do chunk de KB da persona: personas distintas produzem textos
+      // distintos (como o LLM real) — o dedup semântico B2 não as confunde
+      text: `eco: ${req.context[0]?.text ?? req.transcript.slice(0, 60)}`,
       kbSources: req.context.map((c) => c.id),
       modelVersion: 'echo-v1',
     };
@@ -278,6 +280,59 @@ describe('FullBoardOrchestrator — board completo (E6)', () => {
     const synthCall = llm.calls[llm.calls.length - 1]!;
     expect(synthCall.system).toContain('SÍNTESE');
     expect(synthCall.priorContributions!.length).toBeGreaterThanOrEqual(2);
+    board.stop();
+    await session.stop();
+  });
+
+  it('B2 — mesmo tópico repetido MUITO depois (fora dos 60s do gate): corte pré-LLM sem nova chamada', async () => {
+    let t = 1000;
+    const decisions: string[] = [];
+    const { stt, session, board, llm, events } = await setup({
+      now: () => t,
+      onDecision: (kind) => decisions.push(kind),
+    });
+
+    stt.push('Estou com platô no peso há meses.'); // yara-plato (severidade normal)
+    await flush();
+    await board.flush();
+    const emitted = events.length;
+    expect(emitted).toBeGreaterThan(0);
+    const callsAfterFirst = llm.calls.length;
+
+    t = 300_000; // 5min depois — o Deduplicator de 60s do gate já esqueceu o tópico
+    stt.push('Estou com platô no peso há meses.'); // mesma fala, zero vocabulário novo
+    await flush();
+    await board.flush();
+
+    expect(decisions).toContain('semantic-duplicate');
+    expect(llm.calls.length).toBe(callsAfterFirst); // economia: LLM NÃO foi chamado
+    expect(events.length).toBe(emitted); // nada repetido no feed
+    board.stop();
+    await session.stop();
+  });
+
+  it('B2 — critical NUNCA é cortado pré-LLM (recall de segurança); pós-LLM pega texto igual', async () => {
+    let t = 1000;
+    const decisions: string[] = [];
+    const { stt, session, board, llm, events } = await setup({
+      now: () => t,
+      onDecision: (kind) => decisions.push(kind),
+    });
+
+    stt.push('Vou prescrever sibutramina.'); // paulo-cv-farmacos (critical)
+    await flush();
+    await board.flush();
+    const callsAfterFirst = llm.calls.length;
+    const emitted = events.length;
+
+    t = 300_000;
+    stt.push('Vou prescrever sibutramina.'); // mesma fala crítica
+    await flush();
+    await board.flush();
+
+    expect(llm.calls.length).toBeGreaterThan(callsAfterFirst); // critical SEMPRE reanalisa
+    expect(events.length).toBe(emitted); // mas texto idêntico não repete no feed
+    expect(decisions).toContain('semantic-duplicate');
     board.stop();
     await session.stop();
   });
