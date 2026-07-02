@@ -9,7 +9,7 @@ import { NamespacedKnowledgeStore, ingest, seedSources } from '@nutrimed/kb';
 import { DeepgramSttProvider } from '@nutrimed/stt-deepgram';
 import { FakeLlmProvider, type ISttProvider, type SttSession, type TranscriptSegment, type ILlmProvider } from '@nutrimed/providers';
 import { CLINICAL_VOCABULARY } from '@nutrimed/domain';
-import { TelemetryRegistry, type GateDecisionKind, type UiEventKind } from '@nutrimed/telemetry';
+import { TelemetryRegistry, type GateDecisionKind, type UiEventKind, type CaseReviewOutcome } from '@nutrimed/telemetry';
 import {
   saveSynthesis,
   saveTranscriptSegment,
@@ -233,6 +233,8 @@ function telemetryHooks(runtime: BoardRuntime, consultationId: string) {
       t.llmUsage(consultationId, u.inputTokens, u.outputTokens),
     onDecision: (kind: string) => t.gateDecision(consultationId, kind as GateDecisionKind),
     onContributionLatency: (ms: number) => t.contributionLatency(consultationId, ms),
+    onCaseStateUpdate: () => t.caseStateUpdate(consultationId), // B3/B5
+    onCaseReview: (outcome: CaseReviewOutcome) => t.caseReview(consultationId, outcome), // B4/B5
   };
 }
 
@@ -261,6 +263,8 @@ export async function startDemoBoard(consultationId: string): Promise<{ llmLabel
     maxPerMinutePerDoctor: 2,
     onDecision: hooks.onDecision,
     onContributionLatency: hooks.onContributionLatency,
+    onCaseStateUpdate: hooks.onCaseStateUpdate, // B5
+    onCaseReview: hooks.onCaseReview,
   });
   runtime.gateway.bind(consultationId, orchestrator);
   // transcrição ao vivo p/ o painel (texto via WS — áudio nunca passa aqui, §7)
@@ -430,6 +434,8 @@ export async function startLiveBoard(consultationId: string): Promise<void> {
       onDecision: hooks.onDecision,
       onContributionLatency: hooks.onContributionLatency,
       caseReviewMs: 90_000, // B4: análise periódica do caso (piloto) — só em pausa natural
+      onCaseStateUpdate: hooks.onCaseStateUpdate,
+      onCaseReview: hooks.onCaseReview,
     });
     runtime.gateway.bind(consultationId, orchestrator);
     wireSessionBroadcast(runtime, consultationId, session, db);

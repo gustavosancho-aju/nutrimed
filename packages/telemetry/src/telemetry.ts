@@ -31,6 +31,9 @@ export const PRICING = {
   videoPerConsultation: 0, // catálogo pré-renderizado (ADR-007)
 } as const;
 
+/** B4/B5: desfecho de um case review periódico. */
+export type CaseReviewOutcome = 'skip' | 'contribution' | 'discarded';
+
 interface ConsultationRecord {
   startedAt: number | null;
   endedAt: number | null;
@@ -42,6 +45,10 @@ interface ConsultationRecord {
   latenciesMs: number[];
   uiEvents: Map<UiEventKind, number>;
   contributionsDelivered: number;
+  /** B3/B5: updates do CaseState concluídos. */
+  caseStateUpdates: number;
+  /** B4/B5: reviews periódicos por desfecho. */
+  caseReviews: Map<CaseReviewOutcome, number>;
 }
 
 export interface ConsultationReport {
@@ -63,6 +70,15 @@ export interface ConsultationReport {
   /** R3: a consulta usou controles anti-ruído? */
   readonly noiseControlsUsed: boolean;
   readonly acceptance: { readonly delivered: number; readonly dismissed: number; readonly pinned: number; readonly rate: number | null };
+  /** B5 — medidores da autonomia anti-repetição (B1–B4). */
+  readonly autonomy: {
+    readonly llmSkips: number;
+    readonly semanticDuplicates: number;
+    readonly caseStateUpdates: number;
+    readonly caseReviews: Readonly<Record<CaseReviewOutcome, number>>;
+    /** llm-skip / (llm-skip + entregues) — proporção de chamadas em que o modelo se calou. */
+    readonly skipRate: number | null;
+  };
 }
 
 export interface InstanceSummary {
@@ -97,6 +113,8 @@ export class TelemetryRegistry {
         latenciesMs: [],
         uiEvents: new Map(),
         contributionsDelivered: 0,
+        caseStateUpdates: 0,
+        caseReviews: new Map(),
       };
       this.records.set(consultationId, rec);
     }
@@ -138,6 +156,17 @@ export class TelemetryRegistry {
   uiEvent(consultationId: string, kind: UiEventKind): void {
     const rec = this.record(consultationId);
     rec.uiEvents.set(kind, (rec.uiEvents.get(kind) ?? 0) + 1);
+  }
+
+  /** B3/B5: update do CaseState concluído. */
+  caseStateUpdate(consultationId: string): void {
+    this.record(consultationId).caseStateUpdates += 1;
+  }
+
+  /** B4/B5: desfecho de um case review periódico. */
+  caseReview(consultationId: string, outcome: CaseReviewOutcome): void {
+    const rec = this.record(consultationId);
+    rec.caseReviews.set(outcome, (rec.caseReviews.get(outcome) ?? 0) + 1);
   }
 
   report(consultationId: string, now = Date.now()): ConsultationReport {
@@ -191,6 +220,20 @@ export class TelemetryRegistry {
         rate:
           rec.contributionsDelivered > 0
             ? Math.max(0, rec.contributionsDelivered - Math.max(0, dismissed)) / rec.contributionsDelivered
+            : null,
+      },
+      autonomy: {
+        llmSkips: decisions['llm-skip'],
+        semanticDuplicates: decisions['semantic-duplicate'],
+        caseStateUpdates: rec.caseStateUpdates,
+        caseReviews: {
+          skip: rec.caseReviews.get('skip') ?? 0,
+          contribution: rec.caseReviews.get('contribution') ?? 0,
+          discarded: rec.caseReviews.get('discarded') ?? 0,
+        },
+        skipRate:
+          decisions['llm-skip'] + rec.contributionsDelivered > 0
+            ? decisions['llm-skip'] / (decisions['llm-skip'] + rec.contributionsDelivered)
             : null,
       },
     };

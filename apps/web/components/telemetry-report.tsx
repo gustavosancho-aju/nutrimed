@@ -17,7 +17,7 @@ export function TelemetryReport({
     <section aria-label="Telemetria da consulta" className="card-premium mt-6 p-6">
       <h2 className="font-display text-base font-semibold text-ink">📊 Telemetria (piloto)</h2>
 
-      <div className="mt-3 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-3 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-5">
         <div data-testid="tm-cost">
           <h3 className="text-xs font-semibold uppercase text-ink-muted">Custo (NFR7)</h3>
           <p className="font-mono-data mt-1 text-lg font-medium text-ink">{usd(report.cost.totalUsd)}</p>
@@ -43,6 +43,20 @@ export function TelemetryReport({
             {report.latency.samples > 0
               ? `p50 ${(report.latency.p50Ms! / 1000).toFixed(1)}s · p95 ${(report.latency.p95Ms! / 1000).toFixed(1)}s (${report.latency.samples} amostras)`
               : 'sem amostras ainda'}
+          </p>
+        </div>
+
+        <div data-testid="tm-autonomy">
+          <h3 className="text-xs font-semibold uppercase text-ink-muted">Autonomia (anti-repetição)</h3>
+          <p className="font-mono-data mt-1 text-xs text-ink">
+            🤐 {report.autonomy.llmSkips} skips do LLM
+            {report.autonomy.skipRate !== null
+              ? ` (${(report.autonomy.skipRate * 100).toFixed(0)}%)`
+              : ''}{' '}
+            · ♻️ {report.autonomy.semanticDuplicates} descartes por similaridade · 🧠{' '}
+            {report.autonomy.caseStateUpdates} updates do caso · 🔎 reviews:{' '}
+            {report.autonomy.caseReviews.contribution} contrib. / {report.autonomy.caseReviews.skip} skip /{' '}
+            {report.autonomy.caseReviews.discarded} descartados
           </p>
         </div>
 

@@ -2,6 +2,7 @@ export {
   TelemetryRegistry,
   PRICING,
   type GateDecisionKind,
+  type CaseReviewOutcome,
   type UiEventKind,
   type ConsultationReport,
   type InstanceSummary,
