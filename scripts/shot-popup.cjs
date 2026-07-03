@@ -17,7 +17,7 @@ const { chromium } = require('playwright');
 
   await page.click('button:has-text("Consulta simulada")');
   // espera o primeiro pop-up de contribuição aparecer
-  await page.waitForSelector('[data-testid="contribution-popup"]', { timeout: 60000 });
+  await page.waitForSelector('[data-testid^="speech-"]', { timeout: 60000 });
   await page.screenshot({ path: 'shot-popup.png' });
   await page.waitForTimeout(15000);
   await page.screenshot({ path: 'shot-board-live.png' });

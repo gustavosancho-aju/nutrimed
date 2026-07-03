@@ -1,32 +1,41 @@
 @import 'tailwindcss';
 
-/* Design tokens do board (frontend-spec §6 — direção "Clinical Quiet Luxury"):
-   jade profundo (nutrição) + papel quente (conforto em consultas longas) +
-   filete champagne (acento de luxo, uso restrito a micro-detalhes). */
+/* Design tokens (identidade UNIC — Instituto de Cuidado Personalizado):
+   DOURADO como cor PRIMÁRIA (a marca) + verde-sálvia como secundário + marfim
+   quente (conforto em consultas longas) + verde-oliva profundo no chrome/hero.
+   O par clássico verde+ouro da UNIC.
+   Nota de contraste: `--brand` é um dourado PROFUNDO (antique gold) escuro o
+   bastante para texto branco passar AA (5:1) e para servir de texto dourado
+   sobre marfim (4.5:1). O dourado LUMINOSO da marca (#C6A24E) vive em
+   `--accent-gold`, usado em filetes, eyebrow e detalhes decorativos. */
 :root {
-  --brand: 172 45% 26%;
-  --surface: 40 20% 98%;
-  --surface-muted: 40 15% 95%;
-  --surface-deep: 200 25% 12%;
-  --accent-gold: 40 35% 62%;
-  --text: 222 20% 16%;
-  --text-muted: 222 10% 42%;
-  --attn: 30 95% 48%;
-  --attn-critical: 4 80% 50%;
-  --attn-bg: 30 95% 96%;
-  --suggest: 214 80% 52%;
-  --hypothesis: 265 60% 56%;
-  --synthesis: 222 10% 55%;
-  --success: 152 60% 40%;
-  --focus-ring: 214 90% 52%;
-  --doctor-aurelio: 178 36% 38%;
-  --doctor-paulo: 4 58% 48%;
-  --doctor-yara: 265 44% 53%;
+  --brand: 38 46% 37%;
+  --brand-tint: 39 44% 55%;
+  --secondary: 78 20% 33%;
+  --surface: 45 33% 97%;
+  --surface-muted: 44 22% 93%;
+  --surface-deep: 80 22% 15%;
+  --accent-gold: 39 44% 55%;
+  --text: 72 12% 15%;
+  --text-muted: 70 8% 39%;
+  --attn: 30 90% 46%;
+  --attn-critical: 4 78% 49%;
+  --attn-bg: 36 70% 95%;
+  --suggest: 200 42% 42%;
+  --hypothesis: 318 24% 48%;
+  --synthesis: 72 8% 50%;
+  --success: 128 34% 38%;
+  --focus-ring: 38 50% 40%;
+  --doctor-aurelio: 82 26% 32%;
+  --doctor-paulo: 10 52% 46%;
+  --doctor-yara: 318 22% 46%;
   --radius: 14px;
 }
 
 @theme inline {
   --color-brand: hsl(var(--brand));
+  --color-brand-tint: hsl(var(--brand-tint));
+  --color-secondary: hsl(var(--secondary));
   --color-surface: hsl(var(--surface));
   --color-surface-muted: hsl(var(--surface-muted));
   --color-surface-deep: hsl(var(--surface-deep));
@@ -42,6 +51,7 @@
   --color-suggest: hsl(var(--suggest));
   --color-hypothesis: hsl(var(--hypothesis));
   --color-synthesis: hsl(var(--synthesis));
+  --color-success: hsl(var(--success));
   --color-doctor-aurelio: hsl(var(--doctor-aurelio));
   --color-doctor-paulo: hsl(var(--doctor-paulo));
   --color-doctor-yara: hsl(var(--doctor-yara));
@@ -58,7 +68,7 @@ body {
 }
 
 /* Fundo ambiente: arte vetorial "células conectadas" (bg-cells.svg — rede de
-   células em jade sobre bege, ref. estética Einstein) — fixa, sutil, nunca
+   células em verde-sálvia sobre marfim, paleta UNIC) — fixa, sutil, nunca
    animada e nunca atrás de texto denso (legibilidade clínica primeiro). */
 body::before {
   content: '';
@@ -80,7 +90,7 @@ body::before {
     0 8px 24px hsl(var(--text) / 0.05);
 }
 
-/* Filete champagne — o único dourado da interface, em divisor de 1px. */
+/* Filete dourado UNIC — assinatura em divisor de 1px, do centro para fora. */
 .gold-hairline {
   position: relative;
 }
@@ -88,17 +98,56 @@ body::before {
   content: '';
   position: absolute;
   top: 0;
-  left: 10%;
-  right: 10%;
+  left: 8%;
+  right: 8%;
   height: 1px;
-  background: linear-gradient(90deg, transparent, hsl(var(--accent-gold) / 0.75), transparent);
+  background: linear-gradient(90deg, transparent, hsl(var(--accent-gold) / 0.95), transparent);
 }
 
-/* Chrome escuro (header/login hero): petróleo profundo com véu jade. */
+/* Eyebrow UNIC — rótulo em versalete espaçado (ref. "INSTITUTO DE CUIDADO
+   PERSONALIZADO" do lockup da marca). Uso: kickers, seções, assinaturas. */
+.brand-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: hsl(var(--accent-gold));
+}
+
+/* Chrome escuro (header/login hero): verde-oliva profundo com véu sálvia e
+   um sopro dourado no alto — assinatura UNIC. */
 .surface-deep-gradient {
   background:
-    radial-gradient(80% 120% at 80% -20%, hsl(172 40% 22% / 0.55), transparent 60%),
+    radial-gradient(70% 90% at 82% -25%, hsl(var(--accent-gold) / 0.14), transparent 55%),
+    radial-gradient(90% 130% at 15% -20%, hsl(84 30% 30% / 0.6), transparent 60%),
     hsl(var(--surface-deep));
+}
+
+/* Equalizador de fala (Sala de Board): 3 barras pulsando enquanto a persona
+   "fala" — event-driven, nunca em repouso. */
+@keyframes eq-bar {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
+}
+.eq-bar {
+  transform-origin: bottom;
+  animation: eq-bar 900ms ease-in-out infinite;
+}
+
+/* Vinheta de alerta (⚠️ crítico): a sala inteira responde por 2s — percepção
+   periférica antes da leitura. Some sozinha, nunca persiste. */
+@keyframes alert-vignette {
+  0% { opacity: 0; }
+  15% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.alert-vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  box-shadow: inset 0 0 140px 36px hsl(var(--attn) / 0.4);
+  animation: alert-vignette 2000ms ease-out forwards;
 }
 
 /* Decaimento visual do destaque (NFR3/A6 ~8s): o realce some, o card fica. */
@@ -138,7 +187,12 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   .board-decay,
   .board-pulse,
-  .board-entry {
+  .board-entry,
+  .eq-bar,
+  .alert-vignette {
     animation: none;
+  }
+  .alert-vignette {
+    display: none;
   }
 }

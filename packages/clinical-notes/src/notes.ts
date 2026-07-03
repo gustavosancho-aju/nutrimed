@@ -52,6 +52,11 @@ export async function generateNoteDraft(
     context: [],
     transcript: `Transcrição estruturada da consulta:\n${transcript}${board}`,
   });
+  if (result.skip || !result.text.trim()) {
+    // sem allowSkip o modelo não deveria pular — mas nota VAZIA jamais é
+    // gravada como sucesso silencioso (dado clínico)
+    throw new Error('O modelo não gerou conteúdo para a nota — tente novamente.');
+  }
   return result.text;
 }
 
@@ -88,6 +93,109 @@ export async function saveNote(
     kbSources: [],
     modelVersion: origin.modelVersion ?? (origin.action === 'edit' ? 'human-edit' : 'unknown'),
   });
+}
+
+// ── Sínteses do board persistidas (histórico da consulta) ──────────────────
+
+export interface BoardSynthesis {
+  readonly id: string;
+  readonly consultationId: string;
+  readonly content: string;
+  readonly modelVersion: string | null;
+  readonly createdAt: Date;
+}
+
+/**
+ * Persiste uma síntese do board (cifrada + auditada) no momento em que é
+ * gerada — o histórico da consulta sobrevive a restart. Append-only por design
+ * (cada síntese é um registro; nada é sobrescrito).
+ */
+export async function saveSynthesis(
+  db: SqlExecutor,
+  consultationId: string,
+  content: string,
+  encryptionKey: Buffer,
+  modelVersion?: string,
+): Promise<string> {
+  const res = await db.query<{ id: string }>(
+    'INSERT INTO board_synthesis (consultation_id, content_enc, model_version) VALUES ($1, $2, $3) RETURNING id',
+    [consultationId, encryptField(content, encryptionKey), modelVersion ?? null],
+  );
+  await writeAudit(db, consultationId, {
+    triggeredBy: 'board-synthesis',
+    kbSources: [],
+    modelVersion: modelVersion ?? 'unknown',
+  });
+  return res.rows[0]!.id;
+}
+
+/** Sínteses salvas da consulta, decifradas, em ordem cronológica. */
+export async function listSyntheses(
+  db: SqlExecutor,
+  consultationId: string,
+  encryptionKey: Buffer,
+): Promise<BoardSynthesis[]> {
+  const res = await db.query<{ id: string; content_enc: string; model_version: string | null; created_at: Date }>(
+    `SELECT id, content_enc, model_version, created_at
+     FROM board_synthesis WHERE consultation_id = $1
+     ORDER BY created_at ASC, id ASC`,
+    [consultationId],
+  );
+  return res.rows.map((r) => ({
+    id: r.id,
+    consultationId,
+    content: decryptField(r.content_enc, encryptionKey),
+    modelVersion: r.model_version,
+    createdAt: new Date(r.created_at),
+  }));
+}
+
+// ── Transcript persistido incrementalmente (A4) ────────────────────────────
+
+/**
+ * Persiste um segmento FINAL do transcript (cifrado — NFR9). Chamado a cada
+ * final da sessão (fire-and-forget no runtime): a nota clínica sobrevive a
+ * deploy/restart no meio da consulta. SEM writeAudit por segmento de propósito
+ * (inundaria o audit_log — a sessão audita uma única vez em transcript-persist-start);
+ * a trilha da NOTA continua em saveNote.
+ */
+export async function saveTranscriptSegment(
+  db: SqlExecutor,
+  consultationId: string,
+  seq: number,
+  text: string,
+  encryptionKey: Buffer,
+): Promise<void> {
+  await db.query(
+    `INSERT INTO transcript_segment (consultation_id, seq, content_enc) VALUES ($1, $2, $3)
+     ON CONFLICT (consultation_id, seq) DO NOTHING`,
+    [consultationId, seq, encryptField(text, encryptionKey)],
+  );
+}
+
+/** Marca (auditada) o início da persistência de transcript da sessão — 1x por sessão. */
+export async function auditTranscriptPersistStart(
+  db: SqlExecutor,
+  consultationId: string,
+): Promise<void> {
+  await writeAudit(db, consultationId, {
+    triggeredBy: 'transcript-persist-start',
+    kbSources: [],
+    modelVersion: 'n/a',
+  });
+}
+
+/** Segmentos finais persistidos da consulta, decifrados, em ordem (seq). */
+export async function listTranscriptFinals(
+  db: SqlExecutor,
+  consultationId: string,
+  encryptionKey: Buffer,
+): Promise<string[]> {
+  const res = await db.query<{ content_enc: string }>(
+    'SELECT content_enc FROM transcript_segment WHERE consultation_id = $1 ORDER BY seq ASC',
+    [consultationId],
+  );
+  return res.rows.map((r) => decryptField(r.content_enc, encryptionKey));
 }
 
 /** Carrega e decifra a nota da consulta (null se ainda não existe). */

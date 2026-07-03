@@ -10,6 +10,7 @@ import type {
   SttSession,
   ILlmProvider,
   LlmCompletionRequest,
+  TextCompletionRequest,
   IKnowledgeRetriever,
   IVideoAssetProvider,
 } from './interfaces';
@@ -61,18 +62,44 @@ export class FakeLlmProvider implements ILlmProvider {
   constructor(
     private readonly personaId: PersonaId = 'aurelio',
     private readonly type: PersonaContribution['type'] = 'sugestao',
+    /** B1: simula o skip do modelo ("nada novo") quando o predicado casa. */
+    private readonly opts: { skipIf?: (req: LlmCompletionRequest) => boolean } = {},
   ) {}
 
   async complete(req: LlmCompletionRequest): Promise<PersonaContribution> {
+    if (req.allowSkip && this.opts.skipIf?.(req)) {
+      return { personaId: this.personaId, type: this.type, severity: 'normal', text: '', skip: true };
+    }
+    // eco verificável dos priors (B1): testes asseguram que o histórico chegou
+    const priors = req.priorContributions?.length ? ` (priors:${req.priorContributions.length})` : '';
     return {
       personaId: this.personaId,
       type: this.type,
       severity: 'normal',
-      text: `[${this.personaId}] resposta determinística para: ${req.transcript}`,
+      text: `[${this.personaId}] resposta determinística para: ${req.transcript}${priors}`,
       relevanceScore: 0.9,
       triggeredBy: req.transcript,
       kbSources: req.context.map((chunk) => chunk.id),
     };
+  }
+}
+
+/**
+ * Completador de texto fake (B3): respostas roteirizadas em ordem para o
+ * `completeText` opcional de ILlmProvider (CaseState/case review). Grava as
+ * requisições para verificação em teste. Roteiro esgotado ⇒ repete a última.
+ */
+export class FakeTextCompleter {
+  readonly requests: TextCompletionRequest[] = [];
+  private cursor = 0;
+
+  constructor(private readonly script: readonly string[]) {}
+
+  async completeText(req: TextCompletionRequest): Promise<{ text: string; modelVersion?: string }> {
+    this.requests.push(req);
+    const text = this.script[Math.min(this.cursor, this.script.length - 1)] ?? '';
+    this.cursor += 1;
+    return { text, modelVersion: 'fake-text-v1' };
   }
 }
 

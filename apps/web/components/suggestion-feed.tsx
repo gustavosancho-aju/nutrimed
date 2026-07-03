@@ -31,7 +31,7 @@ export function SuggestionFeed() {
   }, [lastDismissed]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+    <div className="flex max-h-[560px] min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
       <h2 className="text-[13px] font-semibold uppercase tracking-wider text-white/50">
         Feed de sugestões
       </h2>

@@ -6,10 +6,12 @@ import { getCurrentUser, SESSION_COOKIE } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { grantConsentAction, revokeConsentAction } from '@/lib/consent-actions';
 import { startDemoBoardAction, requestSynthesisAction } from '@/lib/board-actions';
-import { generateNoteAction, saveNoteAction } from '@/lib/note-actions';
+import { saveNoteAction } from '@/lib/note-actions';
+import { NoteGeneratorForm } from '@/components/note-generator-form';
+import { DiagnosticsPanel } from '@/components/diagnostics-panel';
 import { getBoardRuntime, getTelemetryReport, BOARD_WS_PORT } from '@/lib/board-runtime';
 import { getEncryptionKey } from '@/lib/crypto-key';
-import { loadNote } from '@nutrimed/clinical-notes';
+import { loadNote, listSyntheses } from '@nutrimed/clinical-notes';
 import { ConsultationRoom } from '@/components/consultation-room';
 import { TelemetryReport } from '@/components/telemetry-report';
 
@@ -34,8 +36,14 @@ export default async function ConsultationPage({
 
   await getBoardRuntime();
   const sessionToken = (await cookies()).get(SESSION_COOKIE)?.value ?? '';
-  const wsBaseUrl = process.env.NEXT_PUBLIC_BOARD_WS_URL ?? `ws://localhost:${BOARD_WS_PORT}`;
+  // A6: em modo attached o WS vai pela MESMA origem/porta da página ('' ⇒
+  // o cliente deriva wss://host). Fora dele, env explícita ou dev local (3001).
+  const wsBaseUrl =
+    process.env.BOARD_WS_MODE === 'attached'
+      ? (process.env.NEXT_PUBLIC_BOARD_WS_URL ?? '')
+      : (process.env.NEXT_PUBLIC_BOARD_WS_URL ?? `ws://localhost:${BOARD_WS_PORT}`);
   const note = authorized ? await loadNote(db, id, getEncryptionKey()) : null;
+  const syntheses = authorized ? await listSyntheses(db, id, getEncryptionKey()) : [];
   const telemetry = authorized ? await getTelemetryReport(id) : null;
 
   return (
@@ -140,15 +148,7 @@ export default async function ConsultationPage({
                   repouso e auditada.
                 </p>
               </div>
-              <form action={generateNoteAction}>
-                <input type="hidden" name="consultationId" value={id} />
-                <button
-                  type="submit"
-                  className="rounded-[10px] border border-ink/15 px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-surface-muted"
-                >
-                  ✨ {note ? 'Regenerar rascunho' : 'Gerar nota da consulta'}
-                </button>
-              </form>
+              <NoteGeneratorForm consultationId={id} hasNote={Boolean(note)} />
             </div>
 
             {note ? (
@@ -181,9 +181,32 @@ export default async function ConsultationPage({
             )}
           </section>
 
+          {/* Histórico de sínteses do board — persistidas (cifradas+auditadas) */}
+          {syntheses.length > 0 && (
+            <section aria-label="Sínteses do board" className="card-premium mt-6 p-6">
+              <h2 className="font-display text-base font-semibold text-ink">
+                Sínteses do board <span className="text-sm font-normal text-ink-muted">· histórico salvo</span>
+              </h2>
+              <ul className="mt-4 space-y-3">
+                {[...syntheses].reverse().map((s) => (
+                  <li key={s.id} className="rounded-[10px] border border-ink/10 bg-surface p-4">
+                    <p className="text-sm leading-relaxed text-ink">{s.content}</p>
+                    <p className="mt-2 text-[11px] text-ink-muted">
+                      {s.createdAt.toLocaleString('pt-BR')}
+                      {s.modelVersion ? ` · ${s.modelVersion}` : ''}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           {telemetry ? (
             <TelemetryReport report={telemetry.report} summary={telemetry.summary} />
           ) : null}
+
+          {/* A5 — triagem do pipeline em 30s (médico/suporte) */}
+          <DiagnosticsPanel consultationId={id} />
         </div>
       )}
       </div>

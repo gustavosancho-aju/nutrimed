@@ -2,6 +2,7 @@
 
 import { getCurrentUser } from './auth';
 import { startDemoBoard, requestSynthesis, startLiveBoard, stopLiveBoard } from './board-runtime';
+import { toActionResult, type ActionResult } from './action-result';
 
 /** Server action: inicia a demo do board (auth + gate de consentimento no caminho). */
 export async function startDemoBoardAction(formData: FormData): Promise<void> {
@@ -21,16 +22,33 @@ export async function requestSynthesisAction(formData: FormData): Promise<void> 
   await requestSynthesis(consultationId);
 }
 
-/** Server action: inicia a consulta AO VIVO (mic real → Deepgram → board). */
-export async function startLiveBoardAction(consultationId: string): Promise<void> {
+/**
+ * Server action: inicia a consulta AO VIVO (mic real → Deepgram → board).
+ * NUNCA lança — em produção o Next mascara mensagens de erro de server action;
+ * o resultado tipado preserva o motivo (consentimento, STT, etc.) para o cliente.
+ */
+export async function startLiveBoardAction(consultationId: string): Promise<ActionResult> {
   const user = await getCurrentUser();
-  if (!user) throw new Error('Não autenticado.');
-  await startLiveBoard(consultationId);
+  if (!user) return { ok: false, code: 'unauthenticated' };
+  if (!consultationId) return { ok: false, code: 'invalid-input' };
+  try {
+    await startLiveBoard(consultationId);
+    return { ok: true };
+  } catch (err) {
+    console.error('[board] startLiveBoard falhou:', err);
+    return toActionResult(err);
+  }
 }
 
-/** Server action: encerra a consulta ao vivo. */
-export async function stopLiveBoardAction(consultationId: string): Promise<void> {
+/** Server action: encerra a consulta ao vivo (nunca lança). */
+export async function stopLiveBoardAction(consultationId: string): Promise<ActionResult> {
   const user = await getCurrentUser();
-  if (!user) throw new Error('Não autenticado.');
-  await stopLiveBoard(consultationId);
+  if (!user) return { ok: false, code: 'unauthenticated' };
+  try {
+    await stopLiveBoard(consultationId);
+    return { ok: true };
+  } catch (err) {
+    console.error('[board] stopLiveBoard falhou:', err);
+    return toActionResult(err);
+  }
 }

@@ -5,7 +5,16 @@ import { runMigrations, type SqlExecutor } from '@nutrimed/db';
 import { createConsultation } from '@nutrimed/consent';
 import { getAuditTrail } from '@nutrimed/audit';
 import type { LlmCompletionRequest, PersonaContribution } from '@nutrimed/providers';
-import { generateNoteDraft, saveNote, loadNote } from './notes';
+import {
+  generateNoteDraft,
+  saveNote,
+  loadNote,
+  saveSynthesis,
+  listSyntheses,
+  saveTranscriptSegment,
+  listTranscriptFinals,
+  auditTranscriptPersistStart,
+} from './notes';
 
 function fromPglite(db: PGlite): SqlExecutor {
   return {
@@ -105,6 +114,70 @@ describe('Documentation Service (E9 — FR17)', () => {
 
     it('nota inexistente → null (sem vazamento entre consultas)', async () => {
       expect(await loadNote(exec, '00000000-0000-0000-0000-000000000000', KEY)).toBeNull();
+    });
+  });
+
+  describe('Sínteses do board persistidas (histórico da consulta)', () => {
+    it('salva cifrada (ilegível no storage), lista em ordem cronológica e audita com o modelo', async () => {
+      await saveSynthesis(exec, consultationId, 'Síntese 1: priorizar avaliação de tireoide.', KEY, 'claude-haiku-4-5');
+      await saveSynthesis(exec, consultationId, 'Síntese 2: reavaliar dose após exames.', KEY, 'claude-haiku-4-5');
+
+      const raw = await exec.query<{ content_enc: string }>(
+        'SELECT content_enc FROM board_synthesis WHERE consultation_id = $1 LIMIT 1',
+        [consultationId],
+      );
+      expect(raw.rows[0]!.content_enc).not.toContain('tireoide');
+
+      const list = await listSyntheses(exec, consultationId, KEY);
+      expect(list.map((s) => s.content)).toEqual([
+        'Síntese 1: priorizar avaliação de tireoide.',
+        'Síntese 2: reavaliar dose após exames.',
+      ]);
+      expect(list[0]!.modelVersion).toBe('claude-haiku-4-5');
+
+      const trail = await getAuditTrail(exec, consultationId);
+      expect(trail.filter((e) => e.triggeredBy === 'board-synthesis').length).toBe(2);
+    });
+
+    it('consulta sem sínteses → lista vazia (sem vazamento entre consultas)', async () => {
+      expect(await listSyntheses(exec, '00000000-0000-0000-0000-000000000000', KEY)).toEqual([]);
+    });
+  });
+
+  describe('Transcript persistido incrementalmente (A4)', () => {
+    it('salva cada final cifrado (ilegível em claro) e lista em ordem de seq', async () => {
+      await saveTranscriptSegment(exec, consultationId, 1, 'Iniciaremos semaglutida semanal.', KEY);
+      await saveTranscriptSegment(exec, consultationId, 0, 'Paciente relata palpitação.', KEY);
+
+      const raw = await exec.query<{ content_enc: string }>(
+        'SELECT content_enc FROM transcript_segment WHERE consultation_id = $1 LIMIT 1',
+        [consultationId],
+      );
+      expect(raw.rows[0]!.content_enc).not.toContain('palpitação');
+      expect(raw.rows[0]!.content_enc).not.toContain('semaglutida');
+
+      // ordem por seq (não por ordem de INSERT) — a nota reconstrói a fala fielmente
+      expect(await listTranscriptFinals(exec, consultationId, KEY)).toEqual([
+        'Paciente relata palpitação.',
+        'Iniciaremos semaglutida semanal.',
+      ]);
+    });
+
+    it('mesmo (consulta, seq) duplicado é ignorado — retry idempotente', async () => {
+      await saveTranscriptSegment(exec, consultationId, 0, 'TEXTO DUPLICADO', KEY);
+      const finals = await listTranscriptFinals(exec, consultationId, KEY);
+      expect(finals[0]).toBe('Paciente relata palpitação.'); // o original venceu
+      expect(finals).toHaveLength(2);
+    });
+
+    it('auditTranscriptPersistStart grava UMA trilha por sessão (não por segmento)', async () => {
+      await auditTranscriptPersistStart(exec, consultationId);
+      const trail = await getAuditTrail(exec, consultationId);
+      expect(trail.filter((e) => e.triggeredBy === 'transcript-persist-start')).toHaveLength(1);
+    });
+
+    it('consulta sem transcript → lista vazia (sem vazamento entre consultas)', async () => {
+      expect(await listTranscriptFinals(exec, '00000000-0000-0000-0000-000000000000', KEY)).toEqual([]);
     });
   });
 });

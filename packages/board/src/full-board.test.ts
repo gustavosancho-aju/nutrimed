@@ -9,8 +9,10 @@ import type {
   SttSession,
   TranscriptSegment,
   LlmCompletionRequest,
+  TextCompletionRequest,
   PersonaContribution,
 } from '@nutrimed/providers';
+import { FakeTextCompleter } from '@nutrimed/providers';
 import { startConsultationSession } from '@nutrimed/session';
 import { NamespacedKnowledgeStore, ingest } from '@nutrimed/kb';
 import { FullBoardOrchestrator, type FullBoardEvent } from './full-board';
@@ -35,16 +37,20 @@ class PushSttProvider implements ISttProvider {
     this.wake?.();
   }
   openStream(): SttSession {
-    const self = this;
+    const queue = this.queue;
+    const setWake = (fn: (() => void) | null): void => {
+      this.wake = fn;
+    };
+    const callWake = (): void => this.wake?.();
     let closed = false;
     return {
       async *[Symbol.asyncIterator](): AsyncIterator<TranscriptSegment> {
         for (;;) {
           if (closed) return;
-          const item = self.queue.shift();
+          const item = queue.shift();
           if (item === undefined) {
             await new Promise<void>((r) => {
-              self.wake = r;
+              setWake(r);
             });
             continue;
           }
@@ -54,7 +60,7 @@ class PushSttProvider implements ISttProvider {
       },
       async close(): Promise<void> {
         closed = true;
-        self.wake?.();
+        callWake();
       },
     };
   }
@@ -62,13 +68,22 @@ class PushSttProvider implements ISttProvider {
 
 class EchoLlm {
   calls: LlmCompletionRequest[] = [];
+  /** B1: simula o modelo declarando "nada novo". */
+  skipIf: ((req: LlmCompletionRequest) => boolean) | null = null;
+  /** B3: completeText opcional (CaseState) — atribuído por teste quando necessário. */
+  completeText?: (req: TextCompletionRequest) => Promise<{ text: string; modelVersion?: string }>;
   async complete(req: LlmCompletionRequest): Promise<PersonaContribution> {
     this.calls.push(req);
+    if (req.allowSkip && this.skipIf?.(req)) {
+      return { personaId: 'aurelio', type: 'sugestao', severity: 'normal', text: '', skip: true };
+    }
     return {
       personaId: 'aurelio',
       type: 'sugestao',
       severity: 'normal',
-      text: `eco: ${req.transcript.slice(0, 60)}`,
+      // eco do chunk de KB da persona: personas distintas produzem textos
+      // distintos (como o LLM real) — o dedup semântico B2 não as confunde
+      text: `eco: ${req.context[0]?.text ?? req.transcript.slice(0, 60)}`,
       kbSources: req.context.map((c) => c.id),
       modelVersion: 'echo-v1',
     };
@@ -113,14 +128,32 @@ describe('FullBoardOrchestrator — board completo (E6)', () => {
     await db.close();
   });
 
-  async function setup(opts: { now?: () => number; pauseMs?: number } = {}) {
+  async function setup(
+    opts: {
+      now?: () => number;
+      pauseMs?: number;
+      onDecision?: (kind: string) => void;
+      caseStateEveryNFinals?: number;
+      textScript?: readonly string[];
+      caseReviewMs?: number;
+      onCaseReview?: (outcome: 'skip' | 'contribution' | 'discarded') => void;
+    } = {},
+  ) {
     const stt = new PushSttProvider();
     const session = await startConsultationSession(exec, consultationId, stt);
     const llm = new EchoLlm();
+    if (opts.textScript) {
+      const completer = new FakeTextCompleter(opts.textScript);
+      llm.completeText = (req) => completer.completeText(req);
+    }
     const board = new FullBoardOrchestrator(exec, session, llm, makeStore(), {
       pauseMs: opts.pauseMs ?? 0, // pausa imediata por default (testes determinísticos)
       tickMs: 100000, // tick manual via flush — sem timer interferindo
       now: opts.now,
+      onDecision: opts.onDecision,
+      caseStateEveryNFinals: opts.caseStateEveryNFinals,
+      caseReviewMs: opts.caseReviewMs,
+      onCaseReview: opts.onCaseReview,
     });
     const events: FullBoardEvent[] = [];
     board.subscribe((e) => events.push(e));
@@ -207,6 +240,263 @@ describe('FullBoardOrchestrator — board completo (E6)', () => {
     await flush();
     await board.flush();
     expect(events.every((e) => e.divergent === false)).toBe(true);
+    board.stop();
+    await session.stop();
+  });
+
+  it('B1 — a 2ª chamada do LLM recebe o histórico com a 1ª contribuição (anti-repetição)', async () => {
+    let t = 0;
+    const { stt, session, board, llm, events } = await setup({ now: () => (t += 3000) });
+
+    stt.push('Vou prescrever sibutramina.');
+    await flush();
+    await board.flush();
+    const firstText = events[0]!.contribution.text;
+    // 1ª chamada: consulta ainda sem histórico
+    expect(llm.calls[0]!.priorContributions ?? []).toHaveLength(0);
+    expect(llm.calls[0]!.allowSkip).toBe(true);
+
+    stt.push('Paciente com platô no peso e muito cansaço.');
+    await flush();
+    await board.flush();
+
+    const laterCall = llm.calls[llm.calls.length - 1]!;
+    expect(laterCall.priorContributions!.length).toBeGreaterThan(0);
+    expect(laterCall.priorContributions!.some((p) => p.includes(firstText))).toBe(true);
+    board.stop();
+    await session.stop();
+  });
+
+  it('B1 — {"skip":true} do modelo: nada emitido, nada auditado, decisão llm-skip', async () => {
+    let t = 0;
+    const decisions: string[] = [];
+    const { stt, session, board, llm, events } = await setup({
+      now: () => (t += 3000),
+      onDecision: (kind) => decisions.push(kind),
+    });
+    llm.skipIf = () => true;
+
+    const auditBefore = await exec.query<{ n: string }>('SELECT COUNT(*) AS n FROM audit_log');
+    stt.push('Vou prescrever sibutramina.');
+    await flush();
+    await board.flush();
+
+    expect(events).toHaveLength(0);
+    expect(decisions).toContain('llm-skip');
+    const auditAfter = await exec.query<{ n: string }>('SELECT COUNT(*) AS n FROM audit_log');
+    expect(Number(auditAfter.rows[0]!.n)).toBe(Number(auditBefore.rows[0]!.n)); // sem trilha fantasma
+    board.stop();
+    await session.stop();
+  });
+
+  it('B1 — a síntese do Aurélio recebe o histórico da consulta inteira', async () => {
+    let t = 0;
+    const { stt, session, board, llm } = await setup({ now: () => (t += 3000) });
+    stt.push('GLP-1 prescrito.');
+    stt.push('Paciente com platô e cansaço.');
+    await flush();
+    await board.flush();
+
+    await board.synthesizeNow();
+    const synthCall = llm.calls[llm.calls.length - 1]!;
+    expect(synthCall.system).toContain('SÍNTESE');
+    expect(synthCall.priorContributions!.length).toBeGreaterThanOrEqual(2);
+    board.stop();
+    await session.stop();
+  });
+
+  it('B2 — mesmo tópico repetido MUITO depois (fora dos 60s do gate): corte pré-LLM sem nova chamada', async () => {
+    let t = 1000;
+    const decisions: string[] = [];
+    const { stt, session, board, llm, events } = await setup({
+      now: () => t,
+      onDecision: (kind) => decisions.push(kind),
+    });
+
+    stt.push('Estou com platô no peso há meses.'); // yara-plato (severidade normal)
+    await flush();
+    await board.flush();
+    const emitted = events.length;
+    expect(emitted).toBeGreaterThan(0);
+    const callsAfterFirst = llm.calls.length;
+
+    t = 300_000; // 5min depois — o Deduplicator de 60s do gate já esqueceu o tópico
+    stt.push('Estou com platô no peso há meses.'); // mesma fala, zero vocabulário novo
+    await flush();
+    await board.flush();
+
+    expect(decisions).toContain('semantic-duplicate');
+    expect(llm.calls.length).toBe(callsAfterFirst); // economia: LLM NÃO foi chamado
+    expect(events.length).toBe(emitted); // nada repetido no feed
+    board.stop();
+    await session.stop();
+  });
+
+  it('B2 — critical NUNCA é cortado pré-LLM (recall de segurança); pós-LLM pega texto igual', async () => {
+    let t = 1000;
+    const decisions: string[] = [];
+    const { stt, session, board, llm, events } = await setup({
+      now: () => t,
+      onDecision: (kind) => decisions.push(kind),
+    });
+
+    stt.push('Vou prescrever sibutramina.'); // paulo-cv-farmacos (critical)
+    await flush();
+    await board.flush();
+    const callsAfterFirst = llm.calls.length;
+    const emitted = events.length;
+
+    t = 300_000;
+    stt.push('Vou prescrever sibutramina.'); // mesma fala crítica
+    await flush();
+    await board.flush();
+
+    expect(llm.calls.length).toBeGreaterThan(callsAfterFirst); // critical SEMPRE reanalisa
+    expect(events.length).toBe(emitted); // mas texto idêntico não repete no feed
+    expect(decisions).toContain('semantic-duplicate');
+    board.stop();
+    await session.stop();
+  });
+
+  it('B3 — CaseState entra no prompt das personas e da síntese', async () => {
+    let t = 0;
+    const STATE =
+      '{"hypotheses":["hipotireoidismo subclínico"],"investigated":["TSH pedido"],"patientReports":["cansaço"],"pending":{}}';
+    const { stt, session, board, llm } = await setup({
+      now: () => (t += 3000),
+      caseStateEveryNFinals: 1, // update a cada final (determinístico no teste)
+      textScript: [STATE],
+    });
+
+    stt.push('Bom dia, vamos retomar o acompanhamento.'); // neutro — só alimenta o CaseState
+    await flush();
+    await board.flush();
+    await flush(); // update fire-and-forget do tracker resolve
+
+    stt.push('Paciente com platô no peso e muito cansaço.'); // dispara Yara/Aurélio
+    await flush();
+    await board.flush();
+
+    const contributionCall = llm.calls.find((c) => !c.system.includes('SÍNTESE'));
+    expect(contributionCall!.transcript).toContain('ESTADO DO CASO');
+    expect(contributionCall!.transcript).toContain('hipotireoidismo subclínico');
+
+    await board.synthesizeNow();
+    const synthCall = llm.calls[llm.calls.length - 1]!;
+    expect(synthCall.transcript).toContain('ESTADO DO CASO');
+    board.stop();
+    await session.stop();
+  });
+
+  it('B3 — provider sem completeText: board funciona igual (degradação graciosa)', async () => {
+    let t = 0;
+    const { stt, session, board, events } = await setup({ now: () => (t += 3000) }); // sem textScript
+    stt.push('Vou prescrever sibutramina.');
+    await flush();
+    await board.flush();
+    expect(events.length).toBeGreaterThan(0); // pipeline intacto, sem CaseState
+    board.stop();
+    await session.stop();
+  });
+
+  it('B4 — case review em pausa: contribuição roteada é emitida com triggeredBy case-review e auditada', async () => {
+    let t = 1000;
+    const outcomes: string[] = [];
+    const { stt, session, board, events } = await setup({
+      now: () => t,
+      caseReviewMs: 90_000,
+      textScript: [
+        '{"personaId":"yara","type":"hipotese","severity":"normal","text":"Considere investigar cortisol diante do padrão de ganho de peso central relatado."}',
+      ],
+      onCaseReview: (o) => outcomes.push(o),
+    });
+
+    stt.push('Bom dia, a circunferência abdominal segue aumentando aos poucos.'); // sem palavra-gatilho
+    await flush();
+    await board.flush();
+    expect(events).toHaveLength(0); // regex não pegou — é o gap que o review cobre
+
+    t = 200_000; // pausa longa + intervalo de review vencido
+    await board.tickNow();
+
+    expect(outcomes).toEqual(['contribution']);
+    expect(events).toHaveLength(1);
+    expect(events[0]!.triggeredBy).toBe('case-review');
+    expect(events[0]!.contribution.personaId).toBe('yara');
+    const trail = await getAuditTrail(exec, events[0]!.id);
+    expect(trail[0]!.triggeredBy).toBe('case-review');
+    board.stop();
+    await session.stop();
+  });
+
+  it('B4 — review com skip: nada emitido; respeita o intervalo mínimo entre reviews', async () => {
+    let t = 1000;
+    const outcomes: string[] = [];
+    const { stt, session, board, events, llm } = await setup({
+      now: () => t,
+      caseReviewMs: 90_000,
+      textScript: ['{"skip":true}', '{"skip":true}'],
+      onCaseReview: (o) => outcomes.push(o),
+    });
+    stt.push('Conversa neutra sem gatilhos.');
+    await flush();
+    await board.flush();
+
+    t = 100_000;
+    await board.tickNow();
+    expect(outcomes).toEqual(['skip']);
+    expect(events).toHaveLength(0);
+
+    t = 110_000; // só 10s depois — intervalo de 90s NÃO venceu
+    await board.tickNow();
+    expect(outcomes).toEqual(['skip']); // nenhum review novo
+    expect(llm.calls).toHaveLength(0); // e nenhum LLM de contribuição rodou
+    board.stop();
+    await session.stop();
+  });
+
+  it('B4 — review NÃO roda fora de pausa natural nem sem caseReviewMs', async () => {
+    let t = 1000;
+    const outcomes: string[] = [];
+    const { stt, session, board } = await setup({
+      now: () => t,
+      pauseMs: 5000,
+      caseReviewMs: 90_000,
+      textScript: ['{"skip":true}'],
+      onCaseReview: (o) => outcomes.push(o),
+    });
+    stt.push('Fala recente.'); // lastSpeechAt = t
+    await flush();
+    await board.flush();
+
+    t += 2000; // ainda DENTRO da conversa (pauseMs 5000)
+    await board.tickNow();
+    expect(outcomes).toHaveLength(0); // não interrompe o médico falando
+    board.stop();
+    await session.stop();
+  });
+
+  it('B4 — texto do review similar ao já exibido é DESCARTADO (dedup pós)', async () => {
+    let t = 0;
+    const outcomes: string[] = [];
+    const { stt, session, board, events } = await setup({
+      now: () => (t += 3000),
+      caseReviewMs: 1, // intervalo mínimo — o teste controla via pausa
+      textScript: [
+        // parafraseia o chunk da Yara que o EchoLlm ecoa na 1ª contribuição
+        '{"personaId":"yara","type":"sugestao","severity":"normal","text":"Cansaço com ganho de peso e platô: hipótese tireoidiana, sugerir TSH e T4 livre."}',
+      ],
+      onCaseReview: (o) => outcomes.push(o),
+    });
+    stt.push('Paciente com platô no peso e muito cansaço.'); // Yara contribui via trigger
+    await flush();
+    await board.flush();
+    const emitted = events.length;
+    expect(emitted).toBeGreaterThan(0);
+
+    await board.tickNow(); // review devolve paráfrase do que a Yara já disse
+    expect(outcomes).toEqual(['discarded']);
+    expect(events).toHaveLength(emitted);
     board.stop();
     await session.stop();
   });

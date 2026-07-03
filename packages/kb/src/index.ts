@@ -12,4 +12,5 @@ export {
   buildPersonaSystem,
   type PersonaProfile,
   type ReasonInput,
+  type PriorContribution,
 } from './reasoner';

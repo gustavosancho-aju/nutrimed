@@ -7,12 +7,17 @@ import {
   TriggerDetector,
   scoreMatch,
   BoardGatekeeper,
+  SemanticDeduplicator,
+  keywordSet,
+  jaccard,
   type Candidate,
   type GatekeeperConfig,
   type TriggerMatch,
 } from '@nutrimed/engines';
 import { PersonaReasoner, PERSONA_PROFILES, buildPersonaSystem } from '@nutrimed/kb';
 import type { IKnowledgeRetriever } from '@nutrimed/providers';
+import { CaseStateTracker } from './case-state';
+import { CASE_REVIEW_SYSTEM, parseCaseReview } from './case-review';
 
 /**
  * Board COMPLETO (E6 — Stories 6.1/6.2/6.3): as 3 personas simultâneas (FR2)
@@ -51,6 +56,17 @@ export interface FullBoardConfig extends GatekeeperConfig {
   readonly onDecision?: (kind: string) => void;
   /** Telemetria (E10): latência gatilho→publicação por contribuição (§11). */
   readonly onContributionLatency?: (latencyMs: number) => void;
+  /** B3: atualiza o CaseState a cada N finais (default 6). */
+  readonly caseStateEveryNFinals?: number;
+  /** B3: telemetria — update do CaseState concluído. */
+  readonly onCaseStateUpdate?: () => void;
+  /**
+   * B4: intervalo mínimo entre reviews periódicos do caso (só em pausa
+   * natural). Default: DESLIGADO. Piloto sugerido: 90_000.
+   */
+  readonly caseReviewMs?: number;
+  /** B4: telemetria — desfecho de cada review. */
+  readonly onCaseReview?: (outcome: 'skip' | 'contribution' | 'discarded') => void;
 }
 
 interface RoundEntry {
@@ -65,16 +81,33 @@ export class FullBoardOrchestrator {
   private readonly reasoner: PersonaReasoner;
   private readonly recentFinals: string[] = [];
   private readonly round: RoundEntry[] = [];
+  /**
+   * B1 — memória da consulta INTEIRA (nunca limpa, diferente de `round`):
+   * tudo que o board já exibiu, realimentado ao LLM contra repetição.
+   */
+  private readonly history: { personaId: PersonaId; text: string }[] = [];
+  /** B2 — pré-LLM: 1º segmento que rendeu contribuição por persona+tópico (consulta inteira). */
+  private readonly seenTopics = new Map<string, string>();
+  /** B2 — pós-LLM: similaridade contra TODOS os textos já exibidos. */
+  private readonly semanticDedup = new SemanticDeduplicator();
+  /** B3 — memória estruturada do caso (desliga sozinha sem completeText). */
+  private readonly caseState: CaseStateTracker;
   /** Tipos por tópico p/ detecção de divergência (FR7). */
   private readonly topicTypes = new Map<string, Map<PersonaId, string>>();
   private unsubscribe: (() => void) | null = null;
   private ticker: ReturnType<typeof setInterval> | null = null;
   private lastContributionAt = 0;
+  /** B4 — case review periódico. */
+  private lastSpeechAt = 0;
+  private lastCaseReviewAt = 0;
+  private caseReviewInFlight = false;
+  private caseReviewRun: Promise<void> = Promise.resolve();
   private synthesized = false;
   private pending: Promise<void> = Promise.resolve();
   private readonly now: () => number;
   private readonly config: Required<Pick<FullBoardConfig, 'tickMs' | 'synthesisMinPersonas' | 'synthesisQuietMs'>>;
   private readonly config2: Pick<FullBoardConfig, 'onDecision' | 'onContributionLatency'>;
+  private readonly configReview: Pick<FullBoardConfig, 'caseReviewMs' | 'onCaseReview' | 'pauseMs'>;
 
   constructor(
     private readonly db: SqlExecutor,
@@ -85,6 +118,10 @@ export class FullBoardOrchestrator {
   ) {
     this.gate = new BoardGatekeeper(config);
     this.reasoner = new PersonaReasoner(retriever, llm);
+    this.caseState = new CaseStateTracker(llm, {
+      everyNFinals: config.caseStateEveryNFinals,
+      onUpdate: config.onCaseStateUpdate,
+    });
     this.now = config.now ?? Date.now;
     this.config = {
       tickMs: config.tickMs ?? 1000,
@@ -92,6 +129,11 @@ export class FullBoardOrchestrator {
       synthesisQuietMs: config.synthesisQuietMs ?? 12_000,
     };
     this.config2 = { onDecision: config.onDecision, onContributionLatency: config.onContributionLatency };
+    this.configReview = {
+      caseReviewMs: config.caseReviewMs,
+      onCaseReview: config.onCaseReview,
+      pauseMs: config.pauseMs,
+    };
   }
 
   /** Liga as 3 personas sobre o stream (FR2) + tick de release/síntese. */
@@ -102,6 +144,7 @@ export class FullBoardOrchestrator {
       const text = event.segment.text;
       const at = this.now();
       this.gate.pauseGate.onSpeech(at);
+      this.lastSpeechAt = at; // B4: review só em pausa natural
       this.pending = this.pending.then(() => this.onFinalSegment(text, at));
     });
     this.ticker = setInterval(() => {
@@ -138,6 +181,9 @@ export class FullBoardOrchestrator {
   private async onFinalSegment(text: string, at: number): Promise<void> {
     this.recentFinals.push(text);
     if (this.recentFinals.length > 8) this.recentFinals.shift();
+    this.caseState.onFinalSegment(text); // B3: alimenta a memória do caso
+    // fire-and-forget: o update roda em paralelo à fala (o tracker impede 2 em voo)
+    void this.caseState.maybeUpdate();
 
     // 3 personas monitoram o MESMO segmento — sem invocação (FR2)
     for (const match of this.detector.detect(text, at)) {
@@ -149,6 +195,7 @@ export class FullBoardOrchestrator {
   }
 
   private async tick(): Promise<void> {
+    await this.caseState.maybeUpdate(); // B3: no-op se <N finais ou update em voo
     const now = this.now();
     for (const candidate of this.gate.release(now)) {
       this.config2.onDecision?.('deliver'); // liberado da pausa/fila (E10)
@@ -164,15 +211,126 @@ export class FullBoardOrchestrator {
     ) {
       await this.synthesize('auto');
     }
+    // B4 — fire-and-forget: a chamada LLM do review (segundos) NÃO pode
+    // bloquear a cadeia `pending` (um trigger critical falado durante o
+    // review seria represado). O guard caseReviewInFlight impede 2 em voo.
+    this.caseReviewRun = this.maybeCaseReview(now);
+  }
+
+  /** Executa um tick imediatamente e aguarda o case review disparado por ele. */
+  async tickNow(): Promise<void> {
+    this.pending = this.pending.then(() => this.tick());
+    await this.pending;
+    await this.caseReviewRun;
+  }
+
+  /**
+   * B4 — case review periódico: em pausa natural, 1 chamada de LLM roteia
+   * entre as 3 personas ("alguém tem algo NOVO?") ou skip. O output passa
+   * pelos MESMOS guarda-corpos das contribuições (dedup semântico, rate-limit,
+   * auditoria) — nada de conduta automática.
+   */
+  private async maybeCaseReview(now: number): Promise<void> {
+    const intervalMs = this.configReview.caseReviewMs;
+    if (!intervalMs || typeof this.llm.completeText !== 'function' || this.caseReviewInFlight) return;
+    if (this.recentFinals.length === 0) return; // consulta ainda sem fala
+    if (now - this.lastSpeechAt < (this.configReview.pauseMs ?? 2500)) return; // fora de pausa
+    if (now - this.lastCaseReviewAt < intervalMs) return;
+    this.caseReviewInFlight = true;
+    this.lastCaseReviewAt = now;
+    try {
+      const scopes = (Object.values(PERSONA_PROFILES) as Array<(typeof PERSONA_PROFILES)['aurelio']>)
+        .map((p) => `- ${p.personaId} (${p.displayName}): ${p.scope}`)
+        .join('\n');
+      const said = this.history
+        .slice(-20)
+        .map((h) => `- [${PERSONA_PROFILES[h.personaId].displayName}] ${h.text}`)
+        .join('\n');
+      const caseBlock = this.caseState.renderForPrompt();
+      const res = await this.llm.completeText!({
+        system: CASE_REVIEW_SYSTEM,
+        prompt:
+          `Especialistas e escopos:\n${scopes}\n\n` +
+          (caseBlock ? `${caseBlock}\n\n` : '') +
+          `Últimas falas:\n${this.recentFinals.slice(-4).join(' ')}\n\n` +
+          `O board JÁ disse nesta consulta:\n${said || '- (nada ainda)'}`,
+        maxTokens: 300,
+      });
+      const parsed = parseCaseReview(res.text);
+      if (!parsed || 'skip' in parsed) {
+        this.configReview.onCaseReview?.('skip');
+        return;
+      }
+      if (this.semanticDedup.isDuplicate(parsed.text).duplicate) {
+        this.configReview.onCaseReview?.('discarded');
+        return;
+      }
+      if (!this.gate.rateLimiter.allow(parsed.personaId, parsed.severity, now)) {
+        this.configReview.onCaseReview?.('discarded');
+        return;
+      }
+      const eventId = randomUUID();
+      await writeAudit(this.db, eventId, {
+        triggeredBy: 'case-review',
+        kbSources: [],
+        modelVersion: res.modelVersion ?? 'unknown',
+      });
+      this.round.push({
+        contribution: { ...parsed, modelVersion: res.modelVersion },
+        topicKey: `case-review-${parsed.personaId}`,
+      });
+      this.lastContributionAt = this.now();
+      this.synthesized = false;
+      this.emit({
+        type: 'contribution',
+        id: eventId,
+        consultationId: this.session.consultationId,
+        contribution: { ...parsed, modelVersion: res.modelVersion },
+        personaIds: [parsed.personaId],
+        divergent: false,
+        triggeredBy: 'case-review',
+        at: this.now(),
+      });
+      this.configReview.onCaseReview?.('contribution');
+    } catch {
+      // review nunca derruba a consulta — próximo intervalo tenta de novo
+    } finally {
+      this.caseReviewInFlight = false;
+    }
   }
 
   private async produce(candidate: Candidate): Promise<void> {
+    // B2 pré-LLM (economia): mesma persona+tópico já contribuiu na consulta e o
+    // novo segmento NÃO traz vocabulário novo ⇒ nem chama o LLM. `critical`
+    // NUNCA é cortado aqui (recall > precisão — o modelo decide via skip).
+    const topicSeenKey = `${candidate.personaId}:${candidate.topicKey}`;
+    const firstSegment = this.seenTopics.get(topicSeenKey);
+    if (firstSegment && candidate.severity !== 'critical') {
+      const similarity = jaccard(keywordSet(candidate.segmentText), keywordSet(firstSegment));
+      if (similarity >= 0.5) {
+        this.config2.onDecision?.('semantic-duplicate');
+        return;
+      }
+    }
     try {
       const contribution = await this.reasoner.reason({
         personaId: candidate.personaId,
         query: candidate.segmentText,
         transcript: this.recentFinals.join(' '),
+        previousContributions: this.history.slice(-20), // cap de tokens (B1)
+        caseState: this.caseState.renderForPrompt() || undefined, // B3
       });
+      if (contribution.skip) {
+        // o modelo declarou não ter nada novo — sem audit, sem emit (B1)
+        this.config2.onDecision?.('llm-skip');
+        return;
+      }
+      // B2 pós-LLM (garantia): texto gerado similar a QUALQUER já exibido ⇒ descarta
+      if (this.semanticDedup.isDuplicate(contribution.text).duplicate) {
+        this.config2.onDecision?.('semantic-duplicate');
+        return;
+      }
+      this.seenTopics.set(topicSeenKey, firstSegment ?? candidate.segmentText);
       const divergent = this.registerAndCheckDivergence(candidate, contribution);
       const eventId = randomUUID();
       await writeAudit(this.db, eventId, {
@@ -224,8 +382,18 @@ export class FullBoardOrchestrator {
           'Se houver divergência entre os colegas, exponha-a com transparência e modere. ' +
           'Termine SEMPRE devolvendo a decisão ao médico (ex.: "a conduta é sua").',
         context: [],
-        transcript: `Transcrição recente: ${this.recentFinals.join(' ')}\n\nContribuições do board:\n${summary}`,
+        // B3: a síntese do Aurélio finalmente enxerga o caso INTEIRO (antes: só a janela curta)
+        transcript: `${this.caseState.renderForPrompt() ? `${this.caseState.renderForPrompt()}\n\n` : ''}Transcrição recente: ${this.recentFinals.join(' ')}\n\nContribuições do board:\n${summary}`,
+        // B1: sínteses anteriores + contribuições da consulta inteira — evita
+        // síntese repetida e dá ao Aurélio a progressão do caso
+        priorContributions: this.history
+          .slice(-20)
+          .map((h) => `[${PERSONA_PROFILES[h.personaId].displayName}] ${h.text}`),
       });
+      if (synthesis.skip || !synthesis.text.trim()) {
+        // síntese vazia NUNCA vira card/persistência — rodada permanece p/ nova tentativa
+        return;
+      }
       const kbSources = entries.flatMap((e) => e.contribution.kbSources ?? []);
       const eventId = randomUUID();
       await writeAudit(this.db, eventId, {
@@ -251,6 +419,9 @@ export class FullBoardOrchestrator {
   }
 
   private emit(event: FullBoardEvent): void {
+    // B1/B2: TUDO que o board exibe entra na memória da consulta (anti-repetição)
+    this.history.push({ personaId: event.contribution.personaId, text: event.contribution.text });
+    this.semanticDedup.register(event.contribution.text);
     for (const listener of this.listeners) listener(event);
   }
 }

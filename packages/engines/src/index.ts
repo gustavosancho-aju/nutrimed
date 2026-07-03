@@ -24,3 +24,9 @@ export {
   type GateDecision,
   type DedupResult,
 } from './gate';
+export {
+  keywordSet,
+  jaccard,
+  SemanticDeduplicator,
+  type SemanticDedupResult,
+} from './semantic-dedup';

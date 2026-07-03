@@ -54,6 +54,15 @@ export type BoardServerMessage =
       readonly text: string;
       readonly isFinal: boolean;
       readonly at: number;
+    }
+  | {
+      /** Status do pipeline de transcrição (aditivo — A3): espelha SessionStatus.
+       * `degraded` = STT caiu e está em retry; a UI deve tornar isso VISÍVEL. */
+      readonly v: typeof BOARD_PROTOCOL_VERSION;
+      readonly type: 'status';
+      readonly stt: 'live' | 'degraded' | 'ended';
+      readonly lastFinalAt: number | null;
+      readonly at: number;
     };
 
 /** Mensagens cliente→servidor (skeleton: só pong; comandos silenciar/foco são E7). */

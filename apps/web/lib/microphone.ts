@@ -41,7 +41,29 @@ export interface RecorderLike {
   onstop: (() => void) | null;
 }
 
-export type RecorderFactory = (stream: MediaStream) => RecorderLike;
+export type RecorderFactory = (stream: MediaStream, mimeType?: string) => RecorderLike;
+
+export type MimeSupport = { supported: true; mimeType: string } | { supported: false };
+
+/**
+ * Formatos aceitos pelo STT streaming (Deepgram): WebM/Opus e Ogg/Opus.
+ * Safari/iOS só produz audio/mp4 (AAC) no MediaRecorder — NÃO é confiável no
+ * streaming; melhor detectar e avisar do que transcrever silenciosamente nada.
+ */
+const PREFERRED_MIME_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
+
+/** Escolhe o melhor mimeType suportado pelo navegador (ou nenhum compatível). */
+export function pickRecorderMime(
+  isTypeSupported: (type: string) => boolean = (type) =>
+    typeof MediaRecorder !== 'undefined' &&
+    typeof MediaRecorder.isTypeSupported === 'function' &&
+    MediaRecorder.isTypeSupported(type),
+): MimeSupport {
+  for (const mimeType of PREFERRED_MIME_TYPES) {
+    if (isTypeSupported(mimeType)) return { supported: true, mimeType };
+  }
+  return { supported: false };
+}
 
 export interface AudioSource {
   /** Chunks de áudio p/ o STT (SttOpenOptions.audio). Termina quando stop() é chamado. */
@@ -58,10 +80,12 @@ export function createAudioSource(
   stream: MediaStream,
   recorderFactory?: RecorderFactory,
   timesliceMs = 250,
+  mimeType?: string,
 ): AudioSource {
   const factory: RecorderFactory =
-    recorderFactory ?? ((s) => new MediaRecorder(s) as unknown as RecorderLike);
-  const recorder = factory(stream);
+    recorderFactory ??
+    ((s, mime) => new MediaRecorder(s, mime ? { mimeType: mime } : undefined) as unknown as RecorderLike);
+  const recorder = factory(stream, mimeType);
 
   const queue: Array<Uint8Array | null> = [];
   let wake: (() => void) | null = null;

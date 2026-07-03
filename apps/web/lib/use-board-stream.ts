@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import type { BoardServerMessage } from '@nutrimed/shared-types';
 import { useBoardStore, toContributionItem } from './board-store';
+import { resolveWsBase } from './ws-url';
 
 /**
  * `useBoardStream` (Story 3.3 — frontend-spec §11.2): conecta ao WS do board
@@ -31,11 +32,15 @@ export interface UseBoardStreamOptions {
 export function useBoardStream(consultationId: string, opts: UseBoardStreamOptions = {}) {
   const addContribution = useBoardStore((s) => s.addContribution);
   const addTranscript = useBoardStore((s) => s.addTranscript);
+  const setSttStatus = useBoardStore((s) => s.setSttStatus);
+  const setWsConnected = useBoardStore((s) => s.setWsConnected);
+  const setWsGaveUp = useBoardStore((s) => s.setWsGaveUp);
 
   useEffect(() => {
     const factory: BrowserSocketFactory =
       opts.socketFactory ?? ((url) => new WebSocket(url) as unknown as BrowserSocketLike);
-    const base = opts.baseUrl ?? process.env.NEXT_PUBLIC_BOARD_WS_URL ?? 'ws://localhost:3001';
+    // baseUrl vazio ⇒ mesma origem (modo attached, A6)
+    const base = resolveWsBase(opts.baseUrl || process.env.NEXT_PUBLIC_BOARD_WS_URL);
     const url = `${base}/board?consultationId=${encodeURIComponent(consultationId)}${
       opts.token ? `&token=${encodeURIComponent(opts.token)}` : ''
     }`;
@@ -51,14 +56,22 @@ export function useBoardStream(consultationId: string, opts: UseBoardStreamOptio
       if (disposed) return;
       socket = factory(url);
       socket.addEventListener('open', () => {
-        retries = 0;
+        setWsConnected(true);
       });
       socket.addEventListener('message', (event) => {
+        // retries só zera após MENSAGEM: o gateway completa o handshake ANTES
+        // de autenticar — zerar no 'open' tornava wsGaveUp inalcançável com
+        // token expirado (loop infinito de reconexão a 1/s)
+        retries = 0;
         if (typeof event.data !== 'string') return;
         try {
           const message = JSON.parse(event.data) as BoardServerMessage;
           if (message.v === 1 && message.type === 'transcript') {
             addTranscript(message.text, message.isFinal); // transcrição ao vivo (E7)
+            return;
+          }
+          if (message.v === 1 && message.type === 'status') {
+            setSttStatus(message.stt); // saúde do pipeline (A3)
             return;
           }
           const item = toContributionItem(message);
@@ -68,7 +81,12 @@ export function useBoardStream(consultationId: string, opts: UseBoardStreamOptio
         }
       });
       socket.addEventListener('close', () => {
-        if (disposed || retries >= maxRetries) return;
+        setWsConnected(false);
+        if (disposed) return;
+        if (retries >= maxRetries) {
+          setWsGaveUp(); // reconexão esgotada — a UI pede recarga (A3)
+          return;
+        }
         retries += 1;
         retryTimer = setTimeout(connect, retryDelayMs * retries);
       });
@@ -84,6 +102,9 @@ export function useBoardStream(consultationId: string, opts: UseBoardStreamOptio
     consultationId,
     addContribution,
     addTranscript,
+    setSttStatus,
+    setWsConnected,
+    setWsGaveUp,
     opts.baseUrl,
     opts.token,
     opts.socketFactory,

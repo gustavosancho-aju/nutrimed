@@ -35,17 +35,22 @@ export class ConsentRequiredError extends Error {
  * Abre uma consulta e cria sua linha de consentimento com default NEGADO.
  * O rótulo do paciente é cifrado em repouso (NFR9) antes de tocar o banco.
  * Retorna o id da consulta criada.
+ *
+ * `patientId` (E11/FR23) vincula a consulta a um paciente real quando informado.
+ * É opcional e nullable: consultas antigas (rótulo solto) continuam válidas sem
+ * paciente — não quebra o caminho legado.
  */
 export async function createConsultation(
   db: SqlExecutor,
   userId: string,
   patientLabel: string,
   encryptionKey: Buffer,
+  patientId: string | null = null,
 ): Promise<string> {
   const labelEnc = encryptField(patientLabel, encryptionKey);
   const res = await db.query<{ id: string }>(
-    'INSERT INTO consultation (user_id, patient_label_enc) VALUES ($1, $2) RETURNING id',
-    [userId, labelEnc],
+    'INSERT INTO consultation (user_id, patient_label_enc, patient_id) VALUES ($1, $2, $3) RETURNING id',
+    [userId, labelEnc, patientId],
   );
   const consultationId = res.rows[0]!.id;
   // 1:1 com CONSULTATION — default granted=false (nega por omissão, AC1).
@@ -53,6 +58,28 @@ export async function createConsultation(
     consultationId,
   ]);
   return consultationId;
+}
+
+/** Resumo de uma consulta para o histórico da ficha do paciente (E11/11.5). */
+export interface ConsultationSummary {
+  id: string;
+  status: string;
+  createdAt: Date;
+}
+
+/**
+ * Lista as consultas de um paciente (FR24), mais recente primeiro. Retorna só
+ * metadados não sensíveis (id/status/data) — nenhum campo cifrado é exposto.
+ */
+export async function listConsultationsByPatient(
+  db: SqlExecutor,
+  patientId: string,
+): Promise<ConsultationSummary[]> {
+  const res = await db.query<{ id: string; status: string; created_at: Date }>(
+    'SELECT id, status, created_at FROM consultation WHERE patient_id = $1 ORDER BY created_at DESC, id DESC',
+    [patientId],
+  );
+  return res.rows.map((r) => ({ id: r.id, status: r.status, createdAt: new Date(r.created_at) }));
 }
 
 /**

@@ -44,11 +44,31 @@ export interface LlmCompletionRequest {
   readonly system: string;
   readonly context: readonly KbChunk[];
   readonly transcript: string;
+  /**
+   * ADITIVO (B1 — anti-repetição): contribuições JÁ exibidas nesta consulta,
+   * formatadas ("[Dr. Paulo] texto"). O modelo é instruído a não repeti-las.
+   */
+  readonly priorContributions?: readonly string[];
+  /** ADITIVO (B1): autoriza o modelo a responder {"skip":true} quando não há nada novo. */
+  readonly allowSkip?: boolean;
+}
+
+/** Requisição de completion de TEXTO LIVRE (uso interno — não vira card do board). */
+export interface TextCompletionRequest {
+  readonly system: string;
+  readonly prompt: string;
+  readonly maxTokens?: number;
 }
 
 /** LLM que produz a contribuição de uma persona a partir do contexto recuperado. */
 export interface ILlmProvider {
   complete(req: LlmCompletionRequest): Promise<PersonaContribution>;
+  /**
+   * ADITIVO/OPCIONAL (B3): completion de texto livre para usos internos
+   * (CaseState, case review). Implementações antigas/fakes sem este método
+   * continuam válidas — consumidores DEVEM degradar graciosamente.
+   */
+  completeText?(req: TextCompletionRequest): Promise<{ text: string; modelVersion?: string }>;
 }
 
 /**

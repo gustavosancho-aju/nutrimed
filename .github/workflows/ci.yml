@@ -1,8 +1,18 @@
 name: CI
 
+# Gates BLOQUEANTES de PR (Blueprint §6). Qualquer falha impede o merge.
 on:
   push:
+    branches: [main]
   pull_request:
+
+# Cancela runs antigos do mesmo PR/branch ao chegar um novo push.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   quality:
@@ -32,8 +42,49 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Test
+      - name: Test (187 testes)
         run: pnpm test
 
-      - name: Build
+      - name: Build (19 pacotes)
         run: pnpm build
+
+  dependency-audit:
+    name: pnpm audit (vuln. de dependências)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # BLOQUEIA em severidade alta/crítica (Blueprint §6). Ajuste --audit-level se
+      # houver findings transitivos sem patch (documentar como dívida, não silenciar).
+      - name: Audit (high+)
+        run: pnpm audit --audit-level high --prod
+
+  secret-scan:
+    name: scan de segredos (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Impede reintrodução de keys no repo (Blueprint §6 — keys já vazaram uma vez).
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,65 @@
+name: Deploy (Fly.io · GRU)
+
+# Deploy SEPARADO do CI (Blueprint §6). Disparado manualmente (workflow_dispatch)
+# ou por tag de release v* — NUNCA automático em push de PR.
+#
+# Pré-requisitos (passos manuais do usuário — ver docs/deploy/RUNBOOK.md):
+#  - Secret de repositório FLY_API_TOKEN (token do Fly, NÃO uma key de fornecedor).
+#  - App e secrets de runtime já provisionados no Fly (fly secrets set ...).
+#  - Postgres BR já provisionado e migrations aplicadas.
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Motivo do deploy (registro)"
+        required: false
+        default: "deploy manual"
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-fly
+  cancel-in-progress: false   # nunca cancelar um deploy em andamento (drain em curso)
+
+jobs:
+  # Revalida os gates antes de empurrar para produção (cinto + suspensório).
+  preflight:
+    name: preflight (lint·typecheck·test·build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  deploy:
+    name: fly deploy
+    needs: preflight
+    runs-on: ubuntu-latest
+    # Ambiente protegido: configure required reviewers em Settings → Environments
+    # para exigir aprovação humana antes do deploy de produção (RUNBOOK §6).
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      # Deploy com a estratégia/grace do fly.toml (rolling + graceful drain, ADR-010).
+      - name: Deploy
+        run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

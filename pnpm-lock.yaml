@@ -62,12 +62,21 @@ importers:
       '@nutrimed/engines':
         specifier: workspace:^
         version: link:../../packages/engines
+      '@nutrimed/food-vision':
+        specifier: workspace:*
+        version: link:../../packages/food-vision
       '@nutrimed/kb':
         specifier: workspace:^
         version: link:../../packages/kb
+      '@nutrimed/lab-import':
+        specifier: workspace:*
+        version: link:../../packages/lab-import
       '@nutrimed/llm-anthropic':
         specifier: workspace:^
         version: link:../../packages/llm-anthropic
+      '@nutrimed/patients':
+        specifier: workspace:*
+        version: link:../../packages/patients
       '@nutrimed/providers':
         specifier: workspace:*
         version: link:../../packages/providers
@@ -80,6 +89,12 @@ importers:
       '@nutrimed/stt-deepgram':
         specifier: workspace:*
         version: link:../../packages/stt-deepgram
+      '@nutrimed/telegram-bot':
+        specifier: workspace:*
+        version: link:../../packages/telegram-bot
+      '@nutrimed/telegram-link':
+        specifier: workspace:*
+        version: link:../../packages/telegram-link
       '@nutrimed/telemetry':
         specifier: workspace:*
         version: link:../../packages/telemetry
@@ -337,11 +352,29 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
+  packages/food-vision:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.21
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
   packages/kb:
     dependencies:
       '@nutrimed/providers':
         specifier: workspace:*
         version: link:../providers
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.21
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
+  packages/lab-import:
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -356,6 +389,28 @@ importers:
         specifier: workspace:*
         version: link:../providers
     devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.21
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
+  packages/patients:
+    dependencies:
+      '@nutrimed/audit':
+        specifier: workspace:*
+        version: link:../audit
+      '@nutrimed/crypto':
+        specifier: workspace:*
+        version: link:../crypto
+      '@nutrimed/db':
+        specifier: workspace:*
+        version: link:../db
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.5.0
+        version: 0.5.1
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.21
@@ -419,6 +474,53 @@ importers:
         specifier: workspace:*
         version: link:../providers
     devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.21
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
+  packages/telegram-bot:
+    dependencies:
+      '@nutrimed/db':
+        specifier: workspace:*
+        version: link:../db
+      '@nutrimed/food-vision':
+        specifier: workspace:*
+        version: link:../food-vision
+      '@nutrimed/patients':
+        specifier: workspace:*
+        version: link:../patients
+      '@nutrimed/providers':
+        specifier: workspace:*
+        version: link:../providers
+      '@nutrimed/telegram-link':
+        specifier: workspace:*
+        version: link:../telegram-link
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.5.0
+        version: 0.5.1
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.21
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
+  packages/telegram-link:
+    dependencies:
+      '@nutrimed/audit':
+        specifier: workspace:*
+        version: link:../audit
+      '@nutrimed/db':
+        specifier: workspace:*
+        version: link:../db
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.5.0
+        version: 0.5.1
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.21

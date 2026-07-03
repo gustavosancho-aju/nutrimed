@@ -26,6 +26,8 @@ describe('TelemetryRegistry (E10)', () => {
     t.gateDecision('c1', 'held-for-pause');
     t.gateDecision('c1', 'rate-limited');
     t.gateDecision('c1', 'duplicate');
+    t.gateDecision('c1', 'llm-skip');
+    t.gateDecision('c1', 'semantic-duplicate');
 
     const report = t.report('c1');
     expect(report.gate).toEqual({
@@ -34,7 +36,40 @@ describe('TelemetryRegistry (E10)', () => {
       duplicate: 1,
       'held-for-pause': 1,
       'rate-limited': 1,
+      'llm-skip': 1,
+      'semantic-duplicate': 1,
     });
+  });
+
+  it('B5 — autonomia: skips, dedup semântico, updates do caso e reviews no report', () => {
+    const t = new TelemetryRegistry();
+    t.gateDecision('c1', 'deliver');
+    t.gateDecision('c1', 'llm-skip');
+    t.gateDecision('c1', 'llm-skip');
+    t.gateDecision('c1', 'semantic-duplicate');
+    t.caseStateUpdate('c1');
+    t.caseStateUpdate('c1');
+    t.caseReview('c1', 'skip');
+    t.caseReview('c1', 'contribution');
+    t.caseReview('c1', 'discarded');
+    t.caseReview('c1', 'skip');
+
+    const { autonomy } = t.report('c1');
+    expect(autonomy).toEqual({
+      llmSkips: 2,
+      semanticDuplicates: 1,
+      caseStateUpdates: 2,
+      caseReviews: { skip: 2, contribution: 1, discarded: 1 },
+      skipRate: 2 / 3, // 2 skips / (2 skips + 1 entregue)
+    });
+  });
+
+  it('B5 — consulta sem atividade: autonomia zerada com skipRate null', () => {
+    const t = new TelemetryRegistry();
+    const { autonomy } = t.report('c-vazia');
+    expect(autonomy.skipRate).toBeNull();
+    expect(autonomy.llmSkips).toBe(0);
+    expect(autonomy.caseReviews).toEqual({ skip: 0, contribution: 0, discarded: 0 });
   });
 
   it('AC4/§11 — latência fim-a-fim com p50/p95', () => {
