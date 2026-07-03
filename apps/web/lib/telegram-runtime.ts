@@ -151,8 +151,9 @@ async function pollLoop(token: string, deps: BotDeps, telemetry: TelegramTelemet
   const info = await tgCall<{ url?: string }>(token, 'getWebhookInfo', {}).catch(() => null);
   const webhookUrl = info?.result?.url;
   if (webhookUrl) {
+    // JSON.stringify: valor vem de resposta remota — nunca interpolar cru em log
     console.error(
-      `[telegram] long-polling RECUSADO: este token tem webhook ativo (${webhookUrl}) — ` +
+      `[telegram] long-polling RECUSADO: este token tem webhook ativo (${JSON.stringify(webhookUrl)}) — ` +
         'provavelmente é o token de PRODUÇÃO. Use um bot de teste do @BotFather para dev.',
     );
     return;

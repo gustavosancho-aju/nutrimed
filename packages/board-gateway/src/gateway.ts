@@ -97,7 +97,10 @@ export class BoardGateway {
    * publicada vira mensagem `contribution` para os clientes conectados.
    */
   bind(consultationId: string, orchestrator: BoardEventSource): void {
-    this.unbinders.get(consultationId)?.();
+    // typeof-guard explícito: o id vem de request — CodeQL (js/unvalidated-
+    // dynamic-method-call) exige validar antes de invocar valor dinâmico
+    const previousUnbind = this.unbinders.get(consultationId);
+    if (typeof previousUnbind === 'function') previousUnbind();
     const unbind = orchestrator.subscribe((event) => this.broadcast(event));
     this.unbinders.set(consultationId, unbind);
   }

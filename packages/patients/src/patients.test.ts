@@ -145,8 +145,12 @@ describe('Patient Service (E11 — 11.2)', () => {
         'SELECT values_enc FROM body_composition WHERE patient_id = $1 LIMIT 1',
         [patientId],
       );
-      expect(raw.rows[0]!.values_enc).not.toContain('90');
+      // NÃO afirmar ausência de substrings curtas ('90') — ciphertext base64
+      // aleatório as contém com probabilidade real (flake visto no CI). O que
+      // importa: o JSON em claro não está no storage.
+      expect(raw.rows[0]!.values_enc).not.toContain('"peso"');
       expect(raw.rows[0]!.values_enc).not.toContain('peso');
+      expect(raw.rows[0]!.values_enc).not.toContain(JSON.stringify({ peso: 90, massaGordura: 30 }));
 
       const evo = await listBodyComposition(exec, patientId, KEY);
       expect(evo.map((m) => m.values.peso)).toEqual([95, 90]); // cronológico: jan, mar
