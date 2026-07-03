@@ -85,6 +85,6 @@ jobs:
 
       # Impede reintrodução de keys no repo (Blueprint §6 — keys já vazaram uma vez).
       - name: Gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
