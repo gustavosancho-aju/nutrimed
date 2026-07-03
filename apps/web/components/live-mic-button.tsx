@@ -19,9 +19,21 @@ import { resolveWsBase } from '@/lib/ws-url';
 
 type LiveState = 'idle' | 'starting' | 'live' | 'error' | 'stale-deploy';
 
-/** Deploy no meio da sessão: a referência da server action ficou órfã no cliente. */
-function isStaleDeployError(err: unknown): boolean {
-  return err instanceof Error && /Server Action|Failed to find/i.test(err.message);
+/** Sinaliza que a invocação de uma server action falhou por infra (deploy stale). */
+class StaleDeployError extends Error {}
+
+/**
+ * Chama a server action isolando o erro de INFRAESTRUTURA. A action nunca lança
+ * por regra de negócio (retorna ActionResult), então QUALQUER throw aqui é
+ * transporte/referência órfã pós-deploy — vira `StaleDeployError`, escopado à
+ * chamada (não a um match de string interna do Next, frágil entre versões).
+ */
+async function callAction<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    throw new StaleDeployError(err instanceof Error ? err.message : String(err));
+  }
 }
 
 export function LiveMicButton({
@@ -63,7 +75,15 @@ export function LiveMicButton({
     cleanupRef.current?.();
     cleanupRef.current = null;
     setState('idle');
-    await stopLiveBoardAction(consultationId).catch(() => {});
+    // trata o retorno tipado: se o encerramento no servidor falhou (ex.: sessão
+    // web expirada → unauthenticated), avisa em vez de engolir — senão o
+    // pipeline (Deepgram/board) pode seguir vivo no servidor sem o médico saber.
+    try {
+      const result = await stopLiveBoardAction(consultationId);
+      if (!result.ok) setError(ACTION_ERROR_MESSAGES[result.code]);
+    } catch {
+      setError('Não foi possível confirmar o encerramento no servidor — recarregue a página.');
+    }
   }, [consultationId]);
 
   const start = useCallback(async () => {
@@ -100,8 +120,8 @@ export function LiveMicButton({
       }
 
       // 3) servidor arma o pipeline (Deepgram + sessão + board) — gate 1.4 incluso.
-      // Resultado tipado: em produção o Next mascara mensagens de throw.
-      const result = await startLiveBoardAction(consultationId);
+      // callAction isola um throw de infra (deploy stale) do resultado tipado.
+      const result = await callAction(() => startLiveBoardAction(consultationId));
       if (!result.ok) {
         stopMic();
         setError(ACTION_ERROR_MESSAGES[result.code]);
@@ -158,7 +178,7 @@ export function LiveMicButton({
       stopMic();
       // o servidor já estava armado: desarma para não deixar Deepgram/board órfãos
       if (serverArmed) void stopLiveBoardAction(consultationId).catch(() => {});
-      if (isStaleDeployError(err)) {
+      if (err instanceof StaleDeployError) {
         setError('O sistema foi atualizado enquanto esta página estava aberta — recarregue a página e tente de novo.');
         setState('stale-deploy');
         return;

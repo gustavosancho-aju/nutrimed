@@ -1,5 +1,5 @@
 import { PGlite } from '@electric-sql/pglite';
-import { runMigrations, type SqlExecutor } from '@nutrimed/db';
+import { runMigrations, pgliteExecutor, type SqlExecutor } from '@nutrimed/db';
 import { hashPassword } from '@nutrimed/auth';
 
 /**
@@ -12,18 +12,6 @@ import { hashPassword } from '@nutrimed/auth';
 
 // Singleton resiliente ao HMR do Next (evita múltiplas instâncias em dev).
 const globalForDb = globalThis as unknown as { __nutrimedDb?: Promise<SqlExecutor> };
-
-function fromPglite(db: PGlite): SqlExecutor {
-  return {
-    exec: async (sql: string): Promise<void> => {
-      await db.exec(sql);
-    },
-    query: async <T = Record<string, unknown>>(text: string, params?: unknown[]) => {
-      const result = await db.query<T>(text, params as unknown[]);
-      return { rows: result.rows };
-    },
-  };
-}
 
 const DEMO_EMAIL = 'demo@nutrimed.test';
 const DEMO_PASSWORD = 'nutrimed123';
@@ -44,7 +32,7 @@ async function init(): Promise<SqlExecutor> {
     const { createPool, pgExecutor } = await import('@nutrimed/db');
     exec = pgExecutor(createPool());
   } else {
-    exec = fromPglite(new PGlite('./.pgdata'));
+    exec = pgliteExecutor(new PGlite('./.pgdata'));
   }
   await runMigrations(exec);
   await seedDemoUser(exec);

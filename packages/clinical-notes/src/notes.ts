@@ -198,6 +198,20 @@ export async function listTranscriptFinals(
   return res.rows.map((r) => decryptField(r.content_enc, encryptionKey));
 }
 
+/**
+ * Conta os segmentos finais persistidos SEM decifrar nada — para o painel de
+ * diagnóstico (A5), que faz poll a cada 3s e só precisa do número. Evita
+ * decifrar N blobs AES-GCM por poll. Também é o dono do schema de
+ * `transcript_segment` (o app não faz SQL cru dessa tabela).
+ */
+export async function countTranscriptFinals(db: SqlExecutor, consultationId: string): Promise<number> {
+  const res = await db.query<{ count: string | number }>(
+    'SELECT COUNT(*) AS count FROM transcript_segment WHERE consultation_id = $1',
+    [consultationId],
+  );
+  return Number(res.rows[0]?.count ?? 0);
+}
+
 /** Carrega e decifra a nota da consulta (null se ainda não existe). */
 export async function loadNote(
   db: SqlExecutor,

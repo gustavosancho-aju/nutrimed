@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomBytes } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
-import { runMigrations, type SqlExecutor } from '@nutrimed/db';
+import { runMigrations, type SqlExecutor , pgliteExecutor } from '@nutrimed/db';
 import { createConsultation, grantConsent } from '@nutrimed/consent';
 import { getAuditTrail } from '@nutrimed/audit';
 import {
@@ -15,17 +15,6 @@ import {
 import { startConsultationSession } from '@nutrimed/session';
 import { BoardOrchestrator, type BoardContributionEvent } from './orchestrator';
 
-function fromPglite(db: PGlite): SqlExecutor {
-  return {
-    exec: async (sql: string): Promise<void> => {
-      await db.exec(sql);
-    },
-    query: async <T = Record<string, unknown>>(text: string, params?: unknown[]) => {
-      const result = await db.query<T>(text, params as unknown[]);
-      return { rows: result.rows };
-    },
-  };
-}
 
 class PushSttProvider implements ISttProvider {
   private queue: Array<TranscriptSegment | null> = [];
@@ -83,7 +72,7 @@ describe('BoardOrchestrator — walking skeleton (Story 3.1)', () => {
 
   beforeAll(async () => {
     db = new PGlite();
-    exec = fromPglite(db);
+    exec = pgliteExecutor(db);
     await runMigrations(exec);
     const res = await exec.query<{ id: string }>(
       'INSERT INTO app_user (email, display_name, password_hash) VALUES ($1, $2, $3) RETURNING id',

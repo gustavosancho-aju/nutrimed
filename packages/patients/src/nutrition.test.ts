@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomBytes } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
-import { runMigrations, type SqlExecutor } from '@nutrimed/db';
+import { runMigrations, type SqlExecutor , pgliteExecutor } from '@nutrimed/db';
 import { getAuditTrail } from '@nutrimed/audit';
 import {
   createPatient,
@@ -15,17 +15,6 @@ import {
   sumFoodLogForDay,
 } from './patients';
 
-function fromPglite(db: PGlite): SqlExecutor {
-  return {
-    exec: async (sql: string): Promise<void> => {
-      await db.exec(sql);
-    },
-    query: async <T = Record<string, unknown>>(text: string, params?: unknown[]) => {
-      const result = await db.query<T>(text, params as unknown[]);
-      return { rows: result.rows };
-    },
-  };
-}
 
 const KEY = randomBytes(32);
 const BR = -180; // offset do fuso em minutos (local = UTC + offset)
@@ -45,7 +34,7 @@ describe('Nutrition Goals & Food Log (E12 — 12.2)', () => {
 
   beforeAll(async () => {
     db = new PGlite();
-    exec = fromPglite(db);
+    exec = pgliteExecutor(db);
     await runMigrations(exec);
     userId = await insertUser(exec, 'nutri@nutrimed.test');
   });

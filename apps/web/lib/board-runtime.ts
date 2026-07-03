@@ -2,7 +2,12 @@ import 'server-only';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BoardGateway } from '@nutrimed/board-gateway';
-import { FullBoardOrchestrator, type FullBoardEvent } from '@nutrimed/board';
+import {
+  FullBoardOrchestrator,
+  DEFAULT_SEMANTIC_DEDUP_THRESHOLD,
+  type FullBoardEvent,
+  type FullBoardConfig,
+} from '@nutrimed/board';
 import { startConsultationSession, type ConsultationSession } from '@nutrimed/session';
 import { AnthropicLlmProvider } from '@nutrimed/llm-anthropic';
 import { NamespacedKnowledgeStore, ingest, seedSources } from '@nutrimed/kb';
@@ -14,6 +19,7 @@ import {
   saveSynthesis,
   saveTranscriptSegment,
   listTranscriptFinals,
+  countTranscriptFinals,
   listSyntheses,
   auditTranscriptPersistStart,
 } from '@nutrimed/clinical-notes';
@@ -248,6 +254,26 @@ function wireSessionBroadcast(
   return { flushTranscript: async () => { await nextSeq.catch(() => {}); } };
 }
 
+/** Lê um número de env var (ou default) — tolerante a vazio/NaN. */
+function envNumber(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+/**
+ * Knobs de calibração do board por env — ajustáveis entre consultas via
+ * `fly secrets set` + restart, sem novo deploy. Antes eram números mágicos no
+ * call site (dívida do code review). Defaults = valores do piloto.
+ */
+function boardTuningFromEnv(): Pick<FullBoardConfig, 'caseReviewMs' | 'semanticDedupThreshold'> {
+  return {
+    caseReviewMs: envNumber('BOARD_CASE_REVIEW_MS', 90_000),
+    semanticDedupThreshold: envNumber('BOARD_SEMANTIC_DEDUP_THRESHOLD', DEFAULT_SEMANTIC_DEDUP_THRESHOLD),
+  };
+}
+
 /** Wiring comum de telemetria por consulta (E10). */
 function telemetryHooks(runtime: BoardRuntime, consultationId: string) {
   const t = runtime.telemetry;
@@ -384,10 +410,8 @@ export async function getPipelineStatus(consultationId: string): Promise<Pipelin
   const db = await getDb();
   const active = runtime.active.get(consultationId);
   const lastFinalAt = runtime.lastFinalAt.get(consultationId) ?? null;
-  const persisted = await db.query<{ count: string | number }>(
-    'SELECT COUNT(*) AS count FROM transcript_segment WHERE consultation_id = $1',
-    [consultationId],
-  );
+  // COUNT sem decifrar (poll de 3s do painel) — o schema é do clinical-notes
+  const persistedFinals = await countTranscriptFinals(db, consultationId);
   const sttStatus = active ? active.session.getSnapshot().status : 'idle';
   return {
     // consulta encerrada permanece em `active` (insumo da nota), mas o
@@ -400,7 +424,7 @@ export async function getPipelineStatus(consultationId: string): Promise<Pipelin
     boardClients: runtime.gateway.clientCount(consultationId),
     deepgramConfigured: Boolean(process.env.DEEPGRAM_API_KEY),
     anthropicConfigured: Boolean(process.env.ANTHROPIC_API_KEY),
-    persistedFinals: Number(persisted.rows[0]?.count ?? 0),
+    persistedFinals,
   };
 }
 
@@ -477,7 +501,7 @@ export async function startLiveBoard(consultationId: string): Promise<void> {
       maxPerMinutePerDoctor: 2,
       onDecision: hooks.onDecision,
       onContributionLatency: hooks.onContributionLatency,
-      caseReviewMs: 90_000, // B4: análise periódica do caso (piloto) — só em pausa natural
+      ...boardTuningFromEnv(), // B4: caseReviewMs + threshold do dedup por env (calibração do piloto)
       onCaseStateUpdate: hooks.onCaseStateUpdate,
       onCaseReview: hooks.onCaseReview,
     });

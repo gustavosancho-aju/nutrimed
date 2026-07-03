@@ -6,6 +6,7 @@ export {
   listSyntheses,
   saveTranscriptSegment,
   listTranscriptFinals,
+  countTranscriptFinals,
   auditTranscriptPersistStart,
   type ClinicalNote,
   type BoardSynthesis,

@@ -30,3 +30,6 @@ export {
   FakeKnowledgeRetriever,
   FakeVideoAssetProvider,
 } from './fakes';
+
+// Utilitário de parsing de saída de LLM (strip de cercas de código)
+export { stripJsonFences } from './json';

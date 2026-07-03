@@ -92,12 +92,13 @@ describe('<LiveMicButton> (A1 — erros tipados das actions)', () => {
     });
   });
 
-  it('erro de rede genérico na action → mensagem do erro, sem crash', async () => {
+  it('QUALQUER throw da action (ex.: rede) → tratado como deploy stale (a action nunca lança por regra)', async () => {
     startLiveBoardAction.mockRejectedValue(new Error('fetch failed'));
     renderButton();
     clickStart();
     await waitFor(() => {
-      expect(screen.getByText(/fetch failed/i)).toBeDefined();
+      expect(screen.getByText(/o sistema foi atualizado enquanto esta página estava aberta/i)).toBeDefined();
+      expect(screen.getByRole('button', { name: /recarregar página/i })).toBeDefined();
     });
   });
 });

@@ -2,20 +2,10 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomBytes } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 import { encryptField, decryptField } from '@nutrimed/crypto';
-import { runMigrations, type SqlExecutor } from './migrate';
+import { runMigrations, type SqlExecutor  } from './migrate';
+import { pgliteExecutor } from './testing';
 
 /** Adapta o PGlite (Postgres in-process, WASM) ao SqlExecutor — testes sem Docker. */
-function fromPglite(db: PGlite): SqlExecutor {
-  return {
-    exec: async (sql: string): Promise<void> => {
-      await db.exec(sql);
-    },
-    query: async <T = Record<string, unknown>>(text: string, params?: unknown[]) => {
-      const result = await db.query<T>(text, params as unknown[]);
-      return { rows: result.rows };
-    },
-  };
-}
 
 let db: PGlite;
 let exec: SqlExecutor;
@@ -32,7 +22,7 @@ async function insertUser(email: string): Promise<string> {
 
 beforeAll(async () => {
   db = new PGlite();
-  exec = fromPglite(db);
+  exec = pgliteExecutor(db);
   firstRun = await runMigrations(exec);
 });
 

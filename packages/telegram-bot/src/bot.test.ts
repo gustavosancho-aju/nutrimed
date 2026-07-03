@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomBytes } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
-import { runMigrations, type SqlExecutor } from '@nutrimed/db';
+import { runMigrations, type SqlExecutor , pgliteExecutor } from '@nutrimed/db';
 import { setNutritionGoal, sumFoodLogForDay } from '@nutrimed/patients';
 import { createPairingCode, redeemPairingCode } from '@nutrimed/telegram-link';
 import { FakeFoodEstimator, type FoodImageInput } from '@nutrimed/food-vision';
@@ -16,17 +16,6 @@ import {
   type BotDeps,
 } from './bot';
 
-function fromPglite(db: PGlite): SqlExecutor {
-  return {
-    exec: async (sql: string): Promise<void> => {
-      await db.exec(sql);
-    },
-    query: async <T = Record<string, unknown>>(text: string, params?: unknown[]) => {
-      const result = await db.query<T>(text, params as unknown[]);
-      return { rows: result.rows };
-    },
-  };
-}
 
 const KEY = randomBytes(32);
 const IMAGE: FoodImageInput = { base64: 'x', mediaType: 'image/jpeg' };
@@ -56,7 +45,7 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
 
   beforeAll(async () => {
     db = new PGlite();
-    exec = fromPglite(db);
+    exec = pgliteExecutor(db);
     await runMigrations(exec);
     userId = await insertUser(exec, 'medico@nutrimed.test');
     deps = {
