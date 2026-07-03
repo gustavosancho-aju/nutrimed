@@ -101,6 +101,7 @@ export class FullBoardOrchestrator {
   private lastSpeechAt = 0;
   private lastCaseReviewAt = 0;
   private caseReviewInFlight = false;
+  private caseReviewRun: Promise<void> = Promise.resolve();
   private synthesized = false;
   private pending: Promise<void> = Promise.resolve();
   private readonly now: () => number;
@@ -210,13 +211,17 @@ export class FullBoardOrchestrator {
     ) {
       await this.synthesize('auto');
     }
-    await this.maybeCaseReview(now); // B4
+    // B4 — fire-and-forget: a chamada LLM do review (segundos) NÃO pode
+    // bloquear a cadeia `pending` (um trigger critical falado durante o
+    // review seria represado). O guard caseReviewInFlight impede 2 em voo.
+    this.caseReviewRun = this.maybeCaseReview(now);
   }
 
-  /** Executa um tick imediatamente (testes/ferramentas de operação). */
+  /** Executa um tick imediatamente e aguarda o case review disparado por ele. */
   async tickNow(): Promise<void> {
     this.pending = this.pending.then(() => this.tick());
-    return this.pending;
+    await this.pending;
+    await this.caseReviewRun;
   }
 
   /**
@@ -385,6 +390,10 @@ export class FullBoardOrchestrator {
           .slice(-20)
           .map((h) => `[${PERSONA_PROFILES[h.personaId].displayName}] ${h.text}`),
       });
+      if (synthesis.skip || !synthesis.text.trim()) {
+        // síntese vazia NUNCA vira card/persistência — rodada permanece p/ nova tentativa
+        return;
+      }
       const kbSources = entries.flatMap((e) => e.contribution.kbSources ?? []);
       const eventId = randomUUID();
       await writeAudit(this.db, eventId, {

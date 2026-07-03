@@ -52,6 +52,11 @@ export async function generateNoteDraft(
     context: [],
     transcript: `Transcrição estruturada da consulta:\n${transcript}${board}`,
   });
+  if (result.skip || !result.text.trim()) {
+    // sem allowSkip o modelo não deveria pular — mas nota VAZIA jamais é
+    // gravada como sucesso silencioso (dado clínico)
+    throw new Error('O modelo não gerou conteúdo para a nota — tente novamente.');
+  }
   return result.text;
 }
 

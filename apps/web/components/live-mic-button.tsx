@@ -70,6 +70,7 @@ export function LiveMicButton({
     setState('starting');
     setError(null);
     let micStream: MediaStream | null = null;
+    let serverArmed = false;
     const stopMic = () => micStream?.getTracks().forEach((t) => t.stop());
     try {
       // 1) microfone PRIMEIRO (Story 2.2): feedback imediato ao médico e nenhum
@@ -107,6 +108,7 @@ export function LiveMicButton({
         setState('error');
         return;
       }
+      serverArmed = true;
 
       // 4) captura → WS /audio (só áudio binário; eventos do board vão no /board)
       const source: AudioSource = createAudioSource(mic.stream, undefined, undefined, mime.mimeType);
@@ -116,6 +118,14 @@ export function LiveMicButton({
       ws.binaryType = 'arraybuffer';
 
       let pumping = true;
+      let closedByUs = false;
+      const teardown = (message: string) => {
+        pumping = false;
+        source.stop();
+        void stopLiveBoardAction(consultationId).catch(() => {});
+        setError(message);
+        setState('error');
+      };
       ws.onopen = () => {
         void (async () => {
           for await (const chunk of source.chunks) {
@@ -126,24 +136,28 @@ export function LiveMicButton({
         setState('live');
       };
       ws.onerror = () => {
-        // não deixa mic/pipeline ligados com a UI em erro
-        pumping = false;
-        source.stop();
-        void stopLiveBoardAction(consultationId).catch(() => {});
-        setError('Falha no canal de áudio — verifique a rede e tente novamente.');
-        setState('error');
+        if (closedByUs) return;
+        closedByUs = true; // evita o onclose subsequente duplicar o teardown
+        teardown('Falha no canal de áudio — verifique a rede e tente novamente.');
       };
       ws.onclose = () => {
-        pumping = false;
+        // fechamento LIMPO pelo servidor (deploy/4409) não dispara onerror:
+        // sem isto a UI ficava "ao vivo" com o mic quente e nada transcrevendo
+        if (closedByUs) return;
+        closedByUs = true;
+        teardown('O canal de áudio foi encerrado pelo servidor — retome a consulta ao vivo.');
       };
 
       cleanupRef.current = () => {
+        closedByUs = true;
         pumping = false;
         source.stop();
         ws.close();
       };
     } catch (err) {
       stopMic();
+      // o servidor já estava armado: desarma para não deixar Deepgram/board órfãos
+      if (serverArmed) void stopLiveBoardAction(consultationId).catch(() => {});
       if (isStaleDeployError(err)) {
         setError('O sistema foi atualizado enquanto esta página estava aberta — recarregue a página e tente de novo.');
         setState('stale-deploy');

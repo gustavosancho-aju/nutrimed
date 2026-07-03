@@ -56,10 +56,13 @@ export function useBoardStream(consultationId: string, opts: UseBoardStreamOptio
       if (disposed) return;
       socket = factory(url);
       socket.addEventListener('open', () => {
-        retries = 0;
         setWsConnected(true);
       });
       socket.addEventListener('message', (event) => {
+        // retries só zera após MENSAGEM: o gateway completa o handshake ANTES
+        // de autenticar — zerar no 'open' tornava wsGaveUp inalcançável com
+        // token expirado (loop infinito de reconexão a 1/s)
+        retries = 0;
         if (typeof event.data !== 'string') return;
         try {
           const message = JSON.parse(event.data) as BoardServerMessage;

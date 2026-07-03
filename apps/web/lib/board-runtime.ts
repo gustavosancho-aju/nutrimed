@@ -39,7 +39,16 @@ interface BoardRuntime {
   gateway: BoardGateway;
   kb: NamespacedKnowledgeStore;
   telemetry: TelemetryRegistry;
-  active: Map<string, { session: ConsultationSession; orchestrator: FullBoardOrchestrator; events: FullBoardEvent[] }>;
+  active: Map<
+    string,
+    {
+      session: ConsultationSession;
+      orchestrator: FullBoardOrchestrator;
+      events: FullBoardEvent[];
+      /** Drena a fila de persistência do transcript (A4) — aguardar antes de reiniciar/ler. */
+      flushTranscript: () => Promise<void>;
+    }
+  >;
   /** Último final por consulta (diagnóstico A5 — "recebendo há Xs"). */
   lastFinalAt: Map<string, number>;
 }
@@ -94,7 +103,13 @@ async function init(): Promise<BoardRuntime> {
 
 export function getBoardRuntime(): Promise<BoardRuntime> {
   if (!globalForBoard.__nutrimedBoard) {
-    globalForBoard.__nutrimedBoard = init();
+    // rejeição NÃO fica cacheada: um Neon transiente no boot envenenaria o
+    // singleton para sempre — WS morto atrás de healthcheck verde. A próxima
+    // chamada (lazy-start das actions/rotas) re-tenta o init do zero.
+    globalForBoard.__nutrimedBoard = init().catch((error) => {
+      globalForBoard.__nutrimedBoard = undefined;
+      throw error;
+    });
   }
   return globalForBoard.__nutrimedBoard;
 }
@@ -180,19 +195,22 @@ function wireSessionBroadcast(
   consultationId: string,
   session: ConsultationSession,
   db: SqlExecutor,
-): void {
+  opts: { persistTranscript: boolean },
+): { flushTranscript: () => Promise<void> } {
   let lastFinalAt: number | null = null;
-  // A4: cada final é persistido cifrado no ato (fila encadeada preserva a
+  // A4: cada final REAL é persistido cifrado no ato (fila encadeada preserva a
   // ordem) — a nota clínica sobrevive a deploy/restart no meio da consulta
-  // (incidente 23:52). O seq continua do máximo existente: reinício da mesma
-  // consulta NUNCA colide nem apaga a fala anterior.
-  let nextSeq: Promise<number> = db
-    .query<{ max: number | null }>(
-      'SELECT MAX(seq) AS max FROM transcript_segment WHERE consultation_id = $1',
-      [consultationId],
-    )
-    .then((r) => (r.rows[0]?.max ?? -1) + 1)
-    .catch(() => 0);
+  // (incidente 23:52). A DEMO NÃO persiste (persistTranscript=false): o script
+  // roteirizado contaminaria a nota clínica da consulta real.
+  let nextSeq: Promise<number> = opts.persistTranscript
+    ? db
+        .query<{ max: number | null }>(
+          'SELECT MAX(seq) AS max FROM transcript_segment WHERE consultation_id = $1',
+          [consultationId],
+        )
+        .then((r) => (r.rows[0]?.max ?? -1) + 1)
+        .catch(() => 0)
+    : Promise.resolve(0);
   const persistFinal = (text: string) => {
     nextSeq = nextSeq.then(async (seq) => {
       try {
@@ -203,16 +221,18 @@ function wireSessionBroadcast(
       return seq + 1;
     });
   };
-  auditTranscriptPersistStart(db, consultationId).catch((error) =>
-    console.error('[board] falha ao auditar início da persistência:', error),
-  );
+  if (opts.persistTranscript) {
+    auditTranscriptPersistStart(db, consultationId).catch((error) =>
+      console.error('[board] falha ao auditar início da persistência:', error),
+    );
+  }
   session.subscribe((event) => {
     if (event.type === 'segment') {
       if (event.segment.isFinal) {
         lastFinalAt = Date.now();
         runtime.lastFinalAt.set(consultationId, lastFinalAt);
         runtime.telemetry.sttSegment(consultationId);
-        persistFinal(event.segment.text);
+        if (opts.persistTranscript) persistFinal(event.segment.text);
       }
       runtime.gateway.broadcastTranscript(consultationId, event.segment.text, event.segment.isFinal);
       return;
@@ -223,6 +243,9 @@ function wireSessionBroadcast(
   });
   // prime: quem abrir o /board já sabe que o pipeline está vivo (replay no gateway)
   runtime.gateway.broadcastStatus(consultationId, 'live', null);
+  // drena a fila de persistência: reinício da MESMA consulta aguarda os INSERTs
+  // em voo antes de ler MAX(seq) — sem colisão de seq (ON CONFLICT descartaria fala)
+  return { flushTranscript: async () => { await nextSeq.catch(() => {}); } };
 }
 
 /** Wiring comum de telemetria por consulta (E10). */
@@ -248,6 +271,7 @@ export async function startDemoBoard(consultationId: string): Promise<{ llmLabel
   if (previous) {
     previous.orchestrator.stop();
     await previous.session.stop();
+    await previous.flushTranscript().catch(() => {});
   }
 
   const session = await startConsultationSession(db, consultationId, new ScriptedDemoStt(), {
@@ -267,8 +291,9 @@ export async function startDemoBoard(consultationId: string): Promise<{ llmLabel
     onCaseReview: hooks.onCaseReview,
   });
   runtime.gateway.bind(consultationId, orchestrator);
-  // transcrição ao vivo p/ o painel (texto via WS — áudio nunca passa aqui, §7)
-  wireSessionBroadcast(runtime, consultationId, session, db);
+  // transcrição ao vivo p/ o painel (texto via WS — áudio nunca passa aqui, §7).
+  // DEMO NÃO persiste transcript: o script fictício contaminaria a nota clínica.
+  const wired = wireSessionBroadcast(runtime, consultationId, session, db, { persistTranscript: false });
   // histórico de contribuições da sessão (insumo da nota clínica — E9)
   const events: FullBoardEvent[] = [];
   orchestrator.subscribe((event) => {
@@ -276,7 +301,7 @@ export async function startDemoBoard(consultationId: string): Promise<{ llmLabel
     persistSynthesisEvents(db, consultationId, event); // histórico salvo (cifrado+auditado)
   });
   orchestrator.start();
-  runtime.active.set(consultationId, { session, orchestrator, events });
+  runtime.active.set(consultationId, { session, orchestrator, events, flushTranscript: wired.flushTranscript });
   return { llmLabel: label };
 }
 
@@ -299,30 +324,45 @@ export async function getNoteInputs(consultationId: string): Promise<{
   const runtime = await getBoardRuntime();
   const db = await getDb();
   const key = getEncryptionKey();
-  const dbFinals = await listTranscriptFinals(db, consultationId, key);
-
   const active = runtime.active.get(consultationId);
+  // drena a fila de persistência antes de ler o banco (nada em voo escapa da nota)
+  await active?.flushTranscript().catch(() => {});
+  // leitura durável NUNCA derruba a nota: chave rotacionada/linha corrompida
+  // degrada para a memória da sessão (quando houver) em vez de falhar tudo
+  let dbFinals: string[] = [];
+  try {
+    dbFinals = await listTranscriptFinals(db, consultationId, key);
+  } catch (error) {
+    console.error('[nota] falha ao ler transcript persistido — usando memória:', error);
+  }
+  const dbSyntheses = await listSyntheses(db, consultationId, key).catch((error) => {
+    console.error('[nota] falha ao ler sínteses persistidas:', error);
+    return [];
+  });
+  const synthesesAsContributions = dbSyntheses.map((s) => ({
+    personaId: 'aurelio' as const,
+    type: 'sintese' as const,
+    severity: 'normal' as const,
+    text: s.content,
+    modelVersion: s.modelVersion ?? undefined,
+  }));
+
   if (active) {
     const memFinals = active.session.getSnapshot().finalSegments.map((s) => s.text);
+    const memContributions = active.events.map((e) => e.contribution);
     return {
       finals: dbFinals.length >= memFinals.length ? dbFinals : memFinals,
-      contributions: active.events.map((e) => e.contribution),
+      // pós-restart+reinício: a memória nova pode estar vazia enquanto as
+      // sínteses pré-restart vivem no banco — usa o conjunto mais completo
+      contributions: memContributions.length >= synthesesAsContributions.length
+        ? memContributions
+        : synthesesAsContributions,
     };
   }
 
-  // pós-restart: transcript do banco + sínteses persistidas como contribuições
-  const syntheses = await listSyntheses(db, consultationId, key);
-  if (dbFinals.length === 0 && syntheses.length === 0) return null;
-  return {
-    finals: dbFinals,
-    contributions: syntheses.map((s) => ({
-      personaId: 'aurelio' as const,
-      type: 'sintese' as const,
-      severity: 'normal' as const,
-      text: s.content,
-      modelVersion: s.modelVersion ?? undefined,
-    })),
-  };
+  // pós-restart sem sessão ativa: tudo do banco
+  if (dbFinals.length === 0 && synthesesAsContributions.length === 0) return null;
+  return { finals: dbFinals, contributions: synthesesAsContributions };
 }
 
 /** Snapshot do pipeline para o modo diagnóstico (A5). Só booleanos/contadores
@@ -348,9 +388,12 @@ export async function getPipelineStatus(consultationId: string): Promise<Pipelin
     'SELECT COUNT(*) AS count FROM transcript_segment WHERE consultation_id = $1',
     [consultationId],
   );
+  const sttStatus = active ? active.session.getSnapshot().status : 'idle';
   return {
-    active: Boolean(active),
-    sttStatus: active ? active.session.getSnapshot().status : 'idle',
+    // consulta encerrada permanece em `active` (insumo da nota), mas o
+    // diagnóstico não pode reportá-la como ativa (retrato ambíguo)
+    active: Boolean(active) && sttStatus !== 'ended',
+    sttStatus,
     finalsCount: active ? active.session.getSnapshot().finalSegments.length : 0,
     lastFinalAgoMs: lastFinalAt ? Date.now() - lastFinalAt : null,
     audioSinkRegistered: runtime.gateway.hasAudioSink(consultationId),
@@ -407,6 +450,7 @@ export async function startLiveBoard(consultationId: string): Promise<void> {
   if (previous) {
     previous.orchestrator.stop();
     await previous.session.stop();
+    await previous.flushTranscript().catch(() => {});
     runtime.gateway.unregisterAudioSink(consultationId);
   }
 
@@ -438,14 +482,14 @@ export async function startLiveBoard(consultationId: string): Promise<void> {
       onCaseReview: hooks.onCaseReview,
     });
     runtime.gateway.bind(consultationId, orchestrator);
-    wireSessionBroadcast(runtime, consultationId, session, db);
+    const wired = wireSessionBroadcast(runtime, consultationId, session, db, { persistTranscript: true });
     const events: FullBoardEvent[] = [];
     orchestrator.subscribe((event) => {
       events.push(event);
       persistSynthesisEvents(db, consultationId, event); // histórico salvo (cifrado+auditado)
     });
     orchestrator.start();
-    runtime.active.set(consultationId, { session, orchestrator, events });
+    runtime.active.set(consultationId, { session, orchestrator, events, flushTranscript: wired.flushTranscript });
   } catch (error) {
     // rollback completo: nada fica órfão (sink, sessão STT ou orchestrator)
     runtime.gateway.unregisterAudioSink(consultationId);

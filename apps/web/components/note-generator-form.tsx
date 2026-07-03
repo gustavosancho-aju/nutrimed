@@ -2,7 +2,13 @@
 
 import { useActionState } from 'react';
 import { generateNoteAction } from '@/lib/note-actions';
-import { ACTION_ERROR_MESSAGES } from '@/lib/action-result';
+import { ACTION_ERROR_MESSAGES, type ActionErrorCode } from '@/lib/action-result';
+
+/** Mensagens no CONTEXTO da nota — 'internal' genérico falava do fluxo errado. */
+const NOTE_ERROR_MESSAGES: Record<ActionErrorCode, string> = {
+  ...ACTION_ERROR_MESSAGES,
+  internal: 'Falha inesperada ao gerar a nota — tente novamente; se persistir, contate o suporte.',
+};
 
 /**
  * Botão "Gerar nota" com useActionState (E9): a action retorna ActionResult e a
@@ -32,7 +38,7 @@ export function NoteGeneratorForm({
       </form>
       {result && !result.ok ? (
         <p className="max-w-[280px] text-right text-[11px] text-red-600">
-          {ACTION_ERROR_MESSAGES[result.code]}
+          {NOTE_ERROR_MESSAGES[result.code]}
         </p>
       ) : null}
     </div>

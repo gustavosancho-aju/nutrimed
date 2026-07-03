@@ -145,6 +145,18 @@ async function processUpdate(
 
 /** Loop de long-polling (dev). Não-bloqueante: chamado com `void`. */
 async function pollLoop(token: string, deps: BotDeps, telemetry: TelegramTelemetry): Promise<void> {
+  // GUARDA REAL do incidente 2026-07-02: se o token já tem webhook registrado,
+  // ele está em uso por um ambiente webhook (produção) — polling local com
+  // esse token faria deleteWebhook e derrubaria o bot em prod. RECUSA.
+  const info = await tgCall<{ url?: string }>(token, 'getWebhookInfo', {}).catch(() => null);
+  const webhookUrl = info?.result?.url;
+  if (webhookUrl) {
+    console.error(
+      `[telegram] long-polling RECUSADO: este token tem webhook ativo (${webhookUrl}) — ` +
+        'provavelmente é o token de PRODUÇÃO. Use um bot de teste do @BotFather para dev.',
+    );
+    return;
+  }
   await tgCall(token, 'deleteWebhook', { drop_pending_updates: false }).catch(() => undefined);
   let offset = 0;
   for (;;) {
