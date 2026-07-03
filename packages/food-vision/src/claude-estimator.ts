@@ -1,3 +1,4 @@
+import { stripJsonFences } from '@nutrimed/providers';
 import {
   type IFoodEstimator,
   type FoodImageInput,
@@ -119,7 +120,7 @@ export class ClaudeFoodEstimator implements IFoodEstimator {
     const text = data.content?.find((b) => b.type === 'text')?.text;
     if (!text) throw new FoodEstimatorError('Resposta sem bloco de texto.', 'parse');
 
-    const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    const cleaned = stripJsonFences(text);
     let parsed: unknown;
     try {
       parsed = JSON.parse(cleaned);

@@ -1,4 +1,4 @@
-import type { ILlmProvider, PersonaId } from '@nutrimed/providers';
+import { stripJsonFences, type ILlmProvider, type PersonaId } from '@nutrimed/providers';
 
 /**
  * CaseState (B3) — memória ESTRUTURADA do caso, mantida por IA para IA.
@@ -110,7 +110,7 @@ export class CaseStateTracker {
 
 /** Parse tolerante: null em vez de exceção (o board segue com o estado anterior). */
 export function parseCaseState(raw: string): CaseState | null {
-  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+  const cleaned = stripJsonFences(raw);
   try {
     const obj = JSON.parse(cleaned) as Record<string, unknown>;
     const arr = (v: unknown): string[] =>

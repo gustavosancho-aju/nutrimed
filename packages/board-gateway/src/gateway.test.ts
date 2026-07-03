@@ -4,24 +4,13 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { WebSocket } from 'ws';
 import { PGlite } from '@electric-sql/pglite';
-import { runMigrations, type SqlExecutor } from '@nutrimed/db';
+import { runMigrations, type SqlExecutor , pgliteExecutor } from '@nutrimed/db';
 import { createSession } from '@nutrimed/auth';
 import { createConsultation } from '@nutrimed/consent';
 import type { BoardOrchestrator, BoardContributionEvent, BoardListener } from '@nutrimed/board';
 import type { BoardServerMessage } from '@nutrimed/shared-types';
 import { BoardGateway } from './gateway';
 
-function fromPglite(db: PGlite): SqlExecutor {
-  return {
-    exec: async (sql: string): Promise<void> => {
-      await db.exec(sql);
-    },
-    query: async <T = Record<string, unknown>>(text: string, params?: unknown[]) => {
-      const result = await db.query<T>(text, params as unknown[]);
-      return { rows: result.rows };
-    },
-  };
-}
 
 /** Fonte de eventos controlável com a MESMA superfície de subscribe do orchestrator. */
 function makeEventSource() {
@@ -84,7 +73,7 @@ describe('BoardGateway (Story 3.2 — ADR-003)', () => {
 
   beforeAll(async () => {
     db = new PGlite();
-    exec = fromPglite(db);
+    exec = pgliteExecutor(db);
     await runMigrations(exec);
     const res = await exec.query<{ id: string }>(
       'INSERT INTO app_user (email, display_name, password_hash) VALUES ($1, $2, $3) RETURNING id',

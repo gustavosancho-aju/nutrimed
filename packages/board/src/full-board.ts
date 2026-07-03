@@ -67,7 +67,16 @@ export interface FullBoardConfig extends GatekeeperConfig {
   readonly caseReviewMs?: number;
   /** B4: telemetria — desfecho de cada review. */
   readonly onCaseReview?: (outcome: 'skip' | 'contribution' | 'discarded') => void;
+  /**
+   * B2: limiar de similaridade (Jaccard) do dedup semântico — ÚNICO ponto de
+   * verdade para o corte pré-LLM E pós-LLM (default 0.5). Calibrar com a
+   * telemetria "autonomia" do piloto.
+   */
+  readonly semanticDedupThreshold?: number;
 }
+
+/** B2: default do limiar de dedup semântico (compartilhado pré e pós LLM). */
+export const DEFAULT_SEMANTIC_DEDUP_THRESHOLD = 0.5;
 
 interface RoundEntry {
   readonly contribution: PersonaContribution;
@@ -89,7 +98,9 @@ export class FullBoardOrchestrator {
   /** B2 — pré-LLM: 1º segmento que rendeu contribuição por persona+tópico (consulta inteira). */
   private readonly seenTopics = new Map<string, string>();
   /** B2 — pós-LLM: similaridade contra TODOS os textos já exibidos. */
-  private readonly semanticDedup = new SemanticDeduplicator();
+  private readonly semanticDedup: SemanticDeduplicator;
+  /** B2 — limiar único (pré e pós LLM). */
+  private readonly semanticDedupThreshold: number;
   /** B3 — memória estruturada do caso (desliga sozinha sem completeText). */
   private readonly caseState: CaseStateTracker;
   /** Tipos por tópico p/ detecção de divergência (FR7). */
@@ -118,6 +129,8 @@ export class FullBoardOrchestrator {
   ) {
     this.gate = new BoardGatekeeper(config);
     this.reasoner = new PersonaReasoner(retriever, llm);
+    this.semanticDedupThreshold = config.semanticDedupThreshold ?? DEFAULT_SEMANTIC_DEDUP_THRESHOLD;
+    this.semanticDedup = new SemanticDeduplicator({ threshold: this.semanticDedupThreshold });
     this.caseState = new CaseStateTracker(llm, {
       everyNFinals: config.caseStateEveryNFinals,
       onUpdate: config.onCaseStateUpdate,
@@ -270,15 +283,18 @@ export class FullBoardOrchestrator {
         return;
       }
       const eventId = randomUUID();
+      const topicKey = `case-review-${parsed.personaId}`;
       await writeAudit(this.db, eventId, {
         triggeredBy: 'case-review',
         kbSources: [],
         modelVersion: res.modelVersion ?? 'unknown',
       });
-      this.round.push({
-        contribution: { ...parsed, modelVersion: res.modelVersion },
-        topicKey: `case-review-${parsed.personaId}`,
-      });
+      // consistência com produce(): o review alimenta seenTopics (dedup pré-LLM
+      // de reviews futuros no mesmo tópico) e topicTypes (divergência FR7) —
+      // antes o caminho do review era cego a ambos.
+      this.seenTopics.set(`${parsed.personaId}:${topicKey}`, parsed.text);
+      const divergent = this.registerAndCheckDivergence(topicKey, parsed.personaId, parsed.type);
+      this.round.push({ contribution: { ...parsed, modelVersion: res.modelVersion }, topicKey });
       this.lastContributionAt = this.now();
       this.synthesized = false;
       this.emit({
@@ -287,7 +303,7 @@ export class FullBoardOrchestrator {
         consultationId: this.session.consultationId,
         contribution: { ...parsed, modelVersion: res.modelVersion },
         personaIds: [parsed.personaId],
-        divergent: false,
+        divergent,
         triggeredBy: 'case-review',
         at: this.now(),
       });
@@ -307,7 +323,7 @@ export class FullBoardOrchestrator {
     const firstSegment = this.seenTopics.get(topicSeenKey);
     if (firstSegment && candidate.severity !== 'critical') {
       const similarity = jaccard(keywordSet(candidate.segmentText), keywordSet(firstSegment));
-      if (similarity >= 0.5) {
+      if (similarity >= this.semanticDedupThreshold) {
         this.config2.onDecision?.('semantic-duplicate');
         return;
       }
@@ -331,7 +347,7 @@ export class FullBoardOrchestrator {
         return;
       }
       this.seenTopics.set(topicSeenKey, firstSegment ?? candidate.segmentText);
-      const divergent = this.registerAndCheckDivergence(candidate, contribution);
+      const divergent = this.registerAndCheckDivergence(candidate.topicKey, candidate.personaId, candidate.type);
       const eventId = randomUUID();
       await writeAudit(this.db, eventId, {
         triggeredBy: candidate.triggerId,
@@ -357,12 +373,15 @@ export class FullBoardOrchestrator {
     }
   }
 
-  /** FR7: tipos conflitantes de personas distintas no mesmo tópico ⇒ divergência. */
-  private registerAndCheckDivergence(candidate: Candidate, contribution: PersonaContribution): boolean {
-    const types = this.topicTypes.get(candidate.topicKey) ?? new Map<PersonaId, string>();
-    types.set(candidate.personaId, candidate.type);
-    this.topicTypes.set(candidate.topicKey, types);
-    void contribution;
+  /**
+   * FR7: tipos conflitantes de personas distintas no mesmo tópico ⇒ divergência.
+   * Recebe (topicKey, personaId, type) — chamável tanto pelo caminho keyword
+   * (produce) quanto pelo case review, para que nenhum seja cego à divergência.
+   */
+  private registerAndCheckDivergence(topicKey: string, personaId: PersonaId, type: string): boolean {
+    const types = this.topicTypes.get(topicKey) ?? new Map<PersonaId, string>();
+    types.set(personaId, type);
+    this.topicTypes.set(topicKey, types);
     const distinctTypes = new Set(types.values());
     return types.size > 1 && distinctTypes.size > 1;
   }
@@ -372,6 +391,7 @@ export class FullBoardOrchestrator {
     if (this.round.length === 0) return;
     const entries = [...this.round];
     try {
+      const caseBlock = this.caseState.renderForPrompt(); // render 1× (era 2× na template)
       const summary = entries
         .map((e) => `- ${PERSONA_PROFILES[e.contribution.personaId].displayName}: ${e.contribution.text}`)
         .join('\n');
@@ -383,7 +403,7 @@ export class FullBoardOrchestrator {
           'Termine SEMPRE devolvendo a decisão ao médico (ex.: "a conduta é sua").',
         context: [],
         // B3: a síntese do Aurélio finalmente enxerga o caso INTEIRO (antes: só a janela curta)
-        transcript: `${this.caseState.renderForPrompt() ? `${this.caseState.renderForPrompt()}\n\n` : ''}Transcrição recente: ${this.recentFinals.join(' ')}\n\nContribuições do board:\n${summary}`,
+        transcript: `${caseBlock ? `${caseBlock}\n\n` : ''}Transcrição recente: ${this.recentFinals.join(' ')}\n\nContribuições do board:\n${summary}`,
         // B1: sínteses anteriores + contribuições da consulta inteira — evita
         // síntese repetida e dá ao Aurélio a progressão do caso
         priorContributions: this.history

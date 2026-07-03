@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomBytes } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
-import { runMigrations, type SqlExecutor } from '@nutrimed/db';
+import { runMigrations, type SqlExecutor , pgliteExecutor } from '@nutrimed/db';
 import { setNutritionGoal } from '@nutrimed/patients';
 import { createPairingCode } from '@nutrimed/telegram-link';
 import { FakeFoodEstimator, type FoodImageInput } from '@nutrimed/food-vision';
@@ -15,17 +15,6 @@ import { handleStart, handlePhoto, handleToday, handleGoal, type BotDeps } from 
  * Imprime as respostas reais do bot para inspeção.
  */
 
-function fromPglite(db: PGlite): SqlExecutor {
-  return {
-    exec: async (sql: string): Promise<void> => {
-      await db.exec(sql);
-    },
-    query: async <T = Record<string, unknown>>(text: string, params?: unknown[]) => {
-      const result = await db.query<T>(text, params as unknown[]);
-      return { rows: result.rows };
-    },
-  };
-}
 
 const KEY = randomBytes(32);
 const IMAGE: FoodImageInput = { base64: 'x', mediaType: 'image/jpeg' };
@@ -40,7 +29,7 @@ describe('Jornada completa do paciente (E2E interno)', () => {
 
   beforeAll(async () => {
     db = new PGlite();
-    exec = fromPglite(db);
+    exec = pgliteExecutor(db);
     await runMigrations(exec);
     const u = await exec.query<{ id: string }>(
       'INSERT INTO app_user (email, display_name, password_hash) VALUES ($1, $2, $3) RETURNING id',

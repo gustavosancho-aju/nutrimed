@@ -353,6 +353,10 @@ importers:
         version: 5.9.3
 
   packages/food-vision:
+    dependencies:
+      '@nutrimed/providers':
+        specifier: workspace:*
+        version: link:../providers
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -375,6 +379,10 @@ importers:
         version: 5.9.3
 
   packages/lab-import:
+    dependencies:
+      '@nutrimed/providers':
+        specifier: workspace:*
+        version: link:../providers
     devDependencies:
       '@types/node':
         specifier: ^22.0.0

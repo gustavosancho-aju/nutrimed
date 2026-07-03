@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
-import { runMigrations, type SqlExecutor } from '@nutrimed/db';
+import { runMigrations, type SqlExecutor , pgliteExecutor } from '@nutrimed/db';
 import { getAuditTrail } from '@nutrimed/audit';
 import {
   createPairingCode,
@@ -11,17 +11,6 @@ import {
   getLinkStatus,
 } from './link';
 
-function fromPglite(db: PGlite): SqlExecutor {
-  return {
-    exec: async (sql: string): Promise<void> => {
-      await db.exec(sql);
-    },
-    query: async <T = Record<string, unknown>>(text: string, params?: unknown[]) => {
-      const result = await db.query<T>(text, params as unknown[]);
-      return { rows: result.rows };
-    },
-  };
-}
 
 async function insertUser(exec: SqlExecutor, email: string): Promise<string> {
   const res = await exec.query<{ id: string }>(
@@ -46,7 +35,7 @@ describe('Telegram Link Service — pareamento + gate do canal (E12 — 12.3)', 
 
   beforeAll(async () => {
     db = new PGlite();
-    exec = fromPglite(db);
+    exec = pgliteExecutor(db);
     await runMigrations(exec);
     userId = await insertUser(exec, 'medico@nutrimed.test');
   });

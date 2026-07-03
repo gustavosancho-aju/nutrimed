@@ -8,6 +8,7 @@ export {
 } from './orchestrator';
 export {
   FullBoardOrchestrator,
+  DEFAULT_SEMANTIC_DEDUP_THRESHOLD,
   type FullBoardEvent,
   type FullBoardListener,
   type FullBoardConfig,

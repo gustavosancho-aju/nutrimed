@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
-import { runMigrations, type SqlExecutor } from '@nutrimed/db';
+import { runMigrations, type SqlExecutor , pgliteExecutor } from '@nutrimed/db';
 import { createConsultation } from '@nutrimed/consent';
 
 /**
@@ -17,17 +17,6 @@ vi.mock('server-only', () => ({}));
 vi.mock('./db', () => ({ getDb: async () => holder.db! }));
 vi.mock('./crypto-key', () => ({ getEncryptionKey: () => Buffer.alloc(32, 7) }));
 
-function fromPglite(db: PGlite): SqlExecutor {
-  return {
-    exec: async (sql: string): Promise<void> => {
-      await db.exec(sql);
-    },
-    query: async <T = Record<string, unknown>>(text: string, params?: unknown[]) => {
-      const result = await db.query<T>(text, params as unknown[]);
-      return { rows: result.rows };
-    },
-  };
-}
 
 describe('startLiveBoard (A1 — gate de consentimento antes do sink)', () => {
   let runtimeModule: typeof import('./board-runtime');
@@ -37,7 +26,7 @@ describe('startLiveBoard (A1 — gate de consentimento antes do sink)', () => {
     process.env.BOARD_WS_PORT = '0'; // porta efêmera — não conflita com dev/testes paralelos
     process.env.DEEPGRAM_API_KEY = 'dg-test-key';
     const pglite = new PGlite();
-    const db = fromPglite(pglite);
+    const db = pgliteExecutor(pglite);
     await runMigrations(db);
     holder.db = db;
 

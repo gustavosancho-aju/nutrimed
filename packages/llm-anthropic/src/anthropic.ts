@@ -1,3 +1,4 @@
+import { stripJsonFences } from '@nutrimed/providers';
 import type {
   ILlmProvider,
   LlmCompletionRequest,
@@ -212,7 +213,7 @@ interface ParsedContribution {
 
 /** Parse tolerante do JSON do modelo (aceita cercas de código por robustez). */
 export function parseContribution(raw: string): ParsedContribution {
-  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+  const cleaned = stripJsonFences(raw);
   let obj: Record<string, unknown>;
   try {
     obj = JSON.parse(cleaned) as Record<string, unknown>;

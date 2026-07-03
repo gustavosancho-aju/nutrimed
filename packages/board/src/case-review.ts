@@ -1,4 +1,9 @@
-import type { ContributionSeverity, ContributionType, PersonaId } from '@nutrimed/providers';
+import {
+  stripJsonFences,
+  type ContributionSeverity,
+  type ContributionType,
+  type PersonaId,
+} from '@nutrimed/providers';
 
 /**
  * Case Review (B4) — análise periódica do caso DESACOPLADA de keywords.
@@ -43,7 +48,7 @@ const SEVERITIES = new Set<ContributionSeverity>(['normal', 'critical']);
  * (tratado como skip; o board nunca cai por causa do review).
  */
 export function parseCaseReview(raw: string): CaseReviewResult | null {
-  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+  const cleaned = stripJsonFences(raw);
   try {
     const obj = JSON.parse(cleaned) as Record<string, unknown>;
     if (obj.skip === true) return { skip: true };
