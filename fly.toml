@@ -55,10 +55,10 @@ primary_region = "gru"   # São Paulo — critério eliminatório de residência
     method = "GET"
     path = "/login"
 
-# --- WebSocket do board (porta 3001: /board e /audio) -----------------------
-# Serviço TCP cru com TLS terminado pelo Fly → handler "tls" + "http" para
-# permitir o upgrade WebSocket. SEM idle timeout que mate conexões longas:
-# o Fly não fecha WS ociosos por padrão; o heartbeat do BoardGateway mantém vivo.
+# --- WebSocket LEGADO na 3001 (transição A6 — remover depois) ---------------
+# Desde o PR #1 o caminho PRINCIPAL do WS é a MESMA porta do HTTP (443, modo
+# attached via server.mjs). Este serviço mantém a URL antiga (wss://...:3001)
+# viva só para clientes com a página aberta durante a transição.
 [[services]]
   protocol = "tcp"
   internal_port = 3001
@@ -67,10 +67,8 @@ primary_region = "gru"   # São Paulo — critério eliminatório de residência
   min_machines_running = 1
   processes = ["app"]
 
-  # IMPORTANTE: o WS NÃO pode declarar a porta 443 — ela é exclusiva do
-  # [http_service] (Next, porta 3000). Declarar 443 aqui faz o Fly rotear o
-  # tráfego HTTP para o gateway WS, que responde 426 (Upgrade Required). O board
-  # usa a porta 3001 (NEXT_PUBLIC_BOARD_WS_URL = wss://...:3001).
+  # IMPORTANTE: este bloco NÃO pode declarar a porta 443 — ela é exclusiva do
+  # [http_service] (custom server: Next + upgrades WS na mesma porta).
   [[services.ports]]
     port = 3001
     handlers = ["tls", "http"]
