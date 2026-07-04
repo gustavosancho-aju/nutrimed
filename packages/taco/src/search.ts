@@ -53,8 +53,10 @@ interface IndexedFood {
   readonly tokenSet: ReadonlySet<string>;
 }
 
+// Indexa APENAS a descrição — a categoria contém termos genéricos ("Alimentos
+// preparados") que gerariam falsos positivos para consultas sem relação.
 const INDEX: readonly IndexedFood[] = FOODS.map((food) => {
-  const tokens = tokenize(`${food.description} ${food.category}`);
+  const tokens = tokenize(food.description);
   return { food, tokens, tokenSet: new Set(tokens) };
 });
 

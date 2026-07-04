@@ -278,4 +278,25 @@ CREATE INDEX IF NOT EXISTS idx_transcript_segment_consultation
   ON transcript_segment(consultation_id, seq);
 `,
   },
+  {
+    name: '0009_nutrition_report',
+    sql: `
+-- Relatório nutricional da consulta (E13): recordatório extraído da transcrição,
+-- quantificado DETERMINISTICAMENTE pela tabela TACO. content_enc = markdown
+-- editável pelo médico (cifrado, NFR9); data_enc = JSON estruturado do cálculo
+-- (recordatório + itens TACO + totais) para auditoria e re-render da tabela na UI.
+-- 1:1 com a consulta — regenerar sobrescreve o rascunho (mesma postura da nota E9).
+
+CREATE TABLE IF NOT EXISTS nutrition_report (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  consultation_id  uuid NOT NULL UNIQUE REFERENCES consultation(id),
+  content_enc      text NOT NULL,
+  data_enc         text,
+  model_version    text,
+  taco_version     text,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now()
+);
+`,
+  },
 ];

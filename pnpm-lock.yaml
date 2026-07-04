@@ -404,6 +404,40 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
+  packages/nutrition-report:
+    dependencies:
+      '@nutrimed/audit':
+        specifier: workspace:*
+        version: link:../audit
+      '@nutrimed/crypto':
+        specifier: workspace:*
+        version: link:../crypto
+      '@nutrimed/db':
+        specifier: workspace:*
+        version: link:../db
+      '@nutrimed/patients':
+        specifier: workspace:*
+        version: link:../patients
+      '@nutrimed/providers':
+        specifier: workspace:*
+        version: link:../providers
+      '@nutrimed/taco':
+        specifier: workspace:*
+        version: link:../taco
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.5.0
+        version: 0.5.1
+      '@nutrimed/consent':
+        specifier: workspace:*
+        version: link:../consent
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.21
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
   packages/patients:
     dependencies:
       '@nutrimed/audit':
