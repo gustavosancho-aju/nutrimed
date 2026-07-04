@@ -47,6 +47,21 @@ describe('Story 4.1 — TriggerDetector (FR3/FR4/FR5, sem LLM)', () => {
     }
   });
 
+  it('FR4: dor precordial (incl. corrupção do STT) e dor aos esforços disparam Paulo', () => {
+    // regressão da consulta cbb25091 (2026-07-04): STT gerou "dor primordial"
+    for (const text of [
+      'dor precordial há duas semanas',
+      'você tem dor primordial quando faz exercício físico',
+      'sente aperto no peito subindo escada',
+      'precordialgia atípica',
+      'sinto dores quando faço caminhada mais agressiva',
+    ]) {
+      const matches = detector.detect(text, 0).filter((m) => m.trigger.personaId === 'paulo');
+      expect(matches.length, text).toBeGreaterThan(0);
+      expect(matches[0]!.trigger.severityHint).toBe('critical');
+    }
+  });
+
   it('FR5: sinais tireoidianos e platô disparam Yara como hipótese', () => {
     const tireoide = detector.detect('muito cansaço, queda de cabelo e sente frio', 0);
     expect(tireoide.some((m) => m.trigger.id === 'yara-tireoide')).toBe(true);

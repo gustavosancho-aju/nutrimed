@@ -40,10 +40,23 @@ export const PAULO_TRIGGERS: readonly PersonaTriggerDef[] = [
   {
     id: 'paulo-cv-sintomas',
     personaId: 'paulo',
-    pattern: /press[ãa]o alta|hipertens[ãa]o|palpita[çc][õo]?[ãa]?[oe]s?|dor (no peito|tor[áa]cica)|falta de ar|dispneia/i,
+    // "primordial" cobre a corrupção recorrente de "precordial" pelo STT
+    // (consulta cbb25091, 2026-07-04) — recall > precisão em gatilho crítico.
+    pattern:
+      /press[ãa]o alta|hipertens[ãa]o|palpita[çc][õo]?[ãa]?[oe]s?|dor (no peito|tor[áa]cica|precordial|primordial)|pr[eé]?[- ]?cordial|precordialgia|aperto no peito|angina|falta de ar|dispneia/i,
     typeHint: 'atencao',
     severityHint: 'critical',
     baseWeight: 0.9,
+  },
+  {
+    // Dor aos esforços: bandeira vermelha CV clássica que não depende de o
+    // paciente nomear a região certa (ou de o STT acertar "precordial").
+    id: 'paulo-dor-esforco',
+    personaId: 'paulo',
+    pattern: /dor(es)?\b.{0,60}\b(esfor[çc]o|exerc[íi]cio|atividade f[íi]sica|caminhada|academia)/i,
+    typeHint: 'atencao',
+    severityHint: 'critical',
+    baseWeight: 0.8,
   },
   {
     id: 'paulo-risco-cv',

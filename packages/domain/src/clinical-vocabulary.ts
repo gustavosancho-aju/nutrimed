@@ -27,6 +27,14 @@ export const CLINICAL_VOCABULARY: readonly string[] = [
   'palpitação',
   'taquicardia',
   'pressão arterial',
+  // lição da consulta cbb25091 (2026-07-04): o STT transcreveu "precordial" como
+  // "primordial" e "palpitação" como "próvercoação" — a dor precordial aos
+  // esforços passou invisível pelos gatilhos do Paulo (E4).
+  'precordial',
+  'precordialgia',
+  'dor torácica',
+  'angina',
+  'dispneia',
   // endócrino (Yara)
   'TSH',
   'T4 livre',
