@@ -53,6 +53,20 @@ describe('searchFood', () => {
     expect(match!.food.description.toLowerCase()).toContain('grelhado');
   });
 
+  it('prefere a variante COZIDA quando o paciente não disse "cru" (recordatório = comido)', () => {
+    const [feijao] = searchFood('feijão carioca', 1);
+    expect(feijao!.food.description).toContain('cozido');
+    // pedindo cru explicitamente, a variante crua vence
+    const [cru] = searchFood('feijão carioca cru', 1);
+    expect(cru!.food.description).toContain('cru');
+  });
+
+  it('expande sinônimos coloquiais ("bife grelhado" → carne bovina, não peixe)', () => {
+    const [bife] = searchFood('bife grelhado', 1);
+    expect(bife!.food.description.toLowerCase()).toContain('bovina');
+    expect(bife!.food.description.toLowerCase()).toContain('grelhad');
+  });
+
   it('retorna vazio para consulta sem termos úteis e score baixo para termo inexistente', () => {
     expect(searchFood('de a o')).toEqual([]);
     const noMatch = searchFood('xyzabc123');

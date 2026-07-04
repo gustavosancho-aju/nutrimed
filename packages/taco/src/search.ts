@@ -60,14 +60,36 @@ const INDEX: readonly IndexedFood[] = FOODS.map((food) => {
   return { food, tokens, tokenSet: new Set(tokens) };
 });
 
+// Sinônimos coloquiais → termos como aparecem nas descrições da TACO. Lista curta
+// e deliberada (só termos MUITO comuns em recordatório que não existem na tabela).
+const QUERY_SYNONYMS: Readonly<Record<string, readonly string[]>> = {
+  // "bife" não existe na TACO; o corte usual é contra-filé (tokeniza contra+file)
+  bife: ['carne', 'bovina', 'contra', 'file'],
+  frito: ['frita'],
+  mamao: ['mamao', 'papaia'],
+};
+
+function expandQueryTokens(tokens: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const t of tokens) {
+    const syn = QUERY_SYNONYMS[t];
+    if (syn) out.push(...syn);
+    else out.push(t);
+  }
+  return [...new Set(out)];
+}
+
 /**
  * Busca os k alimentos mais próximos da consulta. Score pondera cobertura da consulta
  * (peso maior — o que o paciente disse precisa estar no item) e concisão do item
  * (desempate: "Arroz, cozido" ganha de "Arroz, com legumes, cozido" para "arroz").
+ * Itens "cru(a)" só vencem se o paciente disse "cru" — recordatório descreve o que
+ * foi COMIDO, e feijão cru (329 kcal/100 g) no lugar do cozido (76) triplicaria o total.
  */
 export function searchFood(query: string, k = 5): TacoMatch[] {
-  const queryTokens = tokenize(query);
+  const queryTokens = expandQueryTokens(tokenize(query));
   if (queryTokens.length === 0) return [];
+  const queryWantsRaw = queryTokens.includes('cru') || queryTokens.includes('crua');
 
   const scored: TacoMatch[] = [];
   for (const entry of INDEX) {
@@ -78,7 +100,10 @@ export function searchFood(query: string, k = 5): TacoMatch[] {
     if (matched === 0) continue;
     const queryCoverage = matched / queryTokens.length;
     const foodCoverage = matched / entry.tokens.length;
-    const score = queryCoverage * 0.75 + foodCoverage * 0.25;
+    let score = queryCoverage * 0.75 + foodCoverage * 0.25;
+    if (!queryWantsRaw && (entry.tokenSet.has('cru') || entry.tokenSet.has('crua'))) {
+      score *= 0.6; // variante crua só entra na falta de alternativa preparada
+    }
     scored.push({ food: entry.food, score: Math.round(score * 1000) / 1000 });
   }
 
