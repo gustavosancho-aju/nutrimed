@@ -12,6 +12,7 @@ export type ActionErrorCode =
   | 'consent-required'
   | 'stt-missing'
   | 'no-transcript'
+  | 'no-recall'
   | 'invalid-input'
   | 'internal';
 
@@ -24,6 +25,8 @@ export const ACTION_ERROR_MESSAGES: Record<ActionErrorCode, string> = {
     'Consentimento de gravação não registrado — registre o consentimento do paciente (botão no topo da página) e tente novamente.',
   'stt-missing': 'O serviço de transcrição não está configurado no servidor — contate o suporte.',
   'no-transcript': 'Sem transcrição nesta sessão — inicie a consulta ao vivo antes de gerar a nota.',
+  'no-recall':
+    'A transcrição não menciona alimentos consumidos — pergunte ao paciente o que ele comeu e gere novamente.',
   'invalid-input': 'Dados da requisição incompletos — recarregue a página e tente de novo.',
   internal: 'Falha inesperada ao iniciar a consulta ao vivo — tente novamente; se persistir, abra o Diagnóstico.',
 };

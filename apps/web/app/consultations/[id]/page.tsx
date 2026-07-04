@@ -7,7 +7,10 @@ import { getDb } from '@/lib/db';
 import { grantConsentAction, revokeConsentAction } from '@/lib/consent-actions';
 import { startDemoBoardAction, requestSynthesisAction } from '@/lib/board-actions';
 import { saveNoteAction } from '@/lib/note-actions';
+import { saveNutritionReportAction } from '@/lib/nutrition-report-actions';
 import { NoteGeneratorForm } from '@/components/note-generator-form';
+import { NutritionReportForm } from '@/components/nutrition-report-form';
+import { loadNutritionReport } from '@nutrimed/nutrition-report';
 import { DiagnosticsPanel } from '@/components/diagnostics-panel';
 import { getBoardRuntime, getTelemetryReport, BOARD_WS_PORT } from '@/lib/board-runtime';
 import { getEncryptionKey } from '@/lib/crypto-key';
@@ -43,6 +46,7 @@ export default async function ConsultationPage({
       ? (process.env.NEXT_PUBLIC_BOARD_WS_URL ?? '')
       : (process.env.NEXT_PUBLIC_BOARD_WS_URL ?? `ws://localhost:${BOARD_WS_PORT}`);
   const note = authorized ? await loadNote(db, id, getEncryptionKey()) : null;
+  const nutritionReport = authorized ? await loadNutritionReport(db, id, getEncryptionKey()) : null;
   const syntheses = authorized ? await listSyntheses(db, id, getEncryptionKey()) : [];
   const telemetry = authorized ? await getTelemetryReport(id) : null;
 
@@ -177,6 +181,139 @@ export default async function ConsultationPage({
             ) : (
               <p className="mt-4 rounded-[10px] border border-dashed border-ink/15 p-4 text-sm text-ink-muted">
                 Nenhuma nota ainda — rode a consulta e clique em “Gerar nota da consulta”.
+              </p>
+            )}
+          </section>
+
+          {/* E13 — Relatório nutricional (TACO): recordatório da transcrição,
+              quantificado deterministicamente; IA redige, médico decide */}
+          <section aria-label="Relatório nutricional" className="card-premium mt-6 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="font-display text-base font-semibold text-ink">
+                  🥗 Relatório nutricional
+                </h2>
+                <p className="text-xs text-ink-muted">
+                  Recordatório extraído da transcrição e quantificado pela tabela TACO
+                  {nutritionReport?.tacoVersion ? ` (${nutritionReport.tacoVersion})` : ''} — revise,
+                  edite e salve. Cifrado em repouso e auditado.
+                </p>
+              </div>
+              <NutritionReportForm consultationId={id} hasReport={Boolean(nutritionReport)} />
+            </div>
+
+            {nutritionReport ? (
+              <>
+                {nutritionReport.data ? (
+                  <div className="mt-4 overflow-x-auto rounded-[10px] border border-ink/10">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-surface text-ink-muted">
+                        <tr>
+                          <th className="px-3 py-2 font-medium">Item relatado</th>
+                          <th className="px-3 py-2 font-medium">Porção</th>
+                          <th className="px-3 py-2 font-medium">kcal</th>
+                          <th className="px-3 py-2 font-medium">Prot. (g)</th>
+                          <th className="px-3 py-2 font-medium">Carb. (g)</th>
+                          <th className="px-3 py-2 font-medium">Gord. (g)</th>
+                          <th className="px-3 py-2 font-medium">Fonte TACO</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {nutritionReport.data.items.map((entry, idx) =>
+                          entry.taco && entry.nutrients ? (
+                            <tr key={idx} className="border-t border-ink/10 text-ink">
+                              <td className="px-3 py-2">
+                                {entry.item.food}
+                                {entry.status === 'uncertain' ? (
+                                  <span className="ml-1 text-amber-600" title="Correspondência incerta na TACO">
+                                    ⚠
+                                  </span>
+                                ) : null}
+                              </td>
+                              <td className="px-3 py-2">
+                                {entry.grams} g
+                                {entry.gramsEstimated ? (
+                                  <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] text-amber-800">
+                                    ~estimada{entry.portionLabel ? `: ${entry.portionLabel}` : ''}
+                                  </span>
+                                ) : null}
+                              </td>
+                              <td className="px-3 py-2">{entry.nutrients.kcal ?? '—'}</td>
+                              <td className="px-3 py-2">{entry.nutrients.protein ?? '—'}</td>
+                              <td className="px-3 py-2">{entry.nutrients.carbs ?? '—'}</td>
+                              <td className="px-3 py-2">{entry.nutrients.fat ?? '—'}</td>
+                              <td className="px-3 py-2 text-ink-muted">
+                                {entry.taco.description}{' '}
+                                <span className="text-[10px]">#{entry.taco.id}</span>
+                              </td>
+                            </tr>
+                          ) : null,
+                        )}
+                        <tr className="border-t border-ink/15 bg-surface font-semibold text-ink">
+                          <td className="px-3 py-2">Totais</td>
+                          <td className="px-3 py-2 text-[10px] font-normal text-ink-muted">
+                            {nutritionReport.data.estimatedCount > 0
+                              ? `${nutritionReport.data.estimatedCount} porção(ões) estimada(s)`
+                              : 'todas as porções relatadas'}
+                          </td>
+                          <td className="px-3 py-2">{nutritionReport.data.totals.kcal ?? 0}</td>
+                          <td className="px-3 py-2">{nutritionReport.data.totals.protein ?? 0}</td>
+                          <td className="px-3 py-2">{nutritionReport.data.totals.carbs ?? 0}</td>
+                          <td className="px-3 py-2">{nutritionReport.data.totals.fat ?? 0}</td>
+                          <td className="px-3 py-2" />
+                        </tr>
+                        {nutritionReport.data.goal && nutritionReport.data.goalDelta ? (
+                          <tr className="border-t border-ink/10 text-ink-muted">
+                            <td className="px-3 py-2">Δ vs meta vigente</td>
+                            <td className="px-3 py-2 text-[10px]">
+                              meta: {nutritionReport.data.goal.kcal} kcal
+                            </td>
+                            <td className="px-3 py-2">{nutritionReport.data.goalDelta.kcal}</td>
+                            <td className="px-3 py-2">{nutritionReport.data.goalDelta.protein}</td>
+                            <td className="px-3 py-2">{nutritionReport.data.goalDelta.carbs}</td>
+                            <td className="px-3 py-2">{nutritionReport.data.goalDelta.fat}</td>
+                            <td className="px-3 py-2" />
+                          </tr>
+                        ) : null}
+                      </tbody>
+                    </table>
+                    {nutritionReport.data.unmatched.length > 0 ? (
+                      <p className="border-t border-ink/10 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                        ⚠ Sem correspondência na TACO (fora dos totais):{' '}
+                        {nutritionReport.data.unmatched.map((u) => u.food).join(' · ')}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <form action={saveNutritionReportAction} className="mt-4 space-y-3">
+                  <input type="hidden" name="consultationId" value={id} />
+                  <textarea
+                    key={nutritionReport.updatedAt.getTime()} // remonta ao regenerar
+                    name="content"
+                    defaultValue={nutritionReport.content}
+                    rows={14}
+                    aria-label="Conteúdo do relatório nutricional"
+                    className="font-mono-data w-full rounded-[10px] border border-ink/15 bg-white p-4 text-sm leading-relaxed text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                  />
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-ink-muted">
+                      Última atualização: {nutritionReport.updatedAt.toLocaleString('pt-BR')} ·
+                      rascunho gerado por IA com base na tabela TACO — IA assiste, o médico decide.
+                    </p>
+                    <button
+                      type="submit"
+                      className="rounded-[10px] bg-brand px-4 py-2 text-xs font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+                    >
+                      💾 Salvar relatório
+                    </button>
+                  </div>
+                </form>
+              </>
+            ) : (
+              <p className="mt-4 rounded-[10px] border border-dashed border-ink/15 p-4 text-sm text-ink-muted">
+                Nenhum relatório ainda — rode a consulta ao vivo e clique em “Gerar relatório
+                nutricional”.
               </p>
             )}
           </section>

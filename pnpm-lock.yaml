@@ -74,6 +74,9 @@ importers:
       '@nutrimed/llm-anthropic':
         specifier: workspace:^
         version: link:../../packages/llm-anthropic
+      '@nutrimed/nutrition-report':
+        specifier: workspace:*
+        version: link:../../packages/nutrition-report
       '@nutrimed/patients':
         specifier: workspace:*
         version: link:../../packages/patients
@@ -89,6 +92,9 @@ importers:
       '@nutrimed/stt-deepgram':
         specifier: workspace:*
         version: link:../../packages/stt-deepgram
+      '@nutrimed/taco':
+        specifier: workspace:*
+        version: link:../../packages/taco
       '@nutrimed/telegram-bot':
         specifier: workspace:*
         version: link:../../packages/telegram-bot
