@@ -35,7 +35,7 @@ Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 
 | E4 Motores (gate/dedup/pausa) | ✅ núcleo | E9 Documentação Clínica | ✅ |
 | E5 RAG namespaces + Reasoner | ✅ núcleo | E10 Observabilidade & Piloto | ✅ núcleo |
 | E9 Documentação Clínica | ✅ | E11 Pacientes & Dashboard | ✅ completo (4 fases) |
-| E12 Bot de Telegram (foto→nutrição vs metas) | ✅ completo (9 stories) | — | — |
+| E12 Bot de Telegram (foto→nutrição vs metas) | ✅ completo (9 stories) | E13 Relatório Nutricional (TACO) | ✅ núcleo (4 stories) |
 
 **Fluxo vivo:** login (`demo@nutrimed.test`/`nutrimed123`) → consulta → consentimento (default NEGA)
 → `/consultations/[id]`: transcrição AO VIVO + board (3 personas com retratos, feed com hierarquia
@@ -43,17 +43,21 @@ de segurança, Modo Foco tecla F) → "▶ Consulta simulada" (STT roteirizado; 
 ou "🎙️ Consulta ao vivo" (mic real → WS `/audio` na porta da página → Deepgram; transcript persistido
 cifrado) → contribuições reais do **claude-haiku-4-5** auditadas, com memória anti-repetição
 (histórico + skip + dedup semântico + CaseState + case review 90s) → síntese do Aurélio → nota
-clínica gerada/editável (cifrada+auditada) → painel 🩺 Diagnóstico → telemetria (custo/gate/
+clínica gerada/editável (cifrada+auditada) → **🥗 Relatório Nutricional (E13)**: recordatório
+extraído da transcrição pela IA, quantificado DETERMINISTICAMENTE pela tabela TACO embarcada
+(591 alimentos, 4ª ed.), porções não ditas assumidas e SINALIZADAS "~estimada", itens sem match
+sinalizados, delta vs meta do paciente (E11) quando vinculado — rascunho editável cifrado+auditado
+com fontes TACO em kbSources → painel 🩺 Diagnóstico → telemetria (custo/gate/
 latência/ruído/autonomia).
 
-## Monorepo (24 pacotes)
+## Monorepo (26 pacotes)
 
 ```
 apps/web                 Tela de consulta + ficha/dashboard + gateway WS + webhook do bot Telegram
 packages/shared-types    Protocolo WS v1 (contribution/ping/transcript)
 packages/domain          CLINICAL_VOCABULARY (boost STT)
 packages/crypto          AES-256-GCM (NFR9)
-packages/db              Migrations 0001–0008 (0007 sínteses · 0008 transcript cifrado) · PGlite dev / pg prod (TLS)
+packages/db              Migrations 0001–0009 (0008 transcript cifrado · 0009 relatório nutricional) · PGlite dev / pg prod (TLS)
 packages/auth            scrypt + sessões DB-backed
 packages/consent         Gate de gravação FR20 (servidor, default NEGA)
 packages/audit           Trilha append-only com proveniência (NFR10)
@@ -73,6 +77,8 @@ packages/lab-import      E11: extração de laudo PDF (ILabExtractor: Claude nat
 packages/food-vision     E12: estimativa nutricional por foto (IFoodEstimator: Claude visão + fake) — ADR-015
 packages/telegram-link   E12: pareamento por código + gate de consentimento do canal (default NEGA) — ADR-013/014
 packages/telegram-bot    E12: lógica pura do bot (handlers de foto/comandos + orientação por IA)
+packages/taco            E13: tabela TACO 4ª ed. embarcada (591 alimentos) + busca lexical + porções caseiras (regen: scripts/gen-taco.mjs)
+packages/nutrition-report E13: recordatório (LLM) → mapeamento TACO → cálculo determinístico → relatório cifrado+auditado
 ```
 
 Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build` · `npm run dev`.

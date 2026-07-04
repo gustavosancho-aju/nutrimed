@@ -139,6 +139,14 @@ const DEMO_SCRIPT: ReadonlyArray<{ segment: TranscriptSegment; delayMs: number }
     delayMs: 8000,
   },
   { segment: { text: 'Vamos revisar também a rotina alimentar e o sono.', isFinal: true }, delayMs: 11_000 },
+  {
+    segment: {
+      // recordatório alimentar — insumo do Relatório Nutricional (E13)
+      text: 'No recordatório de hoje: no café da manhã, pão francês com manteiga e café; no almoço, quatro colheres de sopa de arroz branco, feijão carioca e um bife grelhado.',
+      isFinal: true,
+    },
+    delayMs: 14_000,
+  },
 ];
 
 /** STT roteirizado: emite o script com timing realista (demo sem microfone). */
