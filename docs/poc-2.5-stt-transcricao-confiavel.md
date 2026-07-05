@@ -16,6 +16,26 @@
 - ⛔ **Falta o insumo empírico**: áudio clínico real em pt-BR + a Deepgram key
   (rotacionar antes — a atual vazou pelo chat). Sem isso a POC não roda; o resto está pronto.
 
+## Resultados — 1º ciclo (áudio TTS, 2026-07-04)
+
+Rodado com `scripts/poc-stt-run.mjs`: 12 frases clínicas pt-BR sintetizadas por **Gemini TTS**
+(referência conhecida) → transcritas por cada config do Deepgram (pré-gravado, linear16) →
+pontuadas com as métricas de `@nutrimed/domain`. Vocabulário completo (64 termos) como boost.
+
+| Config | Recall clínico | WER médio | Termos perdidos |
+|---|---|---|---|
+| nova-2 + keywords | **92,3%** (24/26) | 10,4% | precordial, hipotireoidismo |
+| **nova-3 + keyterm** | **100%** (26/26) | **4,4%** | — |
+
+**Sinal direcional: nova-3 + keyterm vence** — recall clínico perfeito e metade do WER. O nova-2
+ainda produziu tokens estranhos ("D" no lugar de "precordial"/"dislipidemia") que valem investigar
+(possível artefato de `keywords`/redação), mas o nova-3 foi consistentemente mais limpo.
+
+⚠️ **Caveat (não pular):** áudio TTS é mais limpo que consulta real → estes números são um **teto
+otimista**. Antes de trocar produção para nova-3, confirmar com **áudio clínico real** (ruído,
+sotaque, fala sobreposta). O adapter já está pronto: basta `DeepgramConfig.model = 'nova-3'` (o
+boost vira `keyterm` automaticamente). Registrar a decisão em ADR-010 com os números do ciclo real.
+
 ## Arms comparados
 
 | Config | model | boost | observação |
