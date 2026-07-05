@@ -2,6 +2,8 @@
 
 > **Story 1.8.** Perguntas a resolver com consultoria jurídica **antes de dados de pacientes reais** (piloto E10). Este documento **organiza** as questões — não é parecer jurídico. Cada item rastreia a um requisito/risco de origem (Article IV — No Invention).
 >
+> **📎 Insumos factuais para o advogado:** [`brief-tecnico-juridico.md`](brief-tecnico-juridico.md) — inventário de dados, fluxos de transferência internacional, segurança, consentimento e retenção (o que o dev já entregou e as lacunas que dependem da consultoria).
+>
 > **Legenda:** 🔴 **BLOQUEANTE para piloto com pacientes reais** (o E1 marca R1/R2 como bloqueantes) · 🟡 **Evolutivo** (pode ser resolvido após o início do piloto, com salvaguardas).
 
 ## Itens
@@ -9,7 +11,7 @@
 | # | Questão para a consultoria | Origem (FR/NFR/Rxx/ADR) | Classificação |
 |---|---|---|---|
 | CJ-1 | **Base legal de tratamento** de dados sensíveis de saúde: consentimento do titular (art. 11, I LGPD) é suficiente e adequado, ou cabe tutela da saúde (art. 11, II, f)? Como o consentimento de gravação (FR20, Story 1.4) deve ser colhido/registrado para valer como base legal — e quem é o titular a consentir (paciente), dado que hoje quem registra é o médico? | R2, NFR9, FR20 | 🔴 Bloqueante |
-| CJ-2 | **Retenção de áudio e transcrição**: por quanto tempo reter áudio bruto, transcrição e contribuições? Há prazo mínimo (prontuário/CFM) e máximo (minimização LGPD)? Política de descarte/anonimização? | R1, R2, NFR9; architecture §11 ("retenção de áudio/transcrição") | 🔴 Bloqueante |
+| CJ-2 | **Retenção de áudio e transcrição**: por quanto tempo reter áudio bruto, transcrição e contribuições? Há prazo mínimo (prontuário/CFM) e máximo (minimização LGPD)? Política de descarte/anonimização? **Estado atual (fatos):** o áudio bruto NÃO é persistido; são persistidos cifrados e SEM política de descarte automático: `transcript_segment` (finais crus do STT, migr. 0008), **`transcript_review`** (transcrição corrigida pelo médico, migr. 0010 — novo), `clinical_note` (0004), `nutrition_report` (0009), `board_synthesis` (0007) e a trilha `audit_log` (append-only, 0003). Todos herdam desta decisão. | R1, R2, NFR9; architecture §11 ("retenção de áudio/transcrição") | 🔴 Bloqueante |
 | CJ-3 | **Residência e transferência internacional**: a direção do ADR-009 (repouso no BR; processamento efêmero externo via art. 33 com minimização) é suficiente? Há vedação a enviar trechos de transcrição a STT/LLM sem região BR? Quais cláusulas exigir nos DPAs dos fornecedores? | R2, NFR9, ADR-009, ADR-002 | 🔴 Bloqueante |
 | CJ-4 | **Papel da IA como apoio à decisão (CFM Res. 2.314/2022 e correlatas)**: o enquadramento "IA assiste, médico decide" (NFR10), com trilha de auditoria com proveniência (Story 1.5) e disclaimers persistentes (FR19, Story 1.7), é suficiente para afastar caracterização de diagnóstico autônomo? Há exigências adicionais de registro/transparência? | R1, NFR10, FR19; ADR-006 | 🔴 Bloqueante |
 | CJ-5 | **Responsabilidade médica e termos de uso**: como alocar responsabilidade entre médico usuário e plataforma nos termos de uso? O aceite do nutrólogo precisa de cláusulas específicas sobre o caráter assistivo? | R1, NFR10 | 🔴 Bloqueante |
