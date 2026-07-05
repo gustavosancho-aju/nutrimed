@@ -4,10 +4,13 @@
 > clínica curada por persona, não o avatar. Postura regulatória: "IA assiste, médico decide".
 > Stack: pnpm workspaces · Next.js 16 + React 19 + Tailwind 4 · TypeScript · PGlite (dev) / Postgres (prod).
 
-**📋 Registro completo do que foi construído: [`docs/IMPLEMENTATION-RECORD.md`](docs/IMPLEMENTATION-RECORD.md)**
-(rastreabilidade FR/NFR/ADR, evidências ao vivo, decisões e pendências — fonte de verdade do status).
+**📖 Documentação COMPLETA e atual do sistema: [`docs/documentacao-sistema.md`](docs/documentacao-sistema.md)**
+(visão geral, arquitetura, 26 pacotes, modelo de dados, fluxos, integrações, segurança/compliance,
+deploy e roadmap — a referência única do estado atual).
+**📋 Registro histórico do MVP (E1–E10): [`docs/IMPLEMENTATION-RECORD.md`](docs/IMPLEMENTATION-RECORD.md)**
+(rastreabilidade FR/NFR/ADR e evidências ao vivo do snapshot de 2026-06-11).
 
-## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-07-03, main @ PR #1)
+## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-07-04, main @ e306f3d)
 
 **9 de 10 épicos com núcleo implementado e verificado ao vivo** (falta E8 — vídeos).
 **E11 (Pacientes & Dashboard) COMPLETO** (4 fases + extras: faixa ideal/meta nos gráficos e
@@ -23,8 +26,14 @@ agentes**: histórico anti-repetição + `{"skip":true}`, dedup semântico (Jacc
 CaseState (memória estruturada do caso nas personas E na síntese), case review periódico (90s, só
 em pausa) e telemetria `autonomy`. Code review pré-merge: 16 achados, 12 corrigidos (dívidas
 restantes na memória do agente).
-Suíte: **377 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS (24 pacotes) ·
-CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) verde.
+**E13 (Relatório Nutricional TACO) COMPLETO e em produção** (2026-07-04) e **Épico Transcrição
+Confiável COMPLETO** (2026-07-04): (1) léxico clínico curado no boost do STT; (2) **revisão do
+transcript pelo médico no fim da consulta** (migration 0010 `transcript_review`; a nota e o
+relatório passam a nascer da versão corrigida); (3) POC 2.5 pronta (adapter escolhe `keyterm` no
+nova-3 vs `keywords` no nova-2 + métricas de recall clínico + harness) — falta só o áudio real.
+**Brief técnico jurídico** entregue (`docs/architecture/project-decisions/brief-tecnico-juridico.md`).
+Suíte: **423 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS (26 pacotes) ·
+CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) verde. Migrations 0001–0010.
 Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 · RUNBOOK Fase 5 = canal Telegram.
 
 | Épico | Status | Épico | Status |
@@ -35,14 +44,17 @@ Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 
 | E4 Motores (gate/dedup/pausa) | ✅ núcleo | E9 Documentação Clínica | ✅ |
 | E5 RAG namespaces + Reasoner | ✅ núcleo | E10 Observabilidade & Piloto | ✅ núcleo |
 | E9 Documentação Clínica | ✅ | E11 Pacientes & Dashboard | ✅ completo (4 fases) |
-| E12 Bot de Telegram (foto→nutrição vs metas) | ✅ completo (9 stories) | E13 Relatório Nutricional (TACO) | ✅ núcleo (4 stories) |
+| E12 Bot de Telegram (foto→nutrição vs metas) | ✅ completo (9 stories) | E13 Relatório Nutricional (TACO) | ✅ completo (em produção) |
+| Transcrição Confiável (léxico + revisão do médico + POC) | ✅ completo (falta áudio real p/ POC) | — | — |
 
 **Fluxo vivo:** login (`demo@nutrimed.test`/`nutrimed123`) → consulta → consentimento (default NEGA)
 → `/consultations/[id]`: transcrição AO VIVO + board (3 personas com retratos, feed com hierarquia
 de segurança, Modo Foco tecla F) → "▶ Consulta simulada" (STT roteirizado; NÃO persiste transcript)
 ou "🎙️ Consulta ao vivo" (mic real → WS `/audio` na porta da página → Deepgram; transcript persistido
 cifrado) → contribuições reais do **claude-haiku-4-5** auditadas, com memória anti-repetição
-(histórico + skip + dedup semântico + CaseState + case review 90s) → síntese do Aurélio → nota
+(histórico + skip + dedup semântico + CaseState + case review 90s) → síntese do Aurélio →
+**📝 revisão do transcript pelo médico** (Transcrição Confiável: corrige o que o STT ouviu; a
+versão corrigida vira a fonte dos documentos) → nota
 clínica gerada/editável (cifrada+auditada) → **🥗 Relatório Nutricional (E13)**: recordatório
 extraído da transcrição pela IA, quantificado DETERMINISTICAMENTE pela tabela TACO embarcada
 (591 alimentos, 4ª ed.), porções não ditas assumidas e SINALIZADAS "~estimada", itens sem match
@@ -55,9 +67,9 @@ latência/ruído/autonomia).
 ```
 apps/web                 Tela de consulta + ficha/dashboard + gateway WS + webhook do bot Telegram
 packages/shared-types    Protocolo WS v1 (contribution/ping/transcript)
-packages/domain          CLINICAL_VOCABULARY (boost STT)
+packages/domain          CLINICAL_VOCABULARY (boost STT, curado) + métricas de acurácia STT (recall clínico/WER — POC 2.5)
 packages/crypto          AES-256-GCM (NFR9)
-packages/db              Migrations 0001–0009 (0008 transcript cifrado · 0009 relatório nutricional) · PGlite dev / pg prod (TLS)
+packages/db              Migrations 0001–0010 (0008 transcript cifrado · 0009 relatório nutricional · 0010 transcript revisado) · PGlite dev / pg prod (TLS)
 packages/auth            scrypt + sessões DB-backed
 packages/consent         Gate de gravação FR20 (servidor, default NEGA)
 packages/audit           Trilha append-only com proveniência (NFR10)
@@ -70,7 +82,7 @@ packages/engines         E4: triggers + score/gate + rate-limit + dedup + pausa
 packages/kb              E5: namespaces isolados + ingestão versionada + Reasoner
 packages/board           E6: FullBoardOrchestrator (3 personas, síntese, divergência)
 packages/board-gateway   WS autenticado /board + /audio
-packages/clinical-notes  E9: nota cifrada+auditada
+packages/clinical-notes  E9: nota cifrada+auditada + transcript persistido/revisado (Transcrição Confiável: saveTranscriptReview)
 packages/telemetry       E10: custo/gate/latência/ruído + Quiet Board trigger
 packages/patients        E11: paciente cifrado + medições (bioimpedância/exames) + computeAge
 packages/lab-import      E11: extração de laudo PDF (ILabExtractor: Claude nativo + fake) — ADR-012
@@ -85,12 +97,17 @@ Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build`
 
 ## Pendências (ordem sugerida)
 
-1. **Teste de voz real do médico** — plumbing pronto e endurecido: erros claros em pt-BR, painel
-   🩺 Diagnóstico, WS na 443 (rede de clínica ok), personas sem repetição. Checklist E2E no plano
-   `~/.claude/plans/fa-a-uma-revis-o-completa-effervescent-puppy.md` §Verificação.
-2. 🔐 **Rotacionar TODAS as keys** (Anthropic/Deepgram/Gemini + **token do bot Telegram** — passaram
-   pelo chat) e **trocar o token do `apps/web/.env.local` por um bot de TESTE** (hoje é o de prod —
-   causou o incidente do webhook em 2026-07-02).
+1. **Parecer jurídico (CJ-1..CJ-13)** — bloqueia o piloto com pacientes reais e o áudio real da
+   POC 2.5. O **brief técnico** (`docs/architecture/project-decisions/brief-tecnico-juridico.md`)
+   deixa a consultoria turnkey; falta o parecer de advogado + regras de negócio (retenção +
+   captura do aceite do paciente). Não é dev.
+2. **Rodar a POC 2.5** — código pronto (adapter keyterm + `scripts/poc-stt-score.mjs` + métricas
+   em `@nutrimed/domain`). Falta o insumo: áudio clínico pt-BR (real consentido OU proxy TTS).
+3. **Teste de voz real do médico** — plumbing pronto e endurecido: erros claros em pt-BR, painel
+   🩺 Diagnóstico, WS na 443, personas sem repetição, transcrição revisável.
+4. 🔐 **Rotação das keys** — Gustavo optou por NÃO rotacionar em 2026-07-04 ("confio no chat").
+   Reavaliar antes de qualquer ambiente compartilhado/comercialização; trocar o token do bot no
+   `apps/web/.env.local` por um bot de TESTE segue recomendado (incidente do webhook 2026-07-02).
 3. **Dívidas do code review do PR #1** (não bloqueiam): stopLiveBoardAction com retorno ignorado no
    stop(); case review cego a seenTopics/divergência FR7; threshold 0.5 do dedup e knobs
    (caseReviewMs etc.) sem config/env; helper único p/ strip de cercas ```json (5 cópias) e

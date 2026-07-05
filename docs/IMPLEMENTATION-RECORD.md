@@ -1,5 +1,9 @@
 # NutriMed — Registro de Implementação (PRD Executado)
 
+> **⚠️ Documento histórico (snapshot do MVP, E1–E10).** Para o estado ATUAL e completo do sistema
+> (E11–E13, Transcrição Confiável, deploy, modelo de dados, compliance) veja
+> [`documentacao-sistema.md`](documentacao-sistema.md).
+>
 > **Data:** 2026-06-11 · **Status:** MVP funcional fim-a-fim (9 de 10 épicos com núcleo implementado)
 > **Fontes de requisitos:** `docs/prd.md` (FR1–FR21, NFR1–NFR12) · `docs/architecture.md` (ADR-001–009) · `docs/epics/`
 > Este documento registra **o que foi construído e verificado**, rastreado aos requisitos de origem (Article IV).
