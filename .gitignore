@@ -43,9 +43,11 @@ out/
 # Package managers
 .pnpm-store/
 
-# Banco local de desenvolvimento (PGlite file-backed)
-.pgdata/
-**/.pgdata/
+# Banco local de desenvolvimento (PGlite file-backed) — inclui backups (.pgdata.bak-*)
+.pgdata
+.pgdata*/
+**/.pgdata
+**/.pgdata*/
 
 # Artefatos de browser/screenshots (Playwright MCP)
 .playwright-mcp/
