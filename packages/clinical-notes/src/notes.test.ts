@@ -14,6 +14,8 @@ import {
   saveTranscriptSegment,
   listTranscriptFinals,
   auditTranscriptPersistStart,
+  saveTranscriptReview,
+  loadTranscriptReview,
 } from './notes';
 
 
@@ -167,6 +169,45 @@ describe('Documentation Service (E9 — FR17)', () => {
 
     it('consulta sem transcript → lista vazia (sem vazamento entre consultas)', async () => {
       expect(await listTranscriptFinals(exec, '00000000-0000-0000-0000-000000000000', KEY)).toEqual([]);
+    });
+  });
+
+  describe('Transcrição Confiável — revisão do médico (NFR9/NFR10)', () => {
+    it('salva cifrado, carrega decifrado e audita como human-edit', async () => {
+      expect(await loadTranscriptReview(exec, consultationId, KEY)).toBeNull();
+
+      await saveTranscriptReview(exec, consultationId, 'Paciente relata dor precordial ao esforço.', KEY);
+
+      // storage bruto ilegível (NFR9)
+      const raw = await exec.query<{ content_enc: string }>(
+        'SELECT content_enc FROM transcript_review WHERE consultation_id = $1',
+        [consultationId],
+      );
+      expect(raw.rows[0]!.content_enc).not.toContain('precordial');
+
+      const review = await loadTranscriptReview(exec, consultationId, KEY);
+      expect(review!.content).toBe('Paciente relata dor precordial ao esforço.');
+
+      const trail = await getAuditTrail(exec, consultationId);
+      const entry = trail.find((e) => e.triggeredBy === 'transcript-reviewed');
+      expect(entry).toBeDefined();
+      expect(entry!.modelVersion).toBe('human-edit');
+    });
+
+    it('regravar sobrescreve a correção (1:1 com a consulta), sem tocar o transcript cru', async () => {
+      await saveTranscriptSegment(exec, consultationId, 99, 'dor primordial', KEY); // cru intocado
+      await saveTranscriptReview(exec, consultationId, 'dor precordial (corrigido)', KEY);
+      await saveTranscriptReview(exec, consultationId, 'dor precordial ao subir escadas', KEY);
+
+      const review = await loadTranscriptReview(exec, consultationId, KEY);
+      expect(review!.content).toBe('dor precordial ao subir escadas');
+      const count = await exec.query<{ n: number }>(
+        'SELECT count(*)::int AS n FROM transcript_review WHERE consultation_id = $1',
+        [consultationId],
+      );
+      expect(count.rows[0]!.n).toBe(1);
+      // o transcript cru do STT permanece como proveniência (o segmento seq 99 salvo acima)
+      expect(await listTranscriptFinals(exec, consultationId, KEY)).toContain('dor primordial');
     });
   });
 });

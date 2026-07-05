@@ -299,4 +299,22 @@ CREATE TABLE IF NOT EXISTS nutrition_report (
 );
 `,
   },
+  {
+    name: '0010_transcript_review',
+    sql: `
+-- Transcrição REVISADA pelo médico (Transcrição Confiável). Os finais crus do STT
+-- (transcript_segment) permanecem intactos como proveniência ("o que a máquina
+-- ouviu"); esta tabela guarda a versão CORRIGIDA pelo médico ("o que de fato foi
+-- dito"). 1:1 com a consulta. Quando existe, é a fonte dos documentos (nota E9 +
+-- relatório E13) — o médico decide o que vira registro clínico. content_enc cifrado
+-- (NFR9); cada save gera trilha 'transcript-reviewed' (NFR10).
+CREATE TABLE IF NOT EXISTS transcript_review (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  consultation_id  uuid NOT NULL UNIQUE REFERENCES consultation(id),
+  content_enc      text NOT NULL,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now()
+);
+`,
+  },
 ];

@@ -22,6 +22,7 @@ import {
   countTranscriptFinals,
   listSyntheses,
   auditTranscriptPersistStart,
+  loadTranscriptReview,
 } from '@nutrimed/clinical-notes';
 import type { SqlExecutor } from '@nutrimed/db';
 import { getDb } from './db';
@@ -381,11 +382,25 @@ export async function getNoteInputs(consultationId: string): Promise<{
     modelVersion: s.modelVersion ?? undefined,
   }));
 
+  // Transcrição Confiável: se o médico revisou o transcript, a versão CORRIGIDA
+  // é a fonte dos documentos — precede tanto o banco cru quanto a memória da sessão
+  // (é a decisão humana sobre o que de fato foi dito).
+  let reviewedFinals: string[] | null = null;
+  try {
+    const review = await loadTranscriptReview(db, consultationId, key);
+    if (review) {
+      const lines = review.content.split(/\r?\n+/).map((l) => l.trim()).filter(Boolean);
+      reviewedFinals = lines.length > 0 ? lines : [review.content.trim()];
+    }
+  } catch (error) {
+    console.error('[nota] falha ao ler transcrição revisada — usando transcript cru:', error);
+  }
+
   if (active) {
     const memFinals = active.session.getSnapshot().finalSegments.map((s) => s.text);
     const memContributions = active.events.map((e) => e.contribution);
     return {
-      finals: dbFinals.length >= memFinals.length ? dbFinals : memFinals,
+      finals: reviewedFinals ?? (dbFinals.length >= memFinals.length ? dbFinals : memFinals),
       // pós-restart+reinício: a memória nova pode estar vazia enquanto as
       // sínteses pré-restart vivem no banco — usa o conjunto mais completo
       contributions: memContributions.length >= synthesesAsContributions.length
@@ -395,8 +410,8 @@ export async function getNoteInputs(consultationId: string): Promise<{
   }
 
   // pós-restart sem sessão ativa: tudo do banco
-  if (dbFinals.length === 0 && synthesesAsContributions.length === 0) return null;
-  return { finals: dbFinals, contributions: synthesesAsContributions };
+  if (!reviewedFinals && dbFinals.length === 0 && synthesesAsContributions.length === 0) return null;
+  return { finals: reviewedFinals ?? dbFinals, contributions: synthesesAsContributions };
 }
 
 /** Snapshot do pipeline para o modo diagnóstico (A5). Só booleanos/contadores

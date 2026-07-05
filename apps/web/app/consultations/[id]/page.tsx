@@ -14,7 +14,8 @@ import { loadNutritionReport } from '@nutrimed/nutrition-report';
 import { DiagnosticsPanel } from '@/components/diagnostics-panel';
 import { getBoardRuntime, getTelemetryReport, BOARD_WS_PORT } from '@/lib/board-runtime';
 import { getEncryptionKey } from '@/lib/crypto-key';
-import { loadNote, listSyntheses } from '@nutrimed/clinical-notes';
+import { loadNote, listSyntheses, listTranscriptFinals, loadTranscriptReview } from '@nutrimed/clinical-notes';
+import { saveTranscriptReviewAction } from '@/lib/transcript-actions';
 import { ConsultationRoom } from '@/components/consultation-room';
 import { TelemetryReport } from '@/components/telemetry-report';
 
@@ -47,6 +48,21 @@ export default async function ConsultationPage({
       : (process.env.NEXT_PUBLIC_BOARD_WS_URL ?? `ws://localhost:${BOARD_WS_PORT}`);
   const note = authorized ? await loadNote(db, id, getEncryptionKey()) : null;
   const nutritionReport = authorized ? await loadNutritionReport(db, id, getEncryptionKey()) : null;
+  // Leitura durável NUNCA derruba a página: chave rotacionada / linha corrompida
+  // degrada para "sem transcrição" (mesma postura de getNoteInputs), em vez de
+  // estourar toda a consulta.
+  let transcriptFinals: string[] = [];
+  let transcriptReview: Awaited<ReturnType<typeof loadTranscriptReview>> = null;
+  if (authorized) {
+    try {
+      transcriptReview = await loadTranscriptReview(db, id, getEncryptionKey());
+      transcriptFinals = await listTranscriptFinals(db, id, getEncryptionKey());
+    } catch (error) {
+      console.error('[consulta] falha ao ler transcrição — seção oculta:', error);
+    }
+  }
+  const transcriptText = transcriptReview?.content ?? transcriptFinals.join('\n');
+  const hasTranscript = transcriptText.trim().length > 0;
   const syntheses = authorized ? await listSyntheses(db, id, getEncryptionKey()) : [];
   const telemetry = authorized ? await getTelemetryReport(id) : null;
 
@@ -136,6 +152,48 @@ export default async function ConsultationPage({
               </form>
             }
           />
+
+          {/* Transcrição Confiável: o médico corrige o que o STT ouviu ANTES de gerar
+              os documentos — a versão revisada vira a fonte da nota e do relatório.
+              Só aparece quando há transcrição persistida (consulta ao vivo). */}
+          {hasTranscript && (
+            <section aria-label="Transcrição da consulta" className="card-premium mt-6 p-6">
+              <div>
+                <h2 className="font-display text-base font-semibold text-ink">
+                  📝 Transcrição da consulta
+                </h2>
+                <p className="text-xs text-ink-muted">
+                  Revise e corrija o que a transcrição automática captou. A nota clínica e o
+                  relatório nutricional são gerados a partir desta versão — o médico decide o que
+                  vira registro. Cifrada em repouso e auditada.
+                </p>
+              </div>
+              <form action={saveTranscriptReviewAction} className="mt-4 space-y-3">
+                <input type="hidden" name="consultationId" value={id} />
+                <textarea
+                  key={transcriptReview?.updatedAt.getTime() ?? 'raw'}
+                  name="content"
+                  defaultValue={transcriptText}
+                  rows={12}
+                  aria-label="Transcrição da consulta"
+                  className="w-full rounded-[10px] border border-ink/15 bg-white p-4 text-sm leading-relaxed text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                />
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs text-ink-muted">
+                    {transcriptReview
+                      ? `Revisada em ${transcriptReview.updatedAt.toLocaleString('pt-BR')} — regenere a nota e o relatório para refletir as correções.`
+                      : 'Ainda mostra a transcrição automática. Corrija termos clínicos e alimentos antes de gerar os documentos.'}
+                  </p>
+                  <button
+                    type="submit"
+                    className="shrink-0 rounded-[10px] bg-brand px-4 py-2 text-xs font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+                  >
+                    💾 Salvar transcrição corrigida
+                  </button>
+                </div>
+              </form>
+            </section>
+          )}
 
           {/* E9 — Nota clínica (FR17/A1): rascunho gerado por IA, editável pelo médico */}
           <section

@@ -8,6 +8,9 @@ export {
   listTranscriptFinals,
   countTranscriptFinals,
   auditTranscriptPersistStart,
+  saveTranscriptReview,
+  loadTranscriptReview,
   type ClinicalNote,
   type BoardSynthesis,
+  type TranscriptReview,
 } from './notes';

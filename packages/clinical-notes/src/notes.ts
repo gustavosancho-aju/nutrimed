@@ -212,6 +212,69 @@ export async function countTranscriptFinals(db: SqlExecutor, consultationId: str
   return Number(res.rows[0]?.count ?? 0);
 }
 
+// ── Transcrição revisada pelo médico (Transcrição Confiável) ───────────────
+
+export interface TranscriptReview {
+  readonly consultationId: string;
+  readonly content: string;
+  readonly updatedAt: Date;
+}
+
+/**
+ * Salva a transcrição CORRIGIDA pelo médico (cifrada — NFR9, auditada — NFR10).
+ * Os finais crus do STT (transcript_segment) NÃO são tocados: ficam como
+ * proveniência do que a máquina ouviu. Esta é a versão que o médico assume como
+ * verdadeira e que passa a alimentar os documentos. Uma trilha por save (não por
+ * caractere) — 'transcript-reviewed'.
+ */
+export async function saveTranscriptReview(
+  db: SqlExecutor,
+  consultationId: string,
+  content: string,
+  encryptionKey: Buffer,
+): Promise<void> {
+  const contentEnc = encryptField(content, encryptionKey);
+  const existing = await db.query<{ id: string }>(
+    'SELECT id FROM transcript_review WHERE consultation_id = $1',
+    [consultationId],
+  );
+  if (existing.rows.length > 0) {
+    await db.query(
+      'UPDATE transcript_review SET content_enc = $2, updated_at = now() WHERE consultation_id = $1',
+      [consultationId, contentEnc],
+    );
+  } else {
+    await db.query(
+      'INSERT INTO transcript_review (consultation_id, content_enc) VALUES ($1, $2)',
+      [consultationId, contentEnc],
+    );
+  }
+  await writeAudit(db, consultationId, {
+    triggeredBy: 'transcript-reviewed',
+    kbSources: [],
+    modelVersion: 'human-edit',
+  });
+}
+
+/** Carrega a transcrição revisada (null se o médico ainda não corrigiu). */
+export async function loadTranscriptReview(
+  db: SqlExecutor,
+  consultationId: string,
+  encryptionKey: Buffer,
+): Promise<TranscriptReview | null> {
+  const res = await db.query<{ content_enc: string; updated_at: Date | string }>(
+    'SELECT content_enc, updated_at FROM transcript_review WHERE consultation_id = $1',
+    [consultationId],
+  );
+  const row = res.rows[0];
+  if (!row) return null;
+  return {
+    consultationId,
+    content: decryptField(row.content_enc, encryptionKey),
+    updatedAt: new Date(row.updated_at),
+  };
+}
+
 /** Carrega e decifra a nota da consulta (null se ainda não existe). */
 export async function loadNote(
   db: SqlExecutor,
