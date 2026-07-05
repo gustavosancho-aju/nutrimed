@@ -95,13 +95,20 @@ export class DeepgramSttProvider implements ISttProvider {
 }
 
 export function buildListenUrl(config: DeepgramConfig, opts: SttOpenOptions): string {
+  const model = config.model ?? 'nova-2';
   const url = new URL(config.endpoint ?? DEFAULT_ENDPOINT);
-  url.searchParams.set('model', config.model ?? 'nova-2');
+  url.searchParams.set('model', model);
   url.searchParams.set('language', opts.lang); // PT-BR (NFR11)
   url.searchParams.set('interim_results', 'true'); // parciais + finais (AC2)
   url.searchParams.set('smart_format', 'true');
+  // Boost do vocabulário clínico (T4). O Nova-3 SUBSTITUIU `keywords` por
+  // `keyterm` (contextual, model-driven, multilíngue, até ~100 termos): setar
+  // `keywords` no nova-3 é silenciosamente IGNORADO pelo Deepgram. Escolhemos o
+  // parâmetro pelo modelo para a POC 2.5 poder comparar nova-2+keywords vs
+  // nova-3+keyterm sem tocar o resto do pipeline.
+  const boostParam = model.startsWith('nova-3') ? 'keyterm' : 'keywords';
   for (const term of opts.vocabularyBoost ?? []) {
-    url.searchParams.append('keywords', term); // boost de termos clínicos (T4)
+    url.searchParams.append(boostParam, term);
   }
   return url.toString();
 }

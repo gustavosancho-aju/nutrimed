@@ -113,6 +113,18 @@ describe('DeepgramSttProvider (Story 2.1)', () => {
       expect(parsed.searchParams.get('language')).toBe('pt-BR');
       expect(parsed.searchParams.get('interim_results')).toBe('true');
       expect(parsed.searchParams.getAll('keywords')).toEqual(['semaglutida', 'TSH']);
+      expect(parsed.searchParams.get('model')).toBe('nova-2'); // default
+    });
+
+    it('no Nova-3 usa keyterm (não keywords — que o Deepgram ignora nesse modelo) — POC 2.5', () => {
+      const url = buildListenUrl(
+        { apiKey: 'k', model: 'nova-3' },
+        { lang: 'pt-BR', vocabularyBoost: ['precordial', 'semaglutida'] },
+      );
+      const parsed = new URL(url);
+      expect(parsed.searchParams.get('model')).toBe('nova-3');
+      expect(parsed.searchParams.getAll('keyterm')).toEqual(['precordial', 'semaglutida']);
+      expect(parsed.searchParams.getAll('keywords')).toEqual([]);
     });
 
     it('autentica via subprotocolo token (sem header custom)', () => {
