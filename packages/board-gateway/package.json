@@ -23,7 +23,7 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.0",
+    "@electric-sql/pglite": "^0.5.4",
     "@nutrimed/consent": "workspace:*",
     "@nutrimed/providers": "workspace:*",
     "@types/node": "^22.0.0",
