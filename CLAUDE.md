@@ -10,13 +10,17 @@ deploy e roadmap — a referência única do estado atual).
 **📋 Registro histórico do MVP (E1–E10): [`docs/IMPLEMENTATION-RECORD.md`](docs/IMPLEMENTATION-RECORD.md)**
 (rastreabilidade FR/NFR/ADR e evidências ao vivo do snapshot de 2026-06-11).
 
-## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-07-04, main @ e306f3d)
+## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-07-11, main @ b8f533d)
 
 **9 de 10 épicos com núcleo implementado e verificado ao vivo** (falta E8 — vídeos).
 **E11 (Pacientes & Dashboard) COMPLETO** (4 fases + extras: faixa ideal/meta nos gráficos e
 **Modo Apresentação** `/patients/[id]/apresentacao` — figura corporal paramétrica por IMC, régua
 OMS e evolução) e **E12 (Bot de Telegram) COMPLETO** (9 stories) — bot **@RafaNutriBot** em
-produção via webhook (visão real do Claude na foto do prato).
+produção via webhook (visão real do Claude na foto do prato). **Bot em GRUPO (2026-07-11,
+b8f533d, deployado e testado em prod):** grupo paciente+nutrólogo+nutricionista pareado como
+canal do paciente; comandos aceitam `/comando@RafaNutriBot`; setup = privacy mode OFF no
+@BotFather + re-adicionar o bot ao grupo + `/start CÓDIGO` no grupo (RUNBOOK passo 18c);
+1 chat por paciente (grupo OU privado); dado clínico em chat coletivo reforça CJ-12.
 **Rodada Transcrição Confiável + Autonomia (PR #1, 2026-07-03):** erros de server action tipados
 com mensagens pt-BR (`ActionResult`) · mimeType do MediaRecorder (Safari avisado) · status do
 pipeline no WS + watchdog · **transcript persistido cifrado** (nota sobrevive a deploy; migration
@@ -32,7 +36,7 @@ transcript pelo médico no fim da consulta** (migration 0010 `transcript_review`
 relatório passam a nascer da versão corrigida); (3) POC 2.5 pronta (adapter escolhe `keyterm` no
 nova-3 vs `keywords` no nova-2 + métricas de recall clínico + harness) — falta só o áudio real.
 **Brief técnico jurídico** entregue (`docs/architecture/project-decisions/brief-tecnico-juridico.md`).
-Suíte: **423 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS (26 pacotes) ·
+Suíte: **424 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS (26 pacotes) ·
 CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) verde. Migrations 0001–0010.
 Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 · RUNBOOK Fase 5 = canal Telegram.
 
@@ -44,7 +48,7 @@ Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 
 | E4 Motores (gate/dedup/pausa) | ✅ núcleo | E9 Documentação Clínica | ✅ |
 | E5 RAG namespaces + Reasoner | ✅ núcleo | E10 Observabilidade & Piloto | ✅ núcleo |
 | E9 Documentação Clínica | ✅ | E11 Pacientes & Dashboard | ✅ completo (4 fases) |
-| E12 Bot de Telegram (foto→nutrição vs metas) | ✅ completo (9 stories) | E13 Relatório Nutricional (TACO) | ✅ completo (em produção) |
+| E12 Bot de Telegram (foto→nutrição vs metas) | ✅ completo (9 stories + modo grupo) | E13 Relatório Nutricional (TACO) | ✅ completo (em produção) |
 | Transcrição Confiável (léxico + revisão do médico + POC) | ✅ completo (falta áudio real p/ POC) | — | — |
 
 **Fluxo vivo:** login (`demo@nutrimed.test`/`nutrimed123`) → consulta → consentimento (default NEGA)

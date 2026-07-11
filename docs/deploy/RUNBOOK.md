@@ -215,6 +215,13 @@ a aceitar conexões depois que alguém abre uma consulta. Isso afeta:
     **RECUSADO** se o token já tem webhook ativo (`getWebhookInfo`) e **IGNORADO** com
     `NODE_ENV=production` — ainda assim, use SEMPRE um **bot de teste** do @BotFather no
     `apps/web/.env.local`.
+18c. **Uso em GRUPO (opcional, em produção desde 2026-07-11):** o canal do paciente pode ser um
+    grupo (paciente + nutrólogo + nutricionista acompanhando). Setup: (a) `@BotFather` →
+    `/setprivacy` → **Disable** no bot (sem isso as fotos do grupo NÃO chegam ao bot); (b)
+    **remover e re-adicionar** o bot ao grupo (o Telegram só aplica a mudança na reentrada); (c)
+    enviar `/start CÓDIGO` **dentro do grupo** — o `chat_id` do grupo vira o canal pareado.
+    Comandos aceitam `/comando@NomeDoBot`. Regra: 1 chat por paciente (grupo OU privado).
+    ⚖️ Dado clínico em chat coletivo → considerar no parecer CJ-12.
 19. **Rollback do canal:** para desligar o webhook (sem afetar o resto do app):
     ```bash
     curl -s "https://api.telegram.org/bot<TOKEN>/deleteWebhook"

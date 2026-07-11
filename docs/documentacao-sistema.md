@@ -167,6 +167,13 @@ Canal de acompanhamento opt-in: o paciente pareia por **código efêmero** (hash
 (Claude visão) estima nutrientes → compara com a meta vigente do dia → responde com disclaimer de
 estimativa (ADR-015). A foto não é persistida.
 
+**Uso em grupo (2026-07-11, em produção):** o canal pareado pode ser um **grupo** (paciente +
+nutrólogo + nutricionista) — os médicos acompanham as fotos e as respostas do bot em tempo real.
+Comandos aceitam a forma `/comando@RafaNutriBot`. Setup: privacy mode **OFF** no @BotFather,
+re-adicionar o bot ao grupo e enviar `/start CÓDIGO` no grupo. O vínculo segue sendo **1 chat por
+paciente** (grupo OU privado, nunca ambos). Atenção jurídica: o dado clínico circula num chat
+coletivo — reforça o item CJ-12.
+
 ---
 
 ## 6. Integrações externas e transferência internacional
