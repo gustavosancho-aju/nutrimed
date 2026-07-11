@@ -340,21 +340,28 @@ export async function handleGoal(deps: BotDeps, chatId: string): Promise<BotRepl
   };
 }
 
+/**
+ * `/comando` ou `/comando@NomeDoBot` (forma usada em grupos). Retorna o resto do
+ * texto (argumento) se casar, `null` se não. O sufixo `@bot` é aceito com
+ * qualquer nome — o Telegram só entrega ao bot os comandos endereçados a ele.
+ */
+function matchCommand(text: string, command: string): string | null {
+  const m = new RegExp(`^\\/${command}(?:@\\w+)?\\b`, 'i').exec(text);
+  return m ? text.slice(m[0].length).trim() : null;
+}
+
 /** Dispatcher: foto → estimativa; `/start`/`/hoje`/`/meta`/`/corrigir`; senão ajuda. */
 export async function handleUpdate(deps: BotDeps, update: BotUpdate): Promise<BotReply | null> {
   if (update.photo) return handlePhoto(deps, update.chatId, update.photo, update.photoRef, update.caption);
 
   const text = update.text?.trim();
   if (!text) return null;
-  if (/^\/start\b/i.test(text)) {
-    const arg = text.replace(/^\/start\b/i, '').trim() || undefined;
-    return handleStart(deps, update.chatId, arg);
-  }
-  if (/^\/hoje\b/i.test(text)) return handleToday(deps, update.chatId);
-  if (/^\/meta\b/i.test(text)) return handleGoal(deps, update.chatId);
-  if (/^\/corrigir\b/i.test(text)) {
-    return handleCorrection(deps, update.chatId, text.replace(/^\/corrigir\b/i, '').trim());
-  }
+  const start = matchCommand(text, 'start');
+  if (start !== null) return handleStart(deps, update.chatId, start || undefined);
+  if (matchCommand(text, 'hoje') !== null) return handleToday(deps, update.chatId);
+  if (matchCommand(text, 'meta') !== null) return handleGoal(deps, update.chatId);
+  const corrigir = matchCommand(text, 'corrigir');
+  if (corrigir !== null) return handleCorrection(deps, update.chatId, corrigir);
   return {
     text:
       'Não entendi. Envie a foto do seu prato, ou use /hoje, /meta e /corrigir (ajusta o último prato). ' +

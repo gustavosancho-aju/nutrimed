@@ -274,5 +274,23 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
       const vazio = await handleUpdate(deps, { chatId: 'chat-disp' });
       expect(vazio).toBeNull();
     });
+
+    it('aceita comandos com menção (/comando@Bot — forma usada em grupos)', async () => {
+      // Pareia o "grupo" via /start@Bot CÓDIGO — o @Bot não pode vazar no argumento.
+      const patientId = await insertPatient(exec, userId);
+      const code = await createPairingCode(exec, patientId, userId);
+      const start = await handleUpdate(deps, { chatId: 'chat-group', text: `/start@RafaNutriBot ${code}` });
+      expect(start?.text).toMatch(/ativado/i);
+
+      const hoje = await handleUpdate(deps, { chatId: 'chat-group', text: '/hoje@RafaNutriBot' });
+      expect(hoje?.text).toMatch(/hoje/i);
+
+      const meta = await handleUpdate(deps, { chatId: 'chat-group', text: '/meta@RafaNutriBot' });
+      expect(meta?.text).toMatch(/meta|ainda n[ãa]o definiu/i);
+
+      // /start@Bot sem código = boas-vindas (não confunde a menção com um código)
+      const welcome = await handleUpdate(deps, { chatId: 'chat-group-2', text: '/start@RafaNutriBot' });
+      expect(welcome?.text).toMatch(/c[óo]digo de\s*v[íi]nculo/i);
+    });
   });
 });
