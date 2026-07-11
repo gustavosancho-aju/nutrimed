@@ -10,6 +10,7 @@ import {
   deriveHeightMeters,
   idealWeightRange,
   idealWeightTarget,
+  imcFromWeight,
   classifyImc,
   IMC_CATEGORIES,
 } from './dashboard';
@@ -159,6 +160,15 @@ describe('parâmetros ideais — altura derivada + peso ideal (OMS)', () => {
   });
   it('peso-alvo = IMC 22 × altura²', () => {
     expect(idealWeightTarget(1.76)).toBeCloseTo(22 * 1.76 * 1.76, 3); // ~68.1
+  });
+  it('imcFromWeight: inverso da derivação (peso/altura²); inválido ⇒ null', () => {
+    expect(imcFromWeight(88.6, 1.76)!).toBeCloseTo(28.6, 1);
+    // roundtrip com deriveHeightMeters: altura derivada devolve o IMC original
+    const h = deriveHeightMeters(90, 28.8)!;
+    expect(imcFromWeight(90, h)!).toBeCloseTo(28.8, 5);
+    expect(imcFromWeight(0, 1.76)).toBeNull();
+    expect(imcFromWeight(80, 0)).toBeNull();
+    expect(imcFromWeight(Number.NaN, 1.76)).toBeNull();
   });
 });
 

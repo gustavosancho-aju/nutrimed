@@ -12,7 +12,6 @@ import {
   computeAge,
 } from '@nutrimed/patients';
 import {
-  classifyImc,
   compareTrendPoints,
   deriveHeightMeters,
   idealWeightRange,
@@ -23,7 +22,7 @@ import {
   type TrendPoint,
   type TargetBand,
 } from '@/lib/dashboard';
-import { BodyFigure } from '@/components/dashboard/body-figure';
+import { BodySimulator } from '@/components/dashboard/body-simulator';
 import { ImcScale } from '@/components/dashboard/imc-scale';
 import { TrendChart } from '@/components/dashboard/trend-chart';
 
@@ -132,7 +131,6 @@ export default async function ApresentacaoPage({ params }: { params: Promise<{ i
   }
   const faixaPeso = heightM !== null ? idealWeightRange(heightM) : null;
   const metaPesoOms = heightM !== null ? idealWeightTarget(heightM) : null;
-  const categoria = imc !== null ? classifyImc(imc) : null;
 
   // Metas do médico (body_goal) têm precedência; Peso e IMC caem na OMS.
   const goal = bodyGoal?.values;
@@ -190,17 +188,16 @@ export default async function ApresentacaoPage({ params }: { params: Promise<{ i
       ) : (
         <section className="card-premium gold-hairline mt-4 overflow-hidden">
           <div className="grid gap-8 p-8 md:grid-cols-[280px_1fr] md:p-10">
-            {/* Figura corporal (estado atual) */}
+            {/* Figura corporal (atual + contorno da meta + simulação por peso) */}
             <div className="flex flex-col items-center justify-center">
               {imc !== null ? (
-                <>
-                  <BodyFigure imc={imc} className="h-[340px] w-auto" />
-                  {categoria && (
-                    <p className="mt-3 rounded-full border border-ink/10 bg-surface-muted px-4 py-1.5 text-sm font-semibold text-ink">
-                      {categoria.label}
-                    </p>
-                  )}
-                </>
+                <BodySimulator
+                  imcAtual={imc}
+                  pesoAtual={peso}
+                  heightM={heightM}
+                  metaPeso={metaPeso ?? null}
+                  metaDefinidaPeloMedico={goal?.peso !== undefined}
+                />
               ) : (
                 <p className="text-sm text-ink-muted">
                   Lance o IMC para visualizar a figura corporal.

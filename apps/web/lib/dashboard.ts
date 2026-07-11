@@ -122,6 +122,12 @@ export function idealWeightTarget(heightM: number): number {
   return TARGET_IMC * heightM * heightM;
 }
 
+/** IMC para um peso (kg) numa altura (m). Entradas inválidas ⇒ null. */
+export function imcFromWeight(peso: number, heightM: number): number | null {
+  if (!Number.isFinite(peso) || !Number.isFinite(heightM) || peso <= 0 || heightM <= 0) return null;
+  return peso / (heightM * heightM);
+}
+
 // ── Distância à meta ("% pra meta") — apoio visual, sem juízo clínico de cor ──
 
 export interface GoalGap {
