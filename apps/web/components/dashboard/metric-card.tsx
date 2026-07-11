@@ -1,4 +1,4 @@
-import { computeTrend, type TrendPoint, type TargetBand } from '@/lib/dashboard';
+import { computeGoalGap, computeTrend, type TrendPoint, type TargetBand } from '@/lib/dashboard';
 import { TrendChart } from './trend-chart';
 
 /** Formata número: inteiro sem casas, senão 1 casa decimal. */
@@ -57,6 +57,19 @@ export function MetricCard({
               {targetLabel}
             </p>
           )}
+          {target !== undefined &&
+            (() => {
+              // "% pra meta": distância do valor atual à meta — sem juízo de cor
+              // (a direção desejada varia por métrica; o médico interpreta).
+              const gap = computeGoalGap(trend.current, target);
+              return gap ? (
+                <p className="mt-1 flex items-center gap-1.5 text-[11px] text-ink-muted">
+                  <span aria-hidden className="inline-block h-0 w-3 border-t-2 border-dashed border-emerald-600/80" />
+                  Meta {fmt(target)}
+                  {unit ?? ''} · {gap.label}
+                </p>
+              ) : null;
+            })()}
           {points.length >= 1 && (
             <div className="mt-3">
               <TrendChart points={points} unit={unit} band={band} target={target} />

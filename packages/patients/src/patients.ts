@@ -54,6 +54,25 @@ export interface LabExamValues {
   readonly ldl?: number;
   readonly hba1c?: number;
   readonly insulina?: number;
+  /**
+   * Exames personalizados do paciente (slots 1–3). A chave é o SLOT (estável),
+   * não o nome: renomear um exame na configuração não migra dados — o histórico
+   * do slot é re-rotulado. Definições em {@link CustomExamDef}.
+   */
+  readonly custom1?: number;
+  readonly custom2?: number;
+  readonly custom3?: number;
+}
+
+/**
+ * Definição de um exame personalizado do paciente (nome/unidade escolhidos pelo
+ * médico — ex.: TSH, Vitamina D). Guardada cifrada em patient.custom_exams_enc;
+ * os valores históricos ficam em lab_exam.values_enc sob a chave `custom{slot}`.
+ */
+export interface CustomExamDef {
+  readonly slot: 1 | 2 | 3;
+  readonly name: string;
+  readonly unit?: string;
 }
 
 export interface Measurement<T> {
@@ -252,8 +271,11 @@ async function listMeasurements<T>(
   key: Buffer,
 ): Promise<Measurement<T>[]> {
   // Ordenado por data de medição ASC — evolução cronológica para os gráficos.
+  // Desempate por created_at: medições lançadas no MESMO dia (measured_at
+  // idêntico, hora zerada) devem sair na ordem de inserção — id (UUID aleatório)
+  // sozinho embaralharia os pontos do gráfico.
   const res = await db.query<MeasurementRow>(
-    `SELECT * FROM ${table} WHERE patient_id = $1 ORDER BY measured_at ASC, id ASC`,
+    `SELECT * FROM ${table} WHERE patient_id = $1 ORDER BY measured_at ASC, created_at ASC, id ASC`,
     [patientId],
   );
   return res.rows.map((r) => toMeasurement<T>(r, key));
@@ -297,6 +319,146 @@ export function listLabExam(
   key: Buffer,
 ): Promise<Measurement<LabExamValues>[]> {
   return listMeasurements<LabExamValues>(db, 'lab_exam', patientId, key);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Exames personalizados por paciente (até 3 slots) — configuração 1:1 cifrada
+// na coluna patient.custom_exams_enc (nome de exame revela condição de saúde,
+// NFR9). Sem versionamento: a auditoria 'custom-exams-set' registra as edições.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Salva as definições dos exames personalizados do paciente (substitui o
+ * conjunto; lista vazia ⇒ limpa a coluna). Cifrado + auditado.
+ */
+export async function setCustomExamDefs(
+  db: SqlExecutor,
+  patientId: string,
+  defs: readonly CustomExamDef[],
+  key: Buffer,
+  origin: WriteOrigin = { action: 'custom-exams-set' },
+): Promise<void> {
+  const enc = defs.length > 0 ? encryptField(JSON.stringify(defs), key) : null;
+  await db.query(
+    `UPDATE patient SET custom_exams_enc = $2, updated_at = now() WHERE id = $1`,
+    [patientId, enc],
+  );
+  await writeAudit(db, patientId, {
+    triggeredBy: origin.action,
+    kbSources: [],
+    modelVersion: origin.modelVersion ?? 'human-edit',
+  });
+}
+
+/** Definições dos exames personalizados do paciente (coluna vazia ⇒ []). */
+export async function loadCustomExamDefs(
+  db: SqlExecutor,
+  patientId: string,
+  key: Buffer,
+): Promise<CustomExamDef[]> {
+  const res = await db.query<{ custom_exams_enc: string | null }>(
+    'SELECT custom_exams_enc FROM patient WHERE id = $1',
+    [patientId],
+  );
+  const enc = res.rows[0]?.custom_exams_enc ?? null;
+  if (enc === null) return [];
+  return JSON.parse(decryptField(enc, key)) as CustomExamDef[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Metas corporais do paciente — definidas pelo médico e VERSIONADAS por append
+// (mesmo padrão de nutrition_goal: a vigente é a de maior effective_from <= o
+// dia consultado; sem UPDATE destrutivo). Todos os campos opcionais — meta
+// parcial (só peso, por ex.) é válida. Cifrado (NFR9) + auditado (NFR10).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Metas corporais alvo (campos opcionais — meta parcial é válida). */
+export interface BodyGoalValues {
+  readonly peso?: number;
+  readonly imc?: number;
+  readonly massaMuscular?: number;
+  readonly massaGordura?: number;
+  readonly cintura?: number;
+  readonly pgc?: number;
+}
+
+export interface BodyGoal {
+  readonly id: string;
+  readonly patientId: string;
+  readonly setByUserId: string;
+  /** Vigência da meta em ISO `YYYY-MM-DD`. */
+  readonly effectiveFrom: string;
+  readonly values: BodyGoalValues;
+  readonly createdAt: Date;
+}
+
+interface BodyGoalRow {
+  id: string;
+  patient_id: string;
+  set_by_user_id: string;
+  effective_from: string;
+  values_enc: string;
+  created_at: Date;
+}
+
+function toBodyGoal(row: BodyGoalRow, key: Buffer): BodyGoal {
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    setByUserId: row.set_by_user_id,
+    effectiveFrom: row.effective_from,
+    values: JSON.parse(decryptField(row.values_enc, key)) as BodyGoalValues,
+    createdAt: new Date(row.created_at),
+  };
+}
+
+/**
+ * Define metas corporais (nova versão, append) cifradas e auditadas.
+ * Não sobrescreve versões anteriores — preserva qual meta valia em cada dia.
+ */
+export async function setBodyGoal(
+  db: SqlExecutor,
+  patientId: string,
+  setByUserId: string,
+  effectiveFrom: string,
+  values: BodyGoalValues,
+  key: Buffer,
+  origin: WriteOrigin = { action: 'body-goal-set' },
+): Promise<string> {
+  const res = await db.query<{ id: string }>(
+    `INSERT INTO body_goal (patient_id, set_by_user_id, effective_from, values_enc)
+     VALUES ($1, $2, $3::date, $4) RETURNING id`,
+    [patientId, setByUserId, effectiveFrom, encryptField(JSON.stringify(values), key)],
+  );
+  const goalId = res.rows[0]!.id;
+  await writeAudit(db, patientId, {
+    triggeredBy: origin.action,
+    kbSources: [],
+    modelVersion: origin.modelVersion ?? 'human-edit',
+  });
+  return goalId;
+}
+
+/**
+ * Meta corporal vigente numa data (default = hoje via `CURRENT_DATE` no banco):
+ * a de maior `effective_from <= asOf`. Null se o paciente não tem meta.
+ */
+export async function loadCurrentBodyGoal(
+  db: SqlExecutor,
+  patientId: string,
+  key: Buffer,
+  asOf?: string,
+): Promise<BodyGoal | null> {
+  const res = await db.query<BodyGoalRow>(
+    `SELECT id, patient_id, set_by_user_id, effective_from::text AS effective_from, values_enc, created_at
+     FROM body_goal
+     WHERE patient_id = $1 AND effective_from <= COALESCE($2::date, CURRENT_DATE)
+     ORDER BY effective_from DESC, created_at DESC
+     LIMIT 1`,
+    [patientId, asOf ?? null],
+  );
+  const row = res.rows[0];
+  return row ? toBodyGoal(row, key) : null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

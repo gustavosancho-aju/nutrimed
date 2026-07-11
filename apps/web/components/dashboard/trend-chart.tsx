@@ -1,4 +1,4 @@
-import type { TrendPoint, TargetBand } from '@/lib/dashboard';
+import { compareTrendPoints, type TrendPoint, type TargetBand } from '@/lib/dashboard';
 
 /**
  * Gráfico de evolução em SVG puro (E11/11.6) — sem dependência de chart lib.
@@ -37,7 +37,7 @@ export function TrendChart({
     return <p className="text-sm text-ink-muted">Sem medições para exibir.</p>;
   }
 
-  const sorted = [...points].sort((a, b) => a.measuredAt.getTime() - b.measuredAt.getTime());
+  const sorted = [...points].sort(compareTrendPoints);
   const values = sorted.map((p) => p.value);
   // O domínio do eixo Y inclui a banda e a meta, para que fiquem sempre visíveis.
   const domain = [...values];

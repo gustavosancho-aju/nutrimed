@@ -8,6 +8,31 @@
 export interface TrendPoint {
   readonly measuredAt: Date;
   readonly value: number;
+  /** Desempate p/ medições no mesmo dia (measured_at com hora zerada). */
+  readonly createdAt?: Date;
+}
+
+/**
+ * Ordena pontos por data de medição, desempatando pela ordem de inserção
+ * (createdAt) — medições do mesmo dia sairiam em ordem aleatória sem isso.
+ * Sem createdAt em ambos retorna 0 (sort estável preserva a ordem de entrada,
+ * já cronológica vinda do banco).
+ */
+export function compareTrendPoints(a: TrendPoint, b: TrendPoint): number {
+  const d = a.measuredAt.getTime() - b.measuredAt.getTime();
+  if (d !== 0) return d;
+  if (a.createdAt && b.createdAt) return a.createdAt.getTime() - b.createdAt.getTime();
+  return 0;
+}
+
+/** Extrai a série temporal de um campo das medições (ignora os ausentes). */
+export function seriesOf<T>(
+  rows: readonly { measuredAt: Date; createdAt: Date; values: T }[],
+  key: keyof T,
+): TrendPoint[] {
+  return rows
+    .filter((r) => typeof r.values[key] === 'number')
+    .map((r) => ({ measuredAt: r.measuredAt, createdAt: r.createdAt, value: r.values[key] as number }));
 }
 
 export interface Trend {
@@ -27,7 +52,7 @@ export interface Trend {
  */
 export function computeTrend(points: readonly TrendPoint[]): Trend | null {
   if (points.length === 0) return null;
-  const sorted = [...points].sort((a, b) => a.measuredAt.getTime() - b.measuredAt.getTime());
+  const sorted = [...points].sort(compareTrendPoints);
   const current = sorted[sorted.length - 1]!.value;
   const previous = sorted.length > 1 ? sorted[sorted.length - 2]!.value : null;
   const delta = previous !== null ? current - previous : null;
@@ -95,6 +120,33 @@ export function idealWeightRange(heightM: number): TargetBand {
 /** Peso-alvo (kg) no IMC de referência ({@link TARGET_IMC}) para a altura (m). */
 export function idealWeightTarget(heightM: number): number {
   return TARGET_IMC * heightM * heightM;
+}
+
+// ── Distância à meta ("% pra meta") — apoio visual, sem juízo clínico de cor ──
+
+export interface GoalGap {
+  /** (atual − meta) / meta × 100. Sinal: + acima da meta, − abaixo. */
+  readonly pct: number;
+  /** Rótulo pt-BR: "na meta" | "X% acima da meta" | "X% abaixo da meta". */
+  readonly label: string;
+}
+
+/**
+ * Distância percentual do valor atual à meta (com sinal). Semântica estável
+ * entre consultas: independe do ponto de partida e da direção clínica desejada
+ * (perder gordura vs. ganhar músculo) — o rótulo textual elimina a ambiguidade
+ * do sinal. Meta ≤ 0 ou valores não finitos ⇒ null.
+ */
+export function computeGoalGap(current: number, goal: number): GoalGap | null {
+  if (!Number.isFinite(current) || !Number.isFinite(goal) || goal <= 0) return null;
+  const pct = ((current - goal) / goal) * 100;
+  const label =
+    Math.abs(pct) < 0.5
+      ? 'na meta'
+      : pct > 0
+        ? `${pct.toFixed(1)}% acima da meta`
+        : `${Math.abs(pct).toFixed(1)}% abaixo da meta`;
+  return { pct, label };
 }
 
 // ── Classificação de IMC (OMS) — apoio visual de apresentação, NÃO diagnóstico ──

@@ -27,6 +27,8 @@ function fmt(n: number): string {
 /**
  * Card de exame laboratorial (E11/11.8): valor atual + faixa de referência
  * colorida (com rótulo) + evolução. A cor é apoio visual, não diagnóstico.
+ * Exames PERSONALIZADOS (sem `marker`) não têm faixa conhecida: sem badge e
+ * gráfico em tom neutro — não inventamos referência ("IA assiste, médico decide").
  */
 export function ExamCard({
   label,
@@ -36,9 +38,9 @@ export function ExamCard({
   points,
 }: {
   label: string;
-  marker: ExamMarker;
-  unit: string;
-  reference: string;
+  marker?: ExamMarker;
+  unit?: string;
+  reference?: string;
   points: readonly TrendPoint[];
 }) {
   const trend = computeTrend(points);
@@ -47,7 +49,7 @@ export function ExamCard({
     <div className="card-premium p-5">
       <div className="flex items-baseline justify-between gap-3">
         <p className="text-xs uppercase tracking-wide text-ink-muted">{label}</p>
-        <span className="text-[11px] text-ink-muted">{unit}</span>
+        {unit && <span className="text-[11px] text-ink-muted">{unit}</span>}
       </div>
 
       {trend === null ? (
@@ -56,7 +58,7 @@ export function ExamCard({
         <>
           <div className="mt-1 flex items-center gap-3">
             <span className="font-display text-2xl font-semibold text-ink">{fmt(trend.current)}</span>
-            {(() => {
+            {marker && (() => {
               const status = classifyExam(marker, trend.current);
               return (
                 <span
@@ -68,10 +70,18 @@ export function ExamCard({
               );
             })()}
           </div>
-          <p className="mt-1 text-[11px] text-ink-muted">Referência: {reference}</p>
+          <p className="mt-1 text-[11px] text-ink-muted">
+            {marker && reference
+              ? `Referência: ${reference}`
+              : 'Sem faixa de referência — interpretação do médico.'}
+          </p>
           {points.length > 1 && (
             <div className="mt-3">
-              <TrendChart points={points} className={CHART_TONE[classifyExam(marker, trend.current)]} unit={unit} />
+              <TrendChart
+                points={points}
+                className={marker ? CHART_TONE[classifyExam(marker, trend.current)] : 'text-brand'}
+                unit={unit}
+              />
             </div>
           )}
         </>

@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
+  compareTrendPoints,
+  computeGoalGap,
   computeTrend,
   classifyExam,
   parseDecimal,
+  seriesOf,
   EXAM_STATUS_LABEL,
   deriveHeightMeters,
   idealWeightRange,
@@ -40,6 +43,76 @@ describe('computeTrend (E11/11.6)', () => {
     ]);
     expect(t!.delta).toBe(5);
     expect(t!.deltaPct).toBeNull();
+  });
+
+  it('pontos no MESMO dia: current = o de createdAt mais recente (bug do gráfico)', () => {
+    const day = new Date('2026-05-01T00:00:00Z');
+    const t = computeTrend([
+      { measuredAt: day, value: 120, createdAt: new Date('2026-05-01T10:00:00Z') },
+      { measuredAt: day, value: 100, createdAt: new Date('2026-05-01T09:00:00Z') },
+    ]);
+    expect(t!.current).toBe(120);
+    expect(t!.previous).toBe(100);
+    expect(t!.delta).toBe(20); // "vs. anterior" positivo — a reta sobe
+  });
+});
+
+describe('compareTrendPoints — ordenação com desempate por createdAt', () => {
+  it('ordena por measuredAt; desempata por createdAt no mesmo dia', () => {
+    const day = new Date('2026-05-01T00:00:00Z');
+    const a = { measuredAt: day, value: 100, createdAt: new Date('2026-05-01T09:00:00Z') };
+    const b = { measuredAt: day, value: 120, createdAt: new Date('2026-05-01T10:00:00Z') };
+    const c = { measuredAt: new Date('2026-04-01T00:00:00Z'), value: 90 };
+    expect([b, a, c].sort(compareTrendPoints).map((p) => p.value)).toEqual([90, 100, 120]);
+  });
+  it('sem createdAt em ambos ⇒ 0 (sort estável preserva a ordem de entrada)', () => {
+    const day = new Date('2026-05-01T00:00:00Z');
+    expect(
+      compareTrendPoints({ measuredAt: day, value: 1 }, { measuredAt: day, value: 2 }),
+    ).toBe(0);
+  });
+});
+
+describe('seriesOf — série temporal a partir das medições', () => {
+  it('extrai o campo com createdAt e ignora medições sem o campo', () => {
+    const rows = [
+      {
+        measuredAt: new Date('2026-01-01'),
+        createdAt: new Date('2026-01-01T08:00:00Z'),
+        values: { ldl: 161 },
+      },
+      {
+        measuredAt: new Date('2026-02-01'),
+        createdAt: new Date('2026-02-01T08:00:00Z'),
+        values: { hba1c: 5.7 } as { ldl?: number; hba1c?: number },
+      },
+    ];
+    const serie = seriesOf(rows, 'ldl');
+    expect(serie).toHaveLength(1);
+    expect(serie[0]!.value).toBe(161);
+    expect(serie[0]!.createdAt).toEqual(new Date('2026-01-01T08:00:00Z'));
+  });
+});
+
+describe('computeGoalGap — "% pra meta" (apoio visual)', () => {
+  it('acima da meta: sinal + e rótulo "acima"', () => {
+    const g = computeGoalGap(87.7, 75);
+    expect(g!.pct).toBeCloseTo(16.9, 1);
+    expect(g!.label).toBe('16.9% acima da meta');
+  });
+  it('abaixo da meta: rótulo "abaixo" com valor absoluto', () => {
+    const g = computeGoalGap(63, 75);
+    expect(g!.pct).toBeCloseTo(-16, 1);
+    expect(g!.label).toBe('16.0% abaixo da meta');
+  });
+  it('a menos de 0,5% da meta ⇒ "na meta"', () => {
+    expect(computeGoalGap(75.2, 75)!.label).toBe('na meta');
+    expect(computeGoalGap(75, 75)!.label).toBe('na meta');
+  });
+  it('meta inválida (≤ 0 / não finita) ⇒ null', () => {
+    expect(computeGoalGap(80, 0)).toBeNull();
+    expect(computeGoalGap(80, -5)).toBeNull();
+    expect(computeGoalGap(Number.NaN, 75)).toBeNull();
   });
 });
 

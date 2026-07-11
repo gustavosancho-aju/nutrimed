@@ -317,4 +317,31 @@ CREATE TABLE IF NOT EXISTS transcript_review (
 );
 `,
   },
+  {
+    name: '0011_custom_exams_body_goal',
+    sql: `
+-- Exames personalizados POR PACIENTE (até 3 slots — nome/unidade definidos pelo
+-- médico na dashboard). O nome do exame revela condição de saúde => cifrado
+-- (NFR9, sufixo _enc). custom_exams_enc = AES-256-GCM de JSON
+-- [{ slot, name, unit? }]. Os VALORES vão no blob values_enc de lab_exam
+-- (chaves custom1..custom3, estáveis por slot) — sem mudança de schema lá.
+ALTER TABLE patient ADD COLUMN IF NOT EXISTS custom_exams_enc text;
+
+-- Metas corporais por paciente (peso/IMC/massa/gordura/cintura/PGC), definidas
+-- pelo médico e VERSIONADAS por append — mesmo padrão de nutrition_goal (a
+-- vigente é a de maior effective_from <= o dia consultado; sem UPDATE
+-- destrutivo). values_enc = AES-256-GCM de JSON com campos opcionais
+-- { peso, imc, massaMuscular, massaGordura, cintura, pgc }.
+CREATE TABLE IF NOT EXISTS body_goal (
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  patient_id     uuid NOT NULL REFERENCES patient(id),
+  set_by_user_id uuid NOT NULL REFERENCES app_user(id),
+  effective_from date NOT NULL,
+  values_enc     text NOT NULL,
+  created_at     timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_body_goal_patient
+  ON body_goal(patient_id, effective_from DESC);
+`,
+  },
 ];

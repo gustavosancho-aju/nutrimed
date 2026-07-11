@@ -8,6 +8,11 @@ export {
   addLabExam,
   listBodyComposition,
   listLabExam,
+  // Exames personalizados por paciente + metas corporais
+  setCustomExamDefs,
+  loadCustomExamDefs,
+  setBodyGoal,
+  loadCurrentBodyGoal,
   // E12 — metas nutricionais & food log
   setNutritionGoal,
   loadCurrentNutritionGoal,
@@ -24,6 +29,9 @@ export {
   type MeasurementInput,
   type BodyCompositionValues,
   type LabExamValues,
+  type CustomExamDef,
+  type BodyGoalValues,
+  type BodyGoal,
   type NutritionGoalValues,
   type NutritionGoal,
   type FoodConfidence,

@@ -3,12 +3,21 @@ import { redirect, notFound } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { getEncryptionKey } from '@/lib/crypto-key';
-import { loadPatient, listBodyComposition, computeAge } from '@nutrimed/patients';
+import {
+  loadPatient,
+  listBodyComposition,
+  listLabExam,
+  loadCustomExamDefs,
+  loadCurrentBodyGoal,
+  computeAge,
+} from '@nutrimed/patients';
 import {
   classifyImc,
+  compareTrendPoints,
   deriveHeightMeters,
   idealWeightRange,
   idealWeightTarget,
+  seriesOf,
   HEALTHY_IMC,
   TARGET_IMC,
   type TrendPoint,
@@ -47,13 +56,6 @@ function firstOf<T>(rows: readonly { values: T }[], key: keyof T): number | null
   return null;
 }
 
-/** Série temporal de um campo das medições (ignora os ausentes). */
-function seriesOf<T>(rows: readonly { measuredAt: Date; values: T }[], key: keyof T): TrendPoint[] {
-  return rows
-    .filter((r) => typeof r.values[key] === 'number')
-    .map((r) => ({ measuredAt: r.measuredAt, value: r.values[key] as number }));
-}
-
 /** dd/mm/aa (pt-BR) para o período das medições sob cada gráfico. */
 function fmtDate(d: Date): string {
   return new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', day: '2-digit', month: '2-digit', year: '2-digit' }).format(d);
@@ -74,7 +76,7 @@ function EvolutionChart({
   target?: number;
 }) {
   if (points.length === 0) return null;
-  const sorted = [...points].sort((a, b) => a.measuredAt.getTime() - b.measuredAt.getTime());
+  const sorted = [...points].sort(compareTrendPoints);
   const first = sorted[0]!;
   const last = sorted[sorted.length - 1]!;
   return (
@@ -111,6 +113,9 @@ export default async function ApresentacaoPage({ params }: { params: Promise<{ i
   if (!patient || patient.userId !== user.id) notFound();
 
   const body = await listBodyComposition(db, id, key);
+  const labs = await listLabExam(db, id, key);
+  const customDefs = await loadCustomExamDefs(db, id, key);
+  const bodyGoal = await loadCurrentBodyGoal(db, id, key);
   const age = computeAge(patient.birthDate, new Date());
 
   const peso = lastOf(body, 'peso');
@@ -126,15 +131,25 @@ export default async function ApresentacaoPage({ params }: { params: Promise<{ i
     heightM = deriveHeightMeters(body[i]!.values.peso, body[i]!.values.imc);
   }
   const faixaPeso = heightM !== null ? idealWeightRange(heightM) : null;
-  const metaPeso = heightM !== null ? idealWeightTarget(heightM) : null;
+  const metaPesoOms = heightM !== null ? idealWeightTarget(heightM) : null;
   const categoria = imc !== null ? classifyImc(imc) : null;
+
+  // Metas do médico (body_goal) têm precedência; Peso e IMC caem na OMS.
+  const goal = bodyGoal?.values;
+  const metaPeso = goal?.peso ?? metaPesoOms;
+  const metaImc = goal?.imc ?? TARGET_IMC;
 
   const stats: { label: string; value: string; hint?: string }[] = [
     { label: 'Peso atual', value: peso !== null ? `${fmt(peso)} kg` : '—' },
     {
       label: 'Peso ideal',
       value: faixaPeso ? `${Math.round(faixaPeso.min)}–${Math.round(faixaPeso.max)} kg` : '—',
-      hint: metaPeso !== null ? `meta ~${Math.round(metaPeso)} kg` : undefined,
+      hint:
+        goal?.peso !== undefined
+          ? `meta ${fmt(goal.peso)} kg (definida pelo médico)`
+          : metaPesoOms !== null
+            ? `meta ~${Math.round(metaPesoOms)} kg`
+            : undefined,
     },
     { label: 'Massa muscular', value: massaMuscular !== null ? `${fmt(massaMuscular)} kg` : '—' },
     { label: '% Gordura', value: pgc !== null ? `${fmt(pgc)} %` : '—' },
@@ -252,12 +267,57 @@ export default async function ApresentacaoPage({ params }: { params: Promise<{ i
                 label="IMC"
                 points={seriesOf(body, 'imc')}
                 band={HEALTHY_IMC}
-                target={TARGET_IMC}
+                target={metaImc}
               />
-              <EvolutionChart label="Massa Muscular" points={seriesOf(body, 'massaMuscular')} unit="kg" />
-              <EvolutionChart label="% Gordura" points={seriesOf(body, 'pgc')} unit="%" />
+              <EvolutionChart
+                label="Massa Muscular"
+                points={seriesOf(body, 'massaMuscular')}
+                unit="kg"
+                target={goal?.massaMuscular}
+              />
+              <EvolutionChart
+                label="% Gordura"
+                points={seriesOf(body, 'pgc')}
+                unit="%"
+                target={goal?.pgc}
+              />
+              <EvolutionChart
+                label="Massa de Gordura"
+                points={seriesOf(body, 'massaGordura')}
+                unit="kg"
+                target={goal?.massaGordura}
+              />
+              <EvolutionChart
+                label="Cintura Abdominal"
+                points={seriesOf(body, 'cintura')}
+                unit="cm"
+                target={goal?.cintura}
+              />
             </div>
           </div>
+
+          {/* Exames laboratoriais — evolução (sem banda/meta: não inventamos
+              referência visual na tela do paciente; a interpretação é do médico) */}
+          {labs.length > 0 && (
+            <div className="border-t border-ink/10 px-8 pb-8 pt-6 md:px-10">
+              <h2 className="font-display text-base font-semibold text-ink">
+                Exames laboratoriais
+              </h2>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <EvolutionChart label="LDL" points={seriesOf(labs, 'ldl')} unit="mg/dL" />
+                <EvolutionChart label="HbA1C" points={seriesOf(labs, 'hba1c')} unit="%" />
+                <EvolutionChart label="Insulina" points={seriesOf(labs, 'insulina')} unit="µU/mL" />
+                {customDefs.map((d) => (
+                  <EvolutionChart
+                    key={d.slot}
+                    label={d.name}
+                    points={seriesOf(labs, `custom${d.slot}` as 'custom1' | 'custom2' | 'custom3')}
+                    unit={d.unit}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
 
           <p className="border-t border-ink/10 bg-surface-muted/60 px-8 py-3 text-center text-[11px] text-ink-muted">
             Figura e faixas (OMS) são apoio visual de apresentação — não constituem diagnóstico. A

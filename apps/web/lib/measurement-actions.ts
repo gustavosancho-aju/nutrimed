@@ -39,6 +39,10 @@ export async function addMeasurementAction(formData: FormData): Promise<void> {
     throw new Error('Paciente não encontrado para este médico.');
   }
 
+  // Hora zerada de propósito: o input é type="date" (semântica de dia) e a
+  // formatação usa timeZone UTC — gravar a hora real deslocaria o dia para
+  // lançamentos noturnos no Brasil. A ordem entre medições do mesmo dia vem do
+  // created_at do banco (desempate do ORDER BY em listMeasurements).
   const dateRaw = String(formData.get('measuredAt') ?? '').trim();
   const measuredAt = dateRaw ? new Date(`${dateRaw}T00:00:00Z`) : new Date();
 
@@ -54,6 +58,10 @@ export async function addMeasurementAction(formData: FormData): Promise<void> {
       ldl: parseDecimal(formData.get('ldl')),
       hba1c: parseDecimal(formData.get('hba1c')),
       insulina: parseDecimal(formData.get('insulina')),
+      // Exames personalizados do paciente (slots 1–3, rotulados na UI).
+      custom1: parseDecimal(formData.get('custom1')),
+      custom2: parseDecimal(formData.get('custom2')),
+      custom3: parseDecimal(formData.get('custom3')),
     });
     if (Object.keys(values).length > 0) {
       await addLabExam(db, patientId, { measuredAt, values }, key, origin);

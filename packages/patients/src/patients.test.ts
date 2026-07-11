@@ -13,6 +13,10 @@ import {
   listBodyComposition,
   addLabExam,
   listLabExam,
+  setCustomExamDefs,
+  loadCustomExamDefs,
+  setBodyGoal,
+  loadCurrentBodyGoal,
 } from './patients';
 
 
@@ -159,6 +163,45 @@ describe('Patient Service (E11 — 11.2)', () => {
       expect(evo[0]!.values.ldl).toBeUndefined();
     });
 
+    it('medições no MESMO dia saem na ordem de inserção (created_at), não por id', async () => {
+      // Cenário do bug real: dois exames lançados no mesmo dia recebem
+      // measured_at idêntico; o desempate por UUID aleatório embaralhava o
+      // gráfico. Forçamos id e created_at em OPOSIÇÃO para o teste ser
+      // determinístico: se o ORDER BY usar id, o resultado sai invertido.
+      const patientId = await createPatient(exec, userId, { name: 'Mesmo Dia' }, KEY);
+      const day = new Date('2026-05-01T00:00:00Z');
+      const idA = await addLabExam(exec, patientId, { measuredAt: day, values: { ldl: 100 } }, KEY);
+      const idB = await addLabExam(exec, patientId, { measuredAt: day, values: { ldl: 120 } }, KEY);
+
+      // A (1º lançado, ldl=100): id MAIOR, created_at MENOR.
+      // B (2º lançado, ldl=120): id menor, created_at maior.
+      await exec.query(
+        `UPDATE lab_exam SET id = 'ffffffff-ffff-4fff-8fff-ffffffffffff', created_at = '2026-05-01T09:00:00Z' WHERE id = $1`,
+        [idA],
+      );
+      await exec.query(
+        `UPDATE lab_exam SET id = '00000000-0000-4000-8000-000000000001', created_at = '2026-05-01T10:00:00Z' WHERE id = $1`,
+        [idB],
+      );
+
+      const evo = await listLabExam(exec, patientId, KEY);
+      expect(evo.map((m) => m.values.ldl)).toEqual([100, 120]); // ordem de lançamento
+    });
+
+    it('lab_exam faz roundtrip dos exames personalizados (custom1..custom3)', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Custom Lab' }, KEY);
+      await addLabExam(
+        exec,
+        patientId,
+        { measuredAt: new Date('2026-06-01'), values: { custom1: 2.5, custom3: 31.2 } },
+        KEY,
+      );
+      const evo = await listLabExam(exec, patientId, KEY);
+      expect(evo[0]!.values.custom1).toBe(2.5);
+      expect(evo[0]!.values.custom2).toBeUndefined();
+      expect(evo[0]!.values.custom3).toBe(31.2);
+    });
+
     it('vincula a consulta de origem quando informada', async () => {
       const patientId = await createPatient(exec, userId, { name: 'Com Origem' }, KEY);
       const c = await exec.query<{ id: string }>(
@@ -174,6 +217,90 @@ describe('Patient Service (E11 — 11.2)', () => {
       );
       const evo = await listBodyComposition(exec, patientId, KEY);
       expect(evo[0]!.sourceConsultationId).toBe(consultationId);
+    });
+  });
+
+  describe('Exames personalizados por paciente — cifrados e auditados', () => {
+    it('grava cifrado (nome ilegível no storage), roundtrip e audita custom-exams-set', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Com Custom' }, KEY);
+      await setCustomExamDefs(
+        exec,
+        patientId,
+        [
+          { slot: 1, name: 'TSH', unit: 'µUI/mL' },
+          { slot: 3, name: 'Vitamina D' },
+        ],
+        KEY,
+      );
+
+      const raw = await exec.query<{ custom_exams_enc: string | null }>(
+        'SELECT custom_exams_enc FROM patient WHERE id = $1',
+        [patientId],
+      );
+      expect(raw.rows[0]!.custom_exams_enc).not.toBeNull();
+      expect(raw.rows[0]!.custom_exams_enc).not.toContain('TSH');
+      expect(raw.rows[0]!.custom_exams_enc).not.toContain('Vitamina');
+
+      const defs = await loadCustomExamDefs(exec, patientId, KEY);
+      expect(defs).toEqual([
+        { slot: 1, name: 'TSH', unit: 'µUI/mL' },
+        { slot: 3, name: 'Vitamina D' },
+      ]);
+
+      const trail = await getAuditTrail(exec, patientId);
+      expect(trail.some((e) => e.triggeredBy === 'custom-exams-set')).toBe(true);
+    });
+
+    it('paciente sem definições ⇒ lista vazia; salvar [] limpa a coluna', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Sem Custom' }, KEY);
+      expect(await loadCustomExamDefs(exec, patientId, KEY)).toEqual([]);
+
+      await setCustomExamDefs(exec, patientId, [{ slot: 2, name: 'Ferritina' }], KEY);
+      expect(await loadCustomExamDefs(exec, patientId, KEY)).toHaveLength(1);
+
+      await setCustomExamDefs(exec, patientId, [], KEY);
+      const raw = await exec.query<{ custom_exams_enc: string | null }>(
+        'SELECT custom_exams_enc FROM patient WHERE id = $1',
+        [patientId],
+      );
+      expect(raw.rows[0]!.custom_exams_enc).toBeNull();
+      expect(await loadCustomExamDefs(exec, patientId, KEY)).toEqual([]);
+    });
+  });
+
+  describe('Metas corporais — versionadas por append, cifradas e auditadas', () => {
+    it('vigente = maior effective_from <= asOf; cifrada; audita body-goal-set', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Com Meta' }, KEY);
+      await setBodyGoal(exec, patientId, userId, '2026-01-01', { peso: 80, pgc: 22 }, KEY);
+      await setBodyGoal(exec, patientId, userId, '2026-06-01', { peso: 75 }, KEY);
+
+      const raw = await exec.query<{ values_enc: string }>(
+        'SELECT values_enc FROM body_goal WHERE patient_id = $1 LIMIT 1',
+        [patientId],
+      );
+      expect(raw.rows[0]!.values_enc).not.toContain('peso');
+
+      // Entre as duas vigências ⇒ pega a antiga (com pgc).
+      const antiga = await loadCurrentBodyGoal(exec, patientId, KEY, '2026-03-01');
+      expect(antiga!.values).toEqual({ peso: 80, pgc: 22 });
+      expect(antiga!.effectiveFrom).toBe('2026-01-01');
+
+      // Sem asOf (hoje) ⇒ pega a mais recente (meta parcial é válida).
+      const vigente = await loadCurrentBodyGoal(exec, patientId, KEY);
+      expect(vigente!.values).toEqual({ peso: 75 });
+      expect(vigente!.values.pgc).toBeUndefined();
+
+      const trail = await getAuditTrail(exec, patientId);
+      expect(trail.filter((e) => e.triggeredBy === 'body-goal-set').length).toBe(2);
+    });
+
+    it('paciente sem meta corporal ⇒ null (e vigência futura não vale hoje)', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Sem Meta' }, KEY);
+      expect(await loadCurrentBodyGoal(exec, patientId, KEY)).toBeNull();
+
+      await setBodyGoal(exec, patientId, userId, '2099-01-01', { peso: 70 }, KEY);
+      expect(await loadCurrentBodyGoal(exec, patientId, KEY)).toBeNull();
+      expect(await loadCurrentBodyGoal(exec, patientId, KEY, '2099-06-01')).not.toBeNull();
     });
   });
 

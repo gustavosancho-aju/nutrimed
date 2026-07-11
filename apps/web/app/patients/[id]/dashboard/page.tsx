@@ -7,10 +7,12 @@ import {
   loadPatient,
   listBodyComposition,
   listLabExam,
+  loadCustomExamDefs,
+  loadCurrentBodyGoal,
   computeAge,
 } from '@nutrimed/patients';
 import {
-  type TrendPoint,
+  seriesOf,
   deriveHeightMeters,
   idealWeightRange,
   idealWeightTarget,
@@ -20,6 +22,8 @@ import {
 import { MetricCard } from '@/components/dashboard/metric-card';
 import { ExamCard } from '@/components/dashboard/exam-card';
 import { MeasurementForm } from '@/components/dashboard/measurement-form';
+import { CustomExamSettings } from '@/components/dashboard/custom-exam-settings';
+import { BodyGoalSettings } from '@/components/dashboard/body-goal-settings';
 
 type Aba = 'geral' | 'bioimpedancia' | 'exames';
 const ABAS: { key: Aba; label: string }[] = [
@@ -27,13 +31,6 @@ const ABAS: { key: Aba; label: string }[] = [
   { key: 'bioimpedancia', label: 'Bioimpedância' },
   { key: 'exames', label: 'Exames' },
 ];
-
-/** Extrai a série temporal de um campo das medições (ignora os ausentes). */
-function seriesOf<T>(rows: readonly { measuredAt: Date; values: T }[], key: keyof T): TrendPoint[] {
-  return rows
-    .filter((r) => typeof r.values[key] === 'number')
-    .map((r) => ({ measuredAt: r.measuredAt, value: r.values[key] as number }));
-}
 
 /**
  * Dashboard de evolução do paciente (E11 Fase 3) — 3 abas (Geral · Bioimpedância
@@ -60,6 +57,8 @@ export default async function DashboardPage({
 
   const body = await listBodyComposition(db, id, key);
   const labs = await listLabExam(db, id, key);
+  const customDefs = await loadCustomExamDefs(db, id, key);
+  const bodyGoal = await loadCurrentBodyGoal(db, id, key);
   const today = new Date().toISOString().slice(0, 10);
   const age = computeAge(patient.birthDate, new Date());
 
@@ -70,12 +69,24 @@ export default async function DashboardPage({
     heightM = deriveHeightMeters(body[i]!.values.peso, body[i]!.values.imc);
   }
   const pesoBand = heightM !== null ? idealWeightRange(heightM) : undefined;
-  const pesoTarget = heightM !== null ? idealWeightTarget(heightM) : undefined;
+  const pesoTargetOms = heightM !== null ? idealWeightTarget(heightM) : undefined;
+
+  // Metas do médico (body_goal) têm precedência; Peso e IMC caem na referência
+  // OMS como padrão. Demais métricas só têm meta quando o médico define.
+  const goal = bodyGoal?.values;
+  const doctorLabel = 'Meta definida pelo médico';
+  const pesoTarget = goal?.peso ?? pesoTargetOms;
+  const imcTarget = goal?.imc ?? TARGET_IMC;
   const pesoTargetLabel =
-    pesoBand && pesoTarget !== undefined
-      ? `Faixa ideal ${Math.round(pesoBand.min)}–${Math.round(pesoBand.max)} kg · meta ~${Math.round(pesoTarget)} kg`
-      : undefined;
-  const imcTargetLabel = `Saudável ${HEALTHY_IMC.min}–${HEALTHY_IMC.max} · meta ~${TARGET_IMC}`;
+    goal?.peso !== undefined
+      ? `${doctorLabel}${pesoBand ? ` · faixa ideal ${Math.round(pesoBand.min)}–${Math.round(pesoBand.max)} kg` : ''}`
+      : pesoBand && pesoTargetOms !== undefined
+        ? `Faixa ideal ${Math.round(pesoBand.min)}–${Math.round(pesoBand.max)} kg · meta ~${Math.round(pesoTargetOms)} kg`
+        : undefined;
+  const imcTargetLabel =
+    goal?.imc !== undefined
+      ? `${doctorLabel} · saudável ${HEALTHY_IMC.min}–${HEALTHY_IMC.max}`
+      : `Saudável ${HEALTHY_IMC.min}–${HEALTHY_IMC.max} · meta ~${TARGET_IMC}`;
 
   return (
     <main className="mx-auto min-h-screen max-w-4xl p-8">
@@ -180,8 +191,20 @@ export default async function DashboardPage({
                 target={pesoTarget}
                 targetLabel={pesoTargetLabel}
               />
-              <MetricCard label="Massa Muscular" points={seriesOf(body, 'massaMuscular')} unit="kg" />
-              <MetricCard label="% Gordura" points={seriesOf(body, 'pgc')} unit="%" />
+              <MetricCard
+                label="Massa Muscular"
+                points={seriesOf(body, 'massaMuscular')}
+                unit="kg"
+                target={goal?.massaMuscular}
+                targetLabel={goal?.massaMuscular !== undefined ? doctorLabel : undefined}
+              />
+              <MetricCard
+                label="% Gordura"
+                points={seriesOf(body, 'pgc')}
+                unit="%"
+                target={goal?.pgc}
+                targetLabel={goal?.pgc !== undefined ? doctorLabel : undefined}
+              />
             </div>
             {body.length === 0 && (
               <p className="text-sm text-ink-muted">
@@ -202,17 +225,41 @@ export default async function DashboardPage({
                 target={pesoTarget}
                 targetLabel={pesoTargetLabel}
               />
-              <MetricCard label="Massa Muscular" points={seriesOf(body, 'massaMuscular')} unit="kg" />
-              <MetricCard label="Massa de Gordura" points={seriesOf(body, 'massaGordura')} unit="kg" />
-              <MetricCard label="Cintura Abdominal" points={seriesOf(body, 'cintura')} unit="cm" />
+              <MetricCard
+                label="Massa Muscular"
+                points={seriesOf(body, 'massaMuscular')}
+                unit="kg"
+                target={goal?.massaMuscular}
+                targetLabel={goal?.massaMuscular !== undefined ? doctorLabel : undefined}
+              />
+              <MetricCard
+                label="Massa de Gordura"
+                points={seriesOf(body, 'massaGordura')}
+                unit="kg"
+                target={goal?.massaGordura}
+                targetLabel={goal?.massaGordura !== undefined ? doctorLabel : undefined}
+              />
+              <MetricCard
+                label="Cintura Abdominal"
+                points={seriesOf(body, 'cintura')}
+                unit="cm"
+                target={goal?.cintura}
+                targetLabel={goal?.cintura !== undefined ? doctorLabel : undefined}
+              />
               <MetricCard
                 label="IMC"
                 points={seriesOf(body, 'imc')}
                 band={HEALTHY_IMC}
-                target={TARGET_IMC}
+                target={imcTarget}
                 targetLabel={imcTargetLabel}
               />
-              <MetricCard label="PGC" points={seriesOf(body, 'pgc')} unit="%" />
+              <MetricCard
+                label="PGC"
+                points={seriesOf(body, 'pgc')}
+                unit="%"
+                target={goal?.pgc}
+                targetLabel={goal?.pgc !== undefined ? doctorLabel : undefined}
+              />
             </div>
             <MeasurementForm
               patientId={id}
@@ -227,6 +274,7 @@ export default async function DashboardPage({
                 { name: 'pgc', label: 'PGC', unit: '%' },
               ]}
             />
+            <BodyGoalSettings patientId={id} goal={bodyGoal} defaultDate={today} />
           </div>
         )}
 
@@ -236,6 +284,14 @@ export default async function DashboardPage({
               <ExamCard label="LDL" marker="ldl" unit="mg/dL" reference="< 100 ok · 100–159 atenção · ≥ 160 alerta" points={seriesOf(labs, 'ldl')} />
               <ExamCard label="HbA1C" marker="hba1c" unit="%" reference="< 5.7 ok · 5.7–6.4 atenção · ≥ 6.5 alerta" points={seriesOf(labs, 'hba1c')} />
               <ExamCard label="Insulina" marker="insulina" unit="µU/mL" reference="≤ 12 ok · 12–25 atenção · > 25 alerta" points={seriesOf(labs, 'insulina')} />
+              {customDefs.map((d) => (
+                <ExamCard
+                  key={d.slot}
+                  label={d.name}
+                  unit={d.unit}
+                  points={seriesOf(labs, `custom${d.slot}` as 'custom1' | 'custom2' | 'custom3')}
+                />
+              ))}
             </div>
             <p className="mt-3 text-xs text-ink-muted">
               As faixas são referência simplificada de apoio visual — não constituem diagnóstico. A
@@ -249,8 +305,10 @@ export default async function DashboardPage({
                 { name: 'ldl', label: 'LDL', unit: 'mg/dL' },
                 { name: 'hba1c', label: 'HbA1C', unit: '%' },
                 { name: 'insulina', label: 'Insulina', unit: 'µU/mL' },
+                ...customDefs.map((d) => ({ name: `custom${d.slot}`, label: d.name, unit: d.unit })),
               ]}
             />
+            <CustomExamSettings patientId={id} defs={customDefs} />
           </div>
         )}
       </section>
