@@ -16,7 +16,13 @@ const globalForDb = globalThis as unknown as { __nutrimedDb?: Promise<SqlExecuto
 const DEMO_EMAIL = 'demo@nutrimed.test';
 const DEMO_PASSWORD = 'nutrimed123';
 
+/**
+ * Semeia o usuário demo APENAS fora de produção (conveniência de dev local).
+ * Em produção jamais criamos uma credencial conhecida — usuários reais são
+ * provisionados por script administrativo (scripts/admin-provision-user.mjs).
+ */
 async function seedDemoUser(db: SqlExecutor): Promise<void> {
+  if (process.env.NODE_ENV === 'production') return;
   const res = await db.query<{ count: number }>('SELECT count(*)::int AS count FROM app_user');
   if (Number(res.rows[0]?.count ?? 0) > 0) return;
   await db.query(
@@ -45,5 +51,3 @@ export function getDb(): Promise<SqlExecutor> {
   }
   return globalForDb.__nutrimedDb;
 }
-
-export const DEMO_CREDENTIALS = { email: DEMO_EMAIL, password: DEMO_PASSWORD };

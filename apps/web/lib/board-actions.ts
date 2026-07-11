@@ -1,7 +1,9 @@
 'use server';
 
 import { getCurrentUser } from './auth';
+import { getDb } from './db';
 import { startDemoBoard, requestSynthesis, startLiveBoard, stopLiveBoard } from './board-runtime';
+import { assertConsultationOwner } from './consultation-owner';
 import { toActionResult, type ActionResult } from './action-result';
 
 /** Server action: inicia a demo do board (auth + gate de consentimento no caminho). */
@@ -10,6 +12,7 @@ export async function startDemoBoardAction(formData: FormData): Promise<void> {
   if (!user) throw new Error('Não autenticado.');
   const consultationId = String(formData.get('consultationId') ?? '');
   if (!consultationId) throw new Error('consultationId ausente.');
+  await assertConsultationOwner(await getDb(), consultationId, user.id);
   await startDemoBoard(consultationId);
 }
 
@@ -19,6 +22,7 @@ export async function requestSynthesisAction(formData: FormData): Promise<void> 
   if (!user) throw new Error('Não autenticado.');
   const consultationId = String(formData.get('consultationId') ?? '');
   if (!consultationId) throw new Error('consultationId ausente.');
+  await assertConsultationOwner(await getDb(), consultationId, user.id);
   await requestSynthesis(consultationId);
 }
 
@@ -32,6 +36,7 @@ export async function startLiveBoardAction(consultationId: string): Promise<Acti
   if (!user) return { ok: false, code: 'unauthenticated' };
   if (!consultationId) return { ok: false, code: 'invalid-input' };
   try {
+    await assertConsultationOwner(await getDb(), consultationId, user.id);
     await startLiveBoard(consultationId);
     return { ok: true };
   } catch (err) {
@@ -45,6 +50,7 @@ export async function stopLiveBoardAction(consultationId: string): Promise<Actio
   const user = await getCurrentUser();
   if (!user) return { ok: false, code: 'unauthenticated' };
   try {
+    await assertConsultationOwner(await getDb(), consultationId, user.id);
     await stopLiveBoard(consultationId);
     return { ok: true };
   } catch (err) {

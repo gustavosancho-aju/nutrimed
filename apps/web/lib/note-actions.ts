@@ -8,6 +8,7 @@ import { getCurrentUser } from './auth';
 import { getDb } from './db';
 import { getEncryptionKey } from './crypto-key';
 import { getNoteInputs } from './board-runtime';
+import { assertConsultationOwner, consultationBelongsTo } from './consultation-owner';
 import { toActionResult, type ActionResult } from './action-result';
 
 /**
@@ -20,6 +21,7 @@ async function requireConsultation(formData: FormData): Promise<string> {
   if (!user) throw new Error('Não autenticado.');
   const consultationId = String(formData.get('consultationId') ?? '');
   if (!consultationId) throw new Error('consultationId ausente.');
+  await assertConsultationOwner(await getDb(), consultationId, user.id);
   return consultationId;
 }
 
@@ -37,6 +39,9 @@ export async function generateNoteAction(
     if (!user) return { ok: false, code: 'unauthenticated' };
     const consultationId = String(formData.get('consultationId') ?? '');
     if (!consultationId) return { ok: false, code: 'invalid-input' };
+    if (!(await consultationBelongsTo(await getDb(), consultationId, user.id))) {
+      return { ok: false, code: 'not-found' };
+    }
     const inputs = await getNoteInputs(consultationId);
     if (!inputs || inputs.finals.length === 0) {
       return { ok: false, code: 'no-transcript' };

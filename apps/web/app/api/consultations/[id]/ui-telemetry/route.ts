@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
+import { getDb } from '@/lib/db';
 import { recordUiEvent } from '@/lib/board-runtime';
+import { consultationBelongsTo } from '@/lib/consultation-owner';
 import type { UiEventKind } from '@nutrimed/telemetry';
 
 /**
@@ -28,6 +30,9 @@ export async function POST(
   const body = (await request.json().catch(() => ({}))) as { kind?: string };
   if (!body.kind || !VALID.has(body.kind)) {
     return NextResponse.json({ error: 'kind inválido' }, { status: 400 });
+  }
+  if (!(await consultationBelongsTo(await getDb(), id, user.id))) {
+    return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
   await recordUiEvent(id, body.kind as UiEventKind);
   return NextResponse.json({ ok: true });

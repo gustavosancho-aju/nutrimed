@@ -14,6 +14,7 @@ export type ActionErrorCode =
   | 'no-transcript'
   | 'no-recall'
   | 'invalid-input'
+  | 'not-found'
   | 'internal';
 
 export type ActionResult = { ok: true } | { ok: false; code: ActionErrorCode; detail?: string };
@@ -28,6 +29,7 @@ export const ACTION_ERROR_MESSAGES: Record<ActionErrorCode, string> = {
   'no-recall':
     'A transcrição não menciona alimentos consumidos — pergunte ao paciente o que ele comeu e gere novamente.',
   'invalid-input': 'Dados da requisição incompletos — recarregue a página e tente de novo.',
+  'not-found': 'Consulta não encontrada.',
   internal: 'Falha inesperada ao iniciar a consulta ao vivo — tente novamente; se persistir, abra o Diagnóstico.',
 };
 
@@ -37,6 +39,7 @@ export const ACTION_ERROR_MESSAGES: Record<ActionErrorCode, string> = {
  */
 export function toActionResult(err: unknown): ActionResult {
   if (err instanceof Error) {
+    if (err.name === 'ConsultationNotFoundError') return { ok: false, code: 'not-found' };
     if (err.name === 'ConsentRequiredError') return { ok: false, code: 'consent-required' };
     if (err.name === 'DeepgramSttError' && (err as { kind?: string }).kind === 'config') {
       return { ok: false, code: 'stt-missing' };

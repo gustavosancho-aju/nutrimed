@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { isCaptureAuthorized } from '@nutrimed/consent';
 import { getDb } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { consultationBelongsTo } from '@/lib/consultation-owner';
 
 /**
  * Gate de servidor da captura de áudio (AC1/AC3/AC6, FR20).
@@ -26,6 +27,12 @@ export async function GET(
 
   const { id: consultationId } = await params;
   const db = await getDb();
+
+  // Posse antes do gate de consentimento: não vaza o estado de consulta alheia.
+  if (!(await consultationBelongsTo(db, consultationId, user.id))) {
+    return NextResponse.json({ authorized: false, reason: 'not_found' }, { status: 404 });
+  }
+
   const authorized = await isCaptureAuthorized(db, consultationId);
 
   if (!authorized) {

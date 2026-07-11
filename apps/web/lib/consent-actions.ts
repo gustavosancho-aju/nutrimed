@@ -11,6 +11,7 @@ import { createPatient, loadPatient } from '@nutrimed/patients';
 import { getDb } from './db';
 import { getCurrentUser } from './auth';
 import { getEncryptionKey } from './crypto-key';
+import { assertConsultationOwner } from './consultation-owner';
 
 /**
  * Abre uma nova consulta (consentimento default NEGADO) vinculada a um paciente
@@ -63,6 +64,7 @@ export async function grantConsentAction(formData: FormData): Promise<void> {
   if (!consultationId) return;
 
   const db = await getDb();
+  await assertConsultationOwner(db, consultationId, user.id);
   await grantConsent(db, consultationId, user.id);
   revalidatePath(`/consultations/${consultationId}`);
 }
@@ -76,6 +78,7 @@ export async function revokeConsentAction(formData: FormData): Promise<void> {
   if (!consultationId) return;
 
   const db = await getDb();
+  await assertConsultationOwner(db, consultationId, user.id);
   await revokeConsent(db, consultationId);
   revalidatePath(`/consultations/${consultationId}`);
 }

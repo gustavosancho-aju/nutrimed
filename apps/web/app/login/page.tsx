@@ -26,11 +26,13 @@ export default function LoginPage() {
           </div>
 
           <label className="block space-y-1.5">
-            <span className="text-sm font-medium text-ink">Email</span>
+            <span className="text-sm font-medium text-ink">Usuário</span>
             <input
               name="email"
-              type="email"
+              type="text"
               autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
               required
               className="w-full rounded-[10px] border border-ink/15 bg-white px-3.5 py-2.5 text-sm text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
             />
@@ -60,10 +62,6 @@ export default function LoginPage() {
           >
             {pending ? 'Entrando…' : 'Entrar'}
           </button>
-
-          <p className="rounded-[10px] bg-surface-muted px-3 py-2 text-center text-xs text-ink-muted">
-            Demo: <strong>demo@nutrimed.test</strong> / <strong>nutrimed123</strong>
-          </p>
         </form>
       </div>
     </main>

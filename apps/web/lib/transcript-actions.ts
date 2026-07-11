@@ -5,6 +5,7 @@ import { saveTranscriptReview } from '@nutrimed/clinical-notes';
 import { getCurrentUser } from './auth';
 import { getDb } from './db';
 import { getEncryptionKey } from './crypto-key';
+import { assertConsultationOwner } from './consultation-owner';
 
 /**
  * Salva a transcrição corrigida pelo médico (Transcrição Confiável). A partir
@@ -20,6 +21,7 @@ export async function saveTranscriptReviewAction(formData: FormData): Promise<vo
   const content = String(formData.get('content') ?? '').trim();
   if (!content) throw new Error('Transcrição vazia — não há o que salvar.');
   const db = await getDb();
+  await assertConsultationOwner(db, consultationId, user.id);
   await saveTranscriptReview(db, consultationId, content, getEncryptionKey());
   revalidatePath(`/consultations/${consultationId}`);
 }

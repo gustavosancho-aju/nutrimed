@@ -16,6 +16,7 @@ import { getCurrentUser } from './auth';
 import { getDb } from './db';
 import { getEncryptionKey } from './crypto-key';
 import { getNoteInputs } from './board-runtime';
+import { assertConsultationOwner, consultationBelongsTo } from './consultation-owner';
 import { toActionResult, type ActionResult } from './action-result';
 
 /**
@@ -54,6 +55,9 @@ export async function generateNutritionReportAction(
     if (!user) return { ok: false, code: 'unauthenticated' };
     const consultationId = String(formData.get('consultationId') ?? '');
     if (!consultationId) return { ok: false, code: 'invalid-input' };
+    if (!(await consultationBelongsTo(await getDb(), consultationId, user.id))) {
+      return { ok: false, code: 'not-found' };
+    }
 
     const inputs = await getNoteInputs(consultationId);
     if (!inputs || inputs.finals.length === 0) {
@@ -111,6 +115,7 @@ export async function saveNutritionReportAction(formData: FormData): Promise<voi
   const content = String(formData.get('content') ?? '').trim();
   if (!content) throw new Error('Relatório vazio.');
   const db = await getDb();
+  await assertConsultationOwner(db, consultationId, user.id);
   await saveNutritionReport(db, consultationId, content, getEncryptionKey(), { action: 'edit' });
   revalidatePath(`/consultations/${consultationId}`);
 }
