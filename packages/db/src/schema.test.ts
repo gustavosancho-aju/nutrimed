@@ -44,6 +44,7 @@ describe('Migrations 0001 — schema base (AC1, AC3)', () => {
       '0009_nutrition_report',
       '0010_transcript_review',
       '0011_custom_exams_body_goal',
+      '0012_totp_2fa',
     ]);
   });
 

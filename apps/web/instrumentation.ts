@@ -35,19 +35,6 @@ export async function register(): Promise<void> {
   } catch (error) {
     console.error('[instrumentation] warm-up do bot de Telegram falhou:', error);
   }
-
-  // Rede de segurança para erros de fundo (fora do ciclo de request): promessas
-  // rejeitadas sem catch também disparam alerta. uncaughtException fica de fora
-  // de propósito — deixa o processo cair e o Fly reiniciar (não mascaramos).
-  try {
-    const { reportServerError } = await import('./lib/alert');
-    process.on('unhandledRejection', (reason) => {
-      console.error('[unhandledRejection]', reason);
-      void reportServerError(reason, { path: 'unhandledRejection' });
-    });
-  } catch (error) {
-    console.error('[instrumentation] hook de unhandledRejection falhou:', error);
-  }
 }
 
 /**

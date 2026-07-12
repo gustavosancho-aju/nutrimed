@@ -42,14 +42,22 @@ export default async function DashboardPage({
           <h1 className="font-display text-2xl font-semibold tracking-tight text-ink">NutriMed</h1>
           <p className="text-sm text-ink-muted">Painel do nutrólogo</p>
         </div>
-        <form action={logoutAction}>
-          <button
-            type="submit"
+        <div className="flex items-center gap-2">
+          <Link
+            href="/seguranca"
             className="rounded-[10px] border border-ink/15 px-3.5 py-1.5 text-sm text-ink transition-colors hover:bg-surface-muted"
           >
-            Sair
-          </button>
-        </form>
+            🔒 Segurança
+          </Link>
+          <form action={logoutAction}>
+            <button
+              type="submit"
+              className="rounded-[10px] border border-ink/15 px-3.5 py-1.5 text-sm text-ink transition-colors hover:bg-surface-muted"
+            >
+              Sair
+            </button>
+          </form>
+        </div>
       </header>
 
       <section className="mt-10 flex items-end justify-between gap-4">

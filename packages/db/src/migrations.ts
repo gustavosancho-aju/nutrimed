@@ -344,4 +344,14 @@ CREATE INDEX IF NOT EXISTS idx_body_goal_patient
   ON body_goal(patient_id, effective_from DESC);
 `,
   },
+  {
+    name: '0012_totp_2fa',
+    sql: `
+-- Verificação em duas etapas (TOTP) do login do médico. Opcional por padrão
+-- (totp_enabled=false) — não quebra logins existentes. O secret revela o segundo
+-- fator => cifrado (NFR9, AES-256-GCM base32 do secret).
+ALTER TABLE app_user ADD COLUMN IF NOT EXISTS totp_secret_enc text;
+ALTER TABLE app_user ADD COLUMN IF NOT EXISTS totp_enabled boolean NOT NULL DEFAULT false;
+`,
+  },
 ];
