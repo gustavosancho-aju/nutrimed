@@ -26,11 +26,18 @@ const STATUS_LABEL: Record<string, string> = {
  * consultas (links para a nota/resumo de E9) + entrada para a dashboard (Fase 3).
  * Valida posse: paciente de outro médico ⇒ notFound (sem vazamento).
  */
-export default async function PatientPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PatientPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ erro?: string }>;
+}) {
   const user = await getCurrentUser();
   if (!user) redirect('/login');
 
   const { id } = await params;
+  const { erro } = await searchParams;
   const db = await getDb();
   const key = getEncryptionKey();
   const patient = await loadPatient(db, id, key);
@@ -65,6 +72,15 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
           + Nova consulta
         </Link>
       </header>
+
+      {erro && (
+        <p
+          role="alert"
+          className="mt-6 rounded-[10px] border border-red-300/60 bg-red-400/10 px-4 py-2.5 text-sm text-red-700"
+        >
+          {erro}
+        </p>
+      )}
 
       {/* Dados do paciente */}
       <section className="card-premium gold-hairline mt-8 p-7">

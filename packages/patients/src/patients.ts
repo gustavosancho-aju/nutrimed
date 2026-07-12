@@ -213,12 +213,27 @@ export async function listPatients(
   db: SqlExecutor,
   userId: string,
   key: Buffer,
+  opts?: { limit?: number; offset?: number },
 ): Promise<Patient[]> {
-  const res = await db.query<PatientRow>(
-    'SELECT * FROM patient WHERE user_id = $1 ORDER BY created_at DESC, id DESC',
+  let sql = 'SELECT * FROM patient WHERE user_id = $1 ORDER BY created_at DESC, id DESC';
+  const params: unknown[] = [userId];
+  if (opts?.limit !== undefined) {
+    params.push(Math.max(1, Math.floor(opts.limit)));
+    sql += ` LIMIT $${params.length}`;
+    params.push(Math.max(0, Math.floor(opts.offset ?? 0)));
+    sql += ` OFFSET $${params.length}`;
+  }
+  const res = await db.query<PatientRow>(sql, params);
+  return res.rows.map((r) => toPatient(r, key));
+}
+
+/** Total de pacientes do médico (para paginação da lista). */
+export async function countPatients(db: SqlExecutor, userId: string): Promise<number> {
+  const res = await db.query<{ n: number }>(
+    'SELECT count(*)::int AS n FROM patient WHERE user_id = $1',
     [userId],
   );
-  return res.rows.map((r) => toPatient(r, key));
+  return res.rows[0]?.n ?? 0;
 }
 
 interface MeasurementRow {
@@ -264,21 +279,27 @@ async function addMeasurement<T>(
   return measurementId;
 }
 
+/** Teto de medições carregadas por paciente (bound de memória/decifragem). */
+const MAX_MEASUREMENTS = 2000;
+
 async function listMeasurements<T>(
   db: SqlExecutor,
   table: 'body_composition' | 'lab_exam',
   patientId: string,
   key: Buffer,
 ): Promise<Measurement<T>[]> {
-  // Ordenado por data de medição ASC — evolução cronológica para os gráficos.
-  // Desempate por created_at: medições lançadas no MESMO dia (measured_at
-  // idêntico, hora zerada) devem sair na ordem de inserção — id (UUID aleatório)
-  // sozinho embaralharia os pontos do gráfico.
+  // Teto de segurança: busca as MAIS RECENTES (DESC) e reordena para ASC — um
+  // paciente real nunca chega perto de 2000 medições, mas isso evita carregar e
+  // decifrar um histórico ilimitado em memória. Desempate por created_at:
+  // medições do MESMO dia (measured_at idêntico, hora zerada) saem na ordem de
+  // inserção — id (UUID aleatório) sozinho embaralharia os pontos do gráfico.
   const res = await db.query<MeasurementRow>(
-    `SELECT * FROM ${table} WHERE patient_id = $1 ORDER BY measured_at ASC, created_at ASC, id ASC`,
+    `SELECT * FROM ${table} WHERE patient_id = $1
+     ORDER BY measured_at DESC, created_at DESC, id DESC
+     LIMIT ${MAX_MEASUREMENTS}`,
     [patientId],
   );
-  return res.rows.map((r) => toMeasurement<T>(r, key));
+  return res.rows.reverse().map((r) => toMeasurement<T>(r, key));
 }
 
 /** Adiciona uma medição de composição corporal (blob cifrado + auditada). */

@@ -41,13 +41,13 @@ export default async function DashboardPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ aba?: string }>;
+  searchParams: Promise<{ aba?: string; erro?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect('/login');
 
   const { id } = await params;
-  const { aba: abaRaw } = await searchParams;
+  const { aba: abaRaw, erro } = await searchParams;
   const aba: Aba = abaRaw === 'bioimpedancia' || abaRaw === 'exames' ? abaRaw : 'geral';
 
   const db = await getDb();
@@ -139,6 +139,15 @@ export default async function DashboardPage({
           );
         })}
       </nav>
+
+      {erro && (
+        <p
+          role="alert"
+          className="mt-6 rounded-[10px] border border-red-300/60 bg-red-400/10 px-4 py-2.5 text-sm text-red-700"
+        >
+          {erro}
+        </p>
+      )}
 
       {/* Conteúdo */}
       <section className="mt-6">

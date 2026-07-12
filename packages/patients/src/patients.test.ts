@@ -9,6 +9,7 @@ import {
   updatePatient,
   loadPatient,
   listPatients,
+  countPatients,
   addBodyComposition,
   listBodyComposition,
   addLabExam,
@@ -115,6 +116,21 @@ describe('Patient Service (E11 — 11.2)', () => {
       expect(listA.map((p) => p.name)).toContain('Paciente de A');
       expect(listA.map((p) => p.name)).not.toContain('Paciente de B');
       expect(listB.map((p) => p.name)).toContain('Paciente de B');
+    });
+
+    it('pagina com limit/offset e conta o total (sem sobreposição entre páginas)', async () => {
+      const dr = await insertUser(exec, 'paginacao@nutrimed.test');
+      for (let i = 0; i < 5; i += 1) await createPatient(exec, dr, { name: `P${i}` }, KEY);
+
+      expect(await countPatients(exec, dr)).toBe(5);
+      const page1 = await listPatients(exec, dr, KEY, { limit: 2, offset: 0 });
+      const page2 = await listPatients(exec, dr, KEY, { limit: 2, offset: 2 });
+      expect(page1).toHaveLength(2);
+      expect(page2).toHaveLength(2);
+      const ids1 = new Set(page1.map((p) => p.id));
+      expect(page2.some((p) => ids1.has(p.id))).toBe(false);
+      // countPatients é escopado por médico
+      expect(await countPatients(exec, '00000000-0000-0000-0000-000000000000')).toBe(0);
     });
   });
 

@@ -16,7 +16,8 @@ export default async function NewConsultationPage() {
   if (!user) redirect('/login');
 
   const db = await getDb();
-  const patients = await listPatients(db, user.id, getEncryptionKey());
+  // Seletor de paciente: teto generoso (busca/typeahead fica p/ evolução futura).
+  const patients = await listPatients(db, user.id, getEncryptionKey(), { limit: 200 });
   const now = new Date();
 
   return (

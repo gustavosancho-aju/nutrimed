@@ -13,6 +13,7 @@ import { getDb } from './db';
 import { getCurrentUser } from './auth';
 import { getEncryptionKey } from './crypto-key';
 import { parseDecimal } from './dashboard';
+import { checkRanges } from './measurement-ranges';
 
 /** Remove chaves undefined — uma medição parcial (só alguns campos) é válida. */
 function compact<T extends Record<string, number | undefined>>(obj: T): Partial<T> {
@@ -53,6 +54,14 @@ export async function addMeasurementAction(formData: FormData): Promise<void> {
     ? { action: 'measurement-import', modelVersion }
     : { action: 'measurement-add' };
 
+  /** Valor absurdo (typo) fora da faixa plausível ⇒ volta com erro, nada salvo. */
+  const rejectOutOfRange = (values: Record<string, unknown>): void => {
+    const err = checkRanges(values);
+    if (err) {
+      redirect(`/patients/${patientId}/dashboard?aba=${aba}&erro=${encodeURIComponent(err)}`);
+    }
+  };
+
   if (kind === 'lab') {
     const values: LabExamValues = compact({
       ldl: parseDecimal(formData.get('ldl')),
@@ -63,6 +72,7 @@ export async function addMeasurementAction(formData: FormData): Promise<void> {
       custom2: parseDecimal(formData.get('custom2')),
       custom3: parseDecimal(formData.get('custom3')),
     });
+    rejectOutOfRange({ ...values });
     if (Object.keys(values).length > 0) {
       await addLabExam(db, patientId, { measuredAt, values }, key, origin);
     }
@@ -75,6 +85,7 @@ export async function addMeasurementAction(formData: FormData): Promise<void> {
       imc: parseDecimal(formData.get('imc')),
       pgc: parseDecimal(formData.get('pgc')),
     });
+    rejectOutOfRange({ ...values });
     if (Object.keys(values).length > 0) {
       await addBodyComposition(db, patientId, { measuredAt, values }, key, origin);
     }

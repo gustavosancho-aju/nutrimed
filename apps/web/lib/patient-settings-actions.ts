@@ -13,6 +13,7 @@ import { getDb } from './db';
 import { getCurrentUser } from './auth';
 import { getEncryptionKey } from './crypto-key';
 import { parseDecimal } from './dashboard';
+import { checkRanges } from './measurement-ranges';
 
 /**
  * Server actions de configuração do paciente na dashboard (exames
@@ -78,6 +79,10 @@ export async function setBodyGoalAction(formData: FormData): Promise<void> {
     cintura: parseDecimal(formData.get('cintura')),
     pgc: parseDecimal(formData.get('pgc')),
   });
+  const rangeError = checkRanges({ ...values });
+  if (rangeError) {
+    redirect(`/patients/${patientId}/dashboard?aba=bioimpedancia&erro=${encodeURIComponent(rangeError)}`);
+  }
   if (Object.keys(values).length > 0) {
     const dateRaw = String(formData.get('effectiveFrom') ?? '').trim();
     const effectiveFrom = dateRaw || new Date().toISOString().slice(0, 10);

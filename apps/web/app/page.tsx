@@ -4,20 +4,35 @@ import { getCurrentUser } from '@/lib/auth';
 import { logoutAction } from '@/lib/auth-actions';
 import { getDb } from '@/lib/db';
 import { getEncryptionKey } from '@/lib/crypto-key';
-import { listPatients, computeAge } from '@nutrimed/patients';
+import { listPatients, countPatients, computeAge } from '@nutrimed/patients';
+
+const PAGE_SIZE = 20;
 
 /**
  * Home (E11/11.4): lista de pacientes do médico. Cada paciente leva à sua ficha
  * (/patients/[id]); o CTA "Nova consulta" leva ao fluxo de seleção/cadastro.
+ * Paginada (?page=) — não carrega a base inteira de uma vez.
  */
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   const user = await getCurrentUser();
   if (!user) {
     redirect('/login');
   }
 
+  const { page: pageRaw } = await searchParams;
+  const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+
   const db = await getDb();
-  const patients = await listPatients(db, user.id, getEncryptionKey());
+  const total = await countPatients(db, user.id);
+  const patients = await listPatients(db, user.id, getEncryptionKey(), {
+    limit: PAGE_SIZE,
+    offset: (page - 1) * PAGE_SIZE,
+  });
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const now = new Date();
 
   return (
@@ -43,8 +58,8 @@ export default async function DashboardPage() {
             Bem-vinda, {user.displayName}
           </h2>
           <p className="text-sm text-ink-muted">
-            {patients.length > 0
-              ? `${patients.length} ${patients.length === 1 ? 'paciente' : 'pacientes'} em acompanhamento.`
+            {total > 0
+              ? `${total} ${total === 1 ? 'paciente' : 'pacientes'} em acompanhamento.`
               : 'Você ainda não tem pacientes.'}
           </p>
         </div>
@@ -56,7 +71,7 @@ export default async function DashboardPage() {
         </Link>
       </section>
 
-      {patients.length === 0 ? (
+      {total === 0 ? (
         <section className="card-premium gold-hairline mt-8 p-10 text-center">
           <h3 className="font-display text-base font-semibold text-ink">Comece pelo primeiro paciente</h3>
           <p className="mx-auto mt-1 max-w-md text-sm text-ink-muted">
@@ -96,6 +111,34 @@ export default async function DashboardPage() {
             );
           })}
         </ul>
+      )}
+
+      {totalPages > 1 && (
+        <nav className="mt-6 flex items-center justify-between text-sm" aria-label="Paginação">
+          {page > 1 ? (
+            <Link
+              href={`/?page=${page - 1}`}
+              className="rounded-[10px] border border-ink/15 px-3.5 py-1.5 text-ink transition-colors hover:bg-surface-muted"
+            >
+              ← Anteriores
+            </Link>
+          ) : (
+            <span />
+          )}
+          <span className="text-ink-muted">
+            Página {page} de {totalPages}
+          </span>
+          {page < totalPages ? (
+            <Link
+              href={`/?page=${page + 1}`}
+              className="rounded-[10px] border border-ink/15 px-3.5 py-1.5 text-ink transition-colors hover:bg-surface-muted"
+            >
+              Próximos →
+            </Link>
+          ) : (
+            <span />
+          )}
+        </nav>
       )}
     </main>
   );

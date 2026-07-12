@@ -76,7 +76,7 @@ export async function listConsultationsByPatient(
   patientId: string,
 ): Promise<ConsultationSummary[]> {
   const res = await db.query<{ id: string; status: string; created_at: Date }>(
-    'SELECT id, status, created_at FROM consultation WHERE patient_id = $1 ORDER BY created_at DESC, id DESC',
+    'SELECT id, status, created_at FROM consultation WHERE patient_id = $1 ORDER BY created_at DESC, id DESC LIMIT 100',
     [patientId],
   );
   return res.rows.map((r) => ({ id: r.id, status: r.status, createdAt: new Date(r.created_at) }));

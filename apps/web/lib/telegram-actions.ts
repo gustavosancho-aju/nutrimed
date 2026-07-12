@@ -8,6 +8,7 @@ import { getDb } from './db';
 import { getCurrentUser } from './auth';
 import { getEncryptionKey } from './crypto-key';
 import { parseDecimal } from './dashboard';
+import { checkRanges } from './measurement-ranges';
 
 /**
  * Server actions do canal Telegram e das metas (E12/12.4). Toda ação valida a
@@ -54,6 +55,10 @@ export async function setGoalAction(formData: FormData): Promise<void> {
     carbs: parseDecimal(formData.get('carbs')) ?? 0,
     fat: parseDecimal(formData.get('fat')) ?? 0,
   };
+  const rangeError = checkRanges({ ...values });
+  if (rangeError) {
+    redirect(`/patients/${patientId}?erro=${encodeURIComponent(rangeError)}`);
+  }
   const dateRaw = String(formData.get('effectiveFrom') ?? '').trim();
   const effectiveFrom = dateRaw || new Date().toISOString().slice(0, 10);
 
