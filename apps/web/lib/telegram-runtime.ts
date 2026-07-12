@@ -159,6 +159,7 @@ async function pollLoop(token: string, deps: BotDeps, telemetry: TelegramTelemet
     return;
   }
   await tgCall(token, 'deleteWebhook', { drop_pending_updates: false }).catch(() => undefined);
+  console.log('[telegram] long-polling iniciado (dev).');
   let offset = 0;
   for (;;) {
     try {
@@ -196,7 +197,6 @@ async function init(): Promise<TelegramRuntime | null> {
       };
     }
     void pollLoop(token, deps, telemetry);
-    console.log('[telegram] long-polling iniciado (dev).');
   } else {
     const base = process.env.PUBLIC_BASE_URL?.replace(/\/$/, '');
     if (base) {
