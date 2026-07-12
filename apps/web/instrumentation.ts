@@ -35,4 +35,35 @@ export async function register(): Promise<void> {
   } catch (error) {
     console.error('[instrumentation] warm-up do bot de Telegram falhou:', error);
   }
+
+  // Rede de segurança para erros de fundo (fora do ciclo de request): promessas
+  // rejeitadas sem catch também disparam alerta. uncaughtException fica de fora
+  // de propósito — deixa o processo cair e o Fly reiniciar (não mascaramos).
+  try {
+    const { reportServerError } = await import('./lib/alert');
+    process.on('unhandledRejection', (reason) => {
+      console.error('[unhandledRejection]', reason);
+      void reportServerError(reason, { path: 'unhandledRejection' });
+    });
+  } catch (error) {
+    console.error('[instrumentation] hook de unhandledRejection falhou:', error);
+  }
+}
+
+/**
+ * Hook oficial do Next 16: dispara em QUALQUER erro de servidor (server
+ * component, route handler, server action, RSC). Envia alerta ao responsável —
+ * tira o time do escuro (antes só o log do Fly registrava). Nunca lança.
+ */
+export async function onRequestError(
+  error: unknown,
+  request: { path?: string; method?: string },
+): Promise<void> {
+  if (process.env.NEXT_RUNTIME !== 'nodejs') return;
+  try {
+    const { reportServerError } = await import('./lib/alert');
+    await reportServerError(error, { path: request?.path, method: request?.method });
+  } catch (err) {
+    console.error('[onRequestError] alerta falhou:', err);
+  }
 }
