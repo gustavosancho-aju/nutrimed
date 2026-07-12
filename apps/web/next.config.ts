@@ -47,6 +47,11 @@ const nextConfig: NextConfig = {
   ],
   // Drivers de banco rodam no servidor — não empacotar (require nativo em runtime).
   serverExternalPackages: ['pg', '@electric-sql/pglite'],
+  experimental: {
+    // Default do Next é 1 MB — laudos em PDF passam disso fácil. Casa com o
+    // MAX_BYTES (10 MB) já validado em lib/import-actions.ts.
+    serverActions: { bodySizeLimit: '10mb' },
+  },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
   },
