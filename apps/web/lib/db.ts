@@ -1,7 +1,6 @@
 import { PGlite } from '@electric-sql/pglite';
 import { runMigrations, pgliteExecutor, type SqlExecutor } from '@nutrimed/db';
 import { hashPassword } from '@nutrimed/auth';
-import { runAdminBootstrap } from './admin-bootstrap';
 
 /**
  * Acesso ao banco no servidor.
@@ -43,7 +42,6 @@ async function init(): Promise<SqlExecutor> {
   }
   await runMigrations(exec);
   await seedDemoUser(exec);
-  await runAdminBootstrap(); // no-op sem ADMIN_BOOTSTRAP (provisionamento único)
   return exec;
 }
 
