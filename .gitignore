@@ -75,3 +75,6 @@ medrxiv_page.html
 .codex/
 .antigravity/
 .kimi/
+
+# Dumps de backup (nunca versionar dados)
+backups/
