@@ -79,6 +79,8 @@ describe('AnthropicLlmProvider (Claude Haiku — Stories 3.1/3.4)', () => {
     expect(body.messages[0].content).toContain('Contribuições JÁ FEITAS pelo board');
     expect(body.messages[0].content).toContain('Vale checar PA e FC.');
     expect(body.system).toContain('{"skip":true}');
+    // critério (b) do skip: sem material ancorado no que foi dito, a persona cala
+    expect(body.system).toContain('ancorada no que foi efetivamente dito');
   });
 
   it('B1 — sem priors/allowSkip o prompt fica como antes (aditivo)', async () => {

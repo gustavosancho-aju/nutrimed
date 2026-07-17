@@ -70,8 +70,10 @@ function outputInstructions(longForm: boolean, allowSkip: boolean): string {
       ? 'O campo text deve conter o DOCUMENTO COMPLETO em markdown, com todas as seções e quebras de linha escapadas no JSON, em português do Brasil.'
       : 'O campo text deve ser curto (1-3 frases), em português do Brasil, em tom de sugestão.') +
     (allowSkip
-      ? ' IMPORTANTE: se você NÃO tem nada NOVO e útil a acrescentar — algo que você ou um colega do board ' +
-        'já disse nesta consulta, MESMO COM OUTRAS PALAVRAS, não é novo — responda APENAS {"skip":true}.'
+      ? ' IMPORTANTE: responda APENAS {"skip":true} em DOIS casos: (a) você NÃO tem nada NOVO e útil a ' +
+        'acrescentar — algo que você ou um colega do board já disse nesta consulta, MESMO COM OUTRAS ' +
+        'PALAVRAS, não é novo; (b) a conversa ainda não deu material suficiente para uma contribuição ' +
+        'ancorada no que foi efetivamente dito.'
       : '')
   );
 }

@@ -30,5 +30,7 @@ describe('parseCaseReview (B4 — parse defensivo do roteador)', () => {
   it('system prompt: tom de sugestão + preferência por skip (anti-ruído)', () => {
     expect(CASE_REVIEW_SYSTEM).toContain('conduta é sempre do médico');
     expect(CASE_REVIEW_SYSTEM).toContain('PREFIRA skip');
+    // ancoragem (feedback do piloto): não presumir o que ninguém disse
+    expect(CASE_REVIEW_SYSTEM).toContain('NÃO presuma medicações');
   });
 });

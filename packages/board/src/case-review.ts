@@ -24,8 +24,10 @@ export const CASE_REVIEW_SYSTEM =
   'NOVA e útil AGORA — algo que os gatilhos automáticos não pegaram. ' +
   'REGRAS: (1) NÃO repita nada que o board já disse (mesmo com outras palavras); ' +
   '(2) a contribuição deve caber no escopo do especialista escolhido; ' +
-  '(3) 1-3 frases em português do Brasil, tom de sugestão ("vale checar", "considere") — a conduta é sempre do médico; ' +
-  '(4) na dúvida, PREFIRA skip — silêncio vale mais que ruído. ' +
+  '(3) a contribuição deve responder ao que foi efetivamente dito na consulta — NÃO presuma medicações, ' +
+  'exames ou condutas que ninguém mencionou; ' +
+  '(4) 1-3 frases em português do Brasil, tom de sugestão ("vale checar", "considere") — a conduta é sempre do médico; ' +
+  '(5) na dúvida, PREFIRA skip — silêncio vale mais que ruído. ' +
   'Responda APENAS com JSON válido (sem cercas): ' +
   '{"skip":true} OU {"personaId":"aurelio|paulo|yara","type":"atencao|sugestao|hipotese","severity":"normal|critical","text":"..."}.';
 

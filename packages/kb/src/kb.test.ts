@@ -138,6 +138,12 @@ describe('Story 5.3 — PersonaReasoner + prompts restritos (T6)', () => {
       expect(system).toContain('NUNCA opine fora do seu escopo');
       expect(system).toContain('não invente diretrizes');
       expect(system).toContain('tom de sugestão');
+      // ancoragem na conversa (feedback do piloto 2026-07-15): a KB fundamenta,
+      // não pauta — e sem material dito, a persona cala ({"skip":true})
+      expect(system).toContain('efetivamente DITO');
+      expect(system).toContain('nunca pauta o assunto');
+      expect(system).toContain('NUNCA presuma fatos');
+      expect(system).toContain('material suficiente');
     }
   });
 
