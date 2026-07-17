@@ -37,6 +37,10 @@ export function useBoardStream(consultationId: string, opts: UseBoardStreamOptio
   const setWsGaveUp = useBoardStore((s) => s.setWsGaveUp);
 
   useEffect(() => {
+    // Amarra o store à consulta ANTES de conectar: troca de consulta reseta o
+    // estado (transcrição/feed da consulta anterior vazava — bug do piloto);
+    // mesma consulta é no-op (StrictMode/reconexão não apagam estado vivo).
+    useBoardStore.getState().bindConsultation(consultationId);
     const factory: BrowserSocketFactory =
       opts.socketFactory ?? ((url) => new WebSocket(url) as unknown as BrowserSocketLike);
     // baseUrl vazio ⇒ mesma origem (modo attached, A6)

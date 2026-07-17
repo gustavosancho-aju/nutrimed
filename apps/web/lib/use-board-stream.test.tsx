@@ -78,6 +78,38 @@ describe('useBoardStream (A3 — status do pipeline)', () => {
     expect(useBoardStore.getState().pipeline.wsGaveUp).toBe(true);
   });
 
+  it('trocar de consulta reseta o store — a transcrição da anterior não vaza', () => {
+    const { factory, sockets } = makeFakeSocketFactory();
+    const first = renderHook(() => useBoardStream('c1', { socketFactory: factory, token: 't' }));
+    act(() => {
+      sockets[0]!.emit('message', {
+        data: JSON.stringify({ v: 1, type: 'transcript', text: 'fala da consulta 1', isFinal: true, at: 1 }),
+      });
+    });
+    expect(useBoardStore.getState().transcript.finals).toEqual(['fala da consulta 1']);
+    first.unmount();
+
+    // navegação SPA: módulo (e store) sobrevivem — nova consulta monta o hook
+    renderHook(() => useBoardStream('c2', { socketFactory: factory, token: 't' }));
+    expect(useBoardStore.getState().transcript.finals).toEqual([]);
+    expect(useBoardStore.getState().contributions).toEqual([]);
+    expect(useBoardStore.getState().boundConsultationId).toBe('c2');
+  });
+
+  it('remontar a MESMA consulta preserva o estado (StrictMode double-mount)', () => {
+    const { factory, sockets } = makeFakeSocketFactory();
+    const first = renderHook(() => useBoardStream('c1', { socketFactory: factory, token: 't' }));
+    act(() => {
+      sockets[0]!.emit('message', {
+        data: JSON.stringify({ v: 1, type: 'transcript', text: 'fala viva', isFinal: true, at: 1 }),
+      });
+    });
+    first.unmount();
+
+    renderHook(() => useBoardStream('c1', { socketFactory: factory, token: 't' }));
+    expect(useBoardStore.getState().transcript.finals).toEqual(['fala viva']);
+  });
+
   it('transcript atualiza lastTranscriptAt (insumo do watchdog)', () => {
     const { factory, sockets } = makeFakeSocketFactory();
     renderHook(() => useBoardStream('c1', { socketFactory: factory, token: 't' }));

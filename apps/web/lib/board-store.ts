@@ -39,6 +39,8 @@ export interface PipelineState {
 }
 
 interface BoardState {
+  /** Consulta a que o estado atual pertence — trocar de consulta reseta tudo. */
+  boundConsultationId: string | null;
   contributions: BoardContributionItem[];
   pinned: Set<string>;
   dismissed: Set<string>;
@@ -51,6 +53,12 @@ interface BoardState {
   transcript: TranscriptState;
   pipeline: PipelineState;
 
+  /**
+   * Amarra o store à consulta: id igual ⇒ no-op (StrictMode/re-run de effect
+   * não apagam estado vivo); id DIFERENTE ⇒ reset total — sem isso a navegação
+   * SPA vazava a transcrição da consulta anterior na nova (bug do piloto).
+   */
+  bindConsultation(consultationId: string): void;
   addContribution(item: BoardContributionItem): void;
   addTranscript(text: string, isFinal: boolean): void;
   setSttStatus(stt: PipelineState['stt']): void;
@@ -65,6 +73,7 @@ interface BoardState {
 }
 
 export const useBoardStore = create<BoardState>((set) => ({
+  boundConsultationId: null,
   contributions: [],
   pinned: new Set(),
   dismissed: new Set(),
@@ -74,6 +83,23 @@ export const useBoardStore = create<BoardState>((set) => ({
   heldByFocus: 0,
   transcript: { finals: [], partial: null },
   pipeline: { stt: 'idle', wsConnected: false, wsGaveUp: false, lastTranscriptAt: null },
+
+  bindConsultation: (consultationId) =>
+    set((state) => {
+      if (state.boundConsultationId === consultationId) return state; // idempotente
+      return {
+        boundConsultationId: consultationId,
+        contributions: [],
+        pinned: new Set<string>(),
+        dismissed: new Set<string>(),
+        lastDismissed: null,
+        silenced: new Set<string>(),
+        focusMode: false,
+        heldByFocus: 0,
+        transcript: { finals: [], partial: null },
+        pipeline: { stt: 'idle', wsConnected: false, wsGaveUp: false, lastTranscriptAt: null },
+      };
+    }),
 
   addContribution: (item) =>
     set((state) => {
@@ -138,6 +164,7 @@ export const useBoardStore = create<BoardState>((set) => ({
 
   clear: () =>
     set({
+      boundConsultationId: null,
       contributions: [],
       pinned: new Set(),
       dismissed: new Set(),
