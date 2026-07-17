@@ -294,12 +294,109 @@ async function listMeasurements<T>(
   // medições do MESMO dia (measured_at idêntico, hora zerada) saem na ordem de
   // inserção — id (UUID aleatório) sozinho embaralharia os pontos do gráfico.
   const res = await db.query<MeasurementRow>(
-    `SELECT * FROM ${table} WHERE patient_id = $1
+    `SELECT * FROM ${table} WHERE patient_id = $1 AND deleted_at IS NULL
      ORDER BY measured_at DESC, created_at DESC, id DESC
      LIMIT ${MAX_MEASUREMENTS}`,
     [patientId],
   );
   return res.rows.reverse().map((r) => toMeasurement<T>(r, key));
+}
+
+/**
+ * Atualiza uma medição existente (recifra o blob) — feedback do piloto: corrigir
+ * dado digitado errado. O WHERE amarra id + patient_id (posse) + não-excluída;
+ * 0 linhas afetadas ⇒ erro (medição de outro paciente nunca é tocada).
+ */
+async function updateMeasurement<T>(
+  db: SqlExecutor,
+  table: 'body_composition' | 'lab_exam',
+  patientId: string,
+  measurementId: string,
+  input: MeasurementInput<T>,
+  key: Buffer,
+  origin: WriteOrigin,
+): Promise<void> {
+  const valuesEnc = encryptField(JSON.stringify(input.values), key);
+  // RETURNING id: o contrato SqlExecutor não expõe rowCount — 0 linhas ⇒ erro
+  const res = await db.query<{ id: string }>(
+    `UPDATE ${table} SET values_enc = $3, measured_at = $4
+     WHERE id = $1 AND patient_id = $2 AND deleted_at IS NULL RETURNING id`,
+    [measurementId, patientId, valuesEnc, input.measuredAt],
+  );
+  if (res.rows.length === 0) throw new Error('Medição não encontrada para este paciente.');
+  await writeAudit(db, patientId, {
+    triggeredBy: origin.action,
+    kbSources: [],
+    modelVersion: origin.modelVersion ?? 'human-edit',
+  });
+}
+
+/**
+ * SOFT-delete de uma medição: a linha permanece (trilha/retensão — CJ-2 sem
+ * parecer), mas some das listagens, gráficos e do relatório nutricional.
+ */
+async function softDeleteMeasurement(
+  db: SqlExecutor,
+  table: 'body_composition' | 'lab_exam',
+  patientId: string,
+  measurementId: string,
+  origin: WriteOrigin,
+): Promise<void> {
+  const res = await db.query<{ id: string }>(
+    `UPDATE ${table} SET deleted_at = now()
+     WHERE id = $1 AND patient_id = $2 AND deleted_at IS NULL RETURNING id`,
+    [measurementId, patientId],
+  );
+  if (res.rows.length === 0) throw new Error('Medição não encontrada para este paciente.');
+  await writeAudit(db, patientId, {
+    triggeredBy: origin.action,
+    kbSources: [],
+    modelVersion: origin.modelVersion ?? 'human-edit',
+  });
+}
+
+/** Edita uma medição de composição corporal (recifra + audita). */
+export function updateBodyComposition(
+  db: SqlExecutor,
+  patientId: string,
+  measurementId: string,
+  input: MeasurementInput<BodyCompositionValues>,
+  key: Buffer,
+  origin: WriteOrigin = { action: 'measurement-edit' },
+): Promise<void> {
+  return updateMeasurement(db, 'body_composition', patientId, measurementId, input, key, origin);
+}
+
+/** Edita uma medição de exames laboratoriais (recifra + audita). */
+export function updateLabExam(
+  db: SqlExecutor,
+  patientId: string,
+  measurementId: string,
+  input: MeasurementInput<LabExamValues>,
+  key: Buffer,
+  origin: WriteOrigin = { action: 'measurement-edit' },
+): Promise<void> {
+  return updateMeasurement(db, 'lab_exam', patientId, measurementId, input, key, origin);
+}
+
+/** Exclui (soft) uma medição de composição corporal (audita a exclusão). */
+export function softDeleteBodyComposition(
+  db: SqlExecutor,
+  patientId: string,
+  measurementId: string,
+  origin: WriteOrigin = { action: 'measurement-delete' },
+): Promise<void> {
+  return softDeleteMeasurement(db, 'body_composition', patientId, measurementId, origin);
+}
+
+/** Exclui (soft) uma medição de exames laboratoriais (audita a exclusão). */
+export function softDeleteLabExam(
+  db: SqlExecutor,
+  patientId: string,
+  measurementId: string,
+  origin: WriteOrigin = { action: 'measurement-delete' },
+): Promise<void> {
+  return softDeleteMeasurement(db, 'lab_exam', patientId, measurementId, origin);
 }
 
 /** Adiciona uma medição de composição corporal (blob cifrado + auditada). */

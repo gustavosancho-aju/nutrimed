@@ -14,6 +14,10 @@ import {
   listBodyComposition,
   addLabExam,
   listLabExam,
+  updateBodyComposition,
+  updateLabExam,
+  softDeleteBodyComposition,
+  softDeleteLabExam,
   setCustomExamDefs,
   loadCustomExamDefs,
   setBodyGoal,
@@ -233,6 +237,81 @@ describe('Patient Service (E11 — 11.2)', () => {
       );
       const evo = await listBodyComposition(exec, patientId, KEY);
       expect(evo[0]!.sourceConsultationId).toBe(consultationId);
+    });
+  });
+
+  describe('Editar/excluir medições — soft-delete auditado (feedback do piloto)', () => {
+    it('update recifra os valores e a listagem reflete a correção', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Correção' }, KEY);
+      const id = await addBodyComposition(
+        exec,
+        patientId,
+        { measuredAt: new Date('2026-06-01'), values: { peso: 90 } },
+        KEY,
+      );
+      await updateBodyComposition(
+        exec,
+        patientId,
+        id,
+        { measuredAt: new Date('2026-06-02'), values: { peso: 89, cintura: 100 } },
+        KEY,
+      );
+      const evo = await listBodyComposition(exec, patientId, KEY);
+      expect(evo).toHaveLength(1);
+      expect(evo[0]!.values).toEqual({ peso: 89, cintura: 100 });
+      expect(evo[0]!.measuredAt.toISOString().slice(0, 10)).toBe('2026-06-02');
+
+      const trail = await getAuditTrail(exec, patientId);
+      const edit = trail.find((e) => e.triggeredBy === 'measurement-edit');
+      expect(edit).toBeDefined();
+      expect(edit!.modelVersion).toBe('human-edit');
+    });
+
+    it('update/softDelete com paciente errado NÃO tocam a medição (posse no WHERE)', async () => {
+      const owner = await createPatient(exec, userId, { name: 'Dono' }, KEY);
+      const other = await createPatient(exec, userId, { name: 'Outro' }, KEY);
+      const id = await addLabExam(
+        exec,
+        owner,
+        { measuredAt: new Date('2026-06-01'), values: { ldl: 120 } },
+        KEY,
+      );
+      await expect(
+        updateLabExam(exec, other, id, { measuredAt: new Date(), values: { ldl: 1 } }, KEY),
+      ).rejects.toThrow(/não encontrada/);
+      await expect(softDeleteLabExam(exec, other, id)).rejects.toThrow(/não encontrada/);
+      // intocada
+      const evo = await listLabExam(exec, owner, KEY);
+      expect(evo[0]!.values.ldl).toBe(120);
+    });
+
+    it('softDelete some das listagens, mantém a linha no banco e 2ª exclusão falha', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Excluir' }, KEY);
+      const id = await addBodyComposition(
+        exec,
+        patientId,
+        { measuredAt: new Date('2026-06-01'), values: { peso: 80 } },
+        KEY,
+      );
+      await softDeleteBodyComposition(exec, patientId, id);
+
+      expect(await listBodyComposition(exec, patientId, KEY)).toHaveLength(0);
+      // soft: a linha PERMANECE (trilha/retensão CJ-2), só marcada
+      const raw = await exec.query<{ deleted_at: Date | null }>(
+        'SELECT deleted_at FROM body_composition WHERE id = $1',
+        [id],
+      );
+      expect(raw.rows).toHaveLength(1);
+      expect(raw.rows[0]!.deleted_at).not.toBeNull();
+
+      await expect(softDeleteBodyComposition(exec, patientId, id)).rejects.toThrow(/não encontrada/);
+      // excluída também não é editável
+      await expect(
+        updateBodyComposition(exec, patientId, id, { measuredAt: new Date(), values: { peso: 1 } }, KEY),
+      ).rejects.toThrow(/não encontrada/);
+
+      const trail = await getAuditTrail(exec, patientId);
+      expect(trail.some((e) => e.triggeredBy === 'measurement-delete')).toBe(true);
     });
   });
 

@@ -1,4 +1,4 @@
-import { addMeasurementAction } from '@/lib/measurement-actions';
+import { addMeasurementAction, updateMeasurementAction } from '@/lib/measurement-actions';
 
 export interface MeasurementField {
   readonly name: string;
@@ -19,6 +19,7 @@ export function MeasurementForm({
   defaults,
   modelVersion,
   title = 'Nova medição',
+  measurementId,
 }: {
   patientId: string;
   kind: 'body' | 'lab';
@@ -29,11 +30,17 @@ export function MeasurementForm({
   /** Proveniência da extração para a auditoria (NFR10); ausente ⇒ entrada manual. */
   modelVersion?: string;
   title?: string;
+  /** Modo edição: id da medição existente — troca a action para update (recifra + audita). */
+  measurementId?: string;
 }) {
   return (
-    <form action={addMeasurementAction} className="card-premium gold-hairline mt-6 p-5">
+    <form
+      action={measurementId ? updateMeasurementAction : addMeasurementAction}
+      className="card-premium gold-hairline mt-6 p-5"
+    >
       <input type="hidden" name="patientId" value={patientId} />
       <input type="hidden" name="kind" value={kind} />
+      {measurementId && <input type="hidden" name="measurementId" value={measurementId} />}
       {modelVersion && <input type="hidden" name="modelVersion" value={modelVersion} />}
       <p className="text-sm font-medium text-ink">{title}</p>
       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -67,7 +74,7 @@ export function MeasurementForm({
         type="submit"
         className="mt-4 rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
       >
-        Adicionar medição
+        {measurementId ? 'Salvar alterações' : 'Adicionar medição'}
       </button>
     </form>
   );

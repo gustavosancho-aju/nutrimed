@@ -354,4 +354,14 @@ ALTER TABLE app_user ADD COLUMN IF NOT EXISTS totp_secret_enc text;
 ALTER TABLE app_user ADD COLUMN IF NOT EXISTS totp_enabled boolean NOT NULL DEFAULT false;
 `,
   },
+  {
+    name: '0013_soft_delete',
+    sql: `
+-- Edição/exclusão de medições pelo médico (feedback do piloto 2026-07-15).
+-- SOFT-delete: a linha permanece para trilha/retensão (parecer jurídico CJ-2
+-- pendente); deleted_at marca a exclusão e o audit_log registra quem/quando.
+ALTER TABLE body_composition ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+ALTER TABLE lab_exam         ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+`,
+  },
 ];

@@ -6,6 +6,10 @@ import {
   loadPatient,
   addBodyComposition,
   addLabExam,
+  updateBodyComposition,
+  updateLabExam,
+  softDeleteBodyComposition,
+  softDeleteLabExam,
   type BodyCompositionValues,
   type LabExamValues,
 } from '@nutrimed/patients';
@@ -90,6 +94,97 @@ export async function addMeasurementAction(formData: FormData): Promise<void> {
       await addBodyComposition(db, patientId, { measuredAt, values }, key, origin);
     }
   }
+
+  revalidatePath(`/patients/${patientId}/dashboard`);
+  redirect(`/patients/${patientId}/dashboard?aba=${aba}`);
+}
+
+/**
+ * Edição de medição existente (feedback do piloto): mesmos parse/faixas do add,
+ * recifra o blob e audita como 'measurement-edit'. Posse validada duas vezes
+ * (action + WHERE patient_id no pacote).
+ */
+export async function updateMeasurementAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect('/login');
+
+  const patientId = String(formData.get('patientId') ?? '');
+  const measurementId = String(formData.get('measurementId') ?? '');
+  const kind = String(formData.get('kind') ?? '');
+  const aba = kind === 'lab' ? 'exames' : 'bioimpedancia';
+  if (!measurementId) throw new Error('measurementId ausente.');
+
+  const db = await getDb();
+  const key = getEncryptionKey();
+  const patient = await loadPatient(db, patientId, key);
+  if (!patient || patient.userId !== user.id) {
+    throw new Error('Paciente não encontrado para este médico.');
+  }
+
+  const dateRaw = String(formData.get('measuredAt') ?? '').trim();
+  const measuredAt = dateRaw ? new Date(`${dateRaw}T00:00:00Z`) : new Date();
+
+  const rejectOutOfRange = (values: Record<string, unknown>): void => {
+    const err = checkRanges(values);
+    if (err) {
+      redirect(`/patients/${patientId}/dashboard?aba=${aba}&erro=${encodeURIComponent(err)}`);
+    }
+  };
+
+  if (kind === 'lab') {
+    const values: LabExamValues = compact({
+      ldl: parseDecimal(formData.get('ldl')),
+      hba1c: parseDecimal(formData.get('hba1c')),
+      insulina: parseDecimal(formData.get('insulina')),
+      custom1: parseDecimal(formData.get('custom1')),
+      custom2: parseDecimal(formData.get('custom2')),
+      custom3: parseDecimal(formData.get('custom3')),
+    });
+    rejectOutOfRange({ ...values });
+    if (Object.keys(values).length === 0) {
+      redirect(`/patients/${patientId}/dashboard?aba=${aba}&erro=${encodeURIComponent('Informe ao menos um valor.')}`);
+    }
+    await updateLabExam(db, patientId, measurementId, { measuredAt, values }, key);
+  } else {
+    const values: BodyCompositionValues = compact({
+      peso: parseDecimal(formData.get('peso')),
+      massaMuscular: parseDecimal(formData.get('massaMuscular')),
+      massaGordura: parseDecimal(formData.get('massaGordura')),
+      cintura: parseDecimal(formData.get('cintura')),
+      imc: parseDecimal(formData.get('imc')),
+      pgc: parseDecimal(formData.get('pgc')),
+    });
+    rejectOutOfRange({ ...values });
+    if (Object.keys(values).length === 0) {
+      redirect(`/patients/${patientId}/dashboard?aba=${aba}&erro=${encodeURIComponent('Informe ao menos um valor.')}`);
+    }
+    await updateBodyComposition(db, patientId, measurementId, { measuredAt, values }, key);
+  }
+
+  revalidatePath(`/patients/${patientId}/dashboard`);
+  redirect(`/patients/${patientId}/dashboard?aba=${aba}`);
+}
+
+/** Exclusão (SOFT) de medição — a linha permanece para trilha; audita 'measurement-delete'. */
+export async function deleteMeasurementAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect('/login');
+
+  const patientId = String(formData.get('patientId') ?? '');
+  const measurementId = String(formData.get('measurementId') ?? '');
+  const kind = String(formData.get('kind') ?? '');
+  const aba = kind === 'lab' ? 'exames' : 'bioimpedancia';
+  if (!measurementId) throw new Error('measurementId ausente.');
+
+  const db = await getDb();
+  const key = getEncryptionKey();
+  const patient = await loadPatient(db, patientId, key);
+  if (!patient || patient.userId !== user.id) {
+    throw new Error('Paciente não encontrado para este médico.');
+  }
+
+  if (kind === 'lab') await softDeleteLabExam(db, patientId, measurementId);
+  else await softDeleteBodyComposition(db, patientId, measurementId);
 
   revalidatePath(`/patients/${patientId}/dashboard`);
   redirect(`/patients/${patientId}/dashboard?aba=${aba}`);

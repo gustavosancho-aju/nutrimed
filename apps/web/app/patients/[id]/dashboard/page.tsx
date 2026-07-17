@@ -22,6 +22,7 @@ import {
 import { MetricCard } from '@/components/dashboard/metric-card';
 import { ExamCard } from '@/components/dashboard/exam-card';
 import { MeasurementForm } from '@/components/dashboard/measurement-form';
+import { MeasurementHistory } from '@/components/dashboard/measurement-history';
 import { CustomExamSettings } from '@/components/dashboard/custom-exam-settings';
 import { BodyGoalSettings } from '@/components/dashboard/body-goal-settings';
 
@@ -41,13 +42,13 @@ export default async function DashboardPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ aba?: string; erro?: string }>;
+  searchParams: Promise<{ aba?: string; erro?: string; editar?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect('/login');
 
   const { id } = await params;
-  const { aba: abaRaw, erro } = await searchParams;
+  const { aba: abaRaw, erro, editar } = await searchParams;
   const aba: Aba = abaRaw === 'bioimpedancia' || abaRaw === 'exames' ? abaRaw : 'geral';
 
   const db = await getDb();
@@ -61,6 +62,26 @@ export default async function DashboardPage({
   const bodyGoal = await loadCurrentBodyGoal(db, id, key);
   const today = new Date().toISOString().slice(0, 10);
   const age = computeAge(patient.birthDate, new Date());
+
+  // Campos das abas (form + histórico compartilham a mesma definição)
+  const bodyFields = [
+    { name: 'peso', label: 'Peso', unit: 'kg' },
+    { name: 'massaMuscular', label: 'Massa Muscular', unit: 'kg' },
+    { name: 'massaGordura', label: 'Massa de Gordura', unit: 'kg' },
+    { name: 'cintura', label: 'Cintura', unit: 'cm' },
+    { name: 'imc', label: 'IMC' },
+    { name: 'pgc', label: 'PGC', unit: '%' },
+  ] as const;
+  const labFields = [
+    { name: 'ldl', label: 'LDL', unit: 'mg/dL' },
+    { name: 'hba1c', label: 'HbA1C', unit: '%' },
+    { name: 'insulina', label: 'Insulina', unit: 'µU/mL' },
+    ...customDefs.map((d) => ({ name: `custom${d.slot}`, label: d.name, unit: d.unit })),
+  ];
+
+  // Modo edição (?editar=<id>): pré-preenche o form da aba com a medição
+  const editingBody = aba === 'bioimpedancia' && editar ? body.find((m) => m.id === editar) : undefined;
+  const editingLab = aba === 'exames' && editar ? labs.find((m) => m.id === editar) : undefined;
 
   // Parâmetros ideais (apoio visual, referência OMS): altura derivada da medição
   // mais recente que tenha peso + IMC juntos → faixa/meta de peso saudável.
@@ -273,15 +294,18 @@ export default async function DashboardPage({
             <MeasurementForm
               patientId={id}
               kind="body"
-              defaultDate={today}
-              fields={[
-                { name: 'peso', label: 'Peso', unit: 'kg' },
-                { name: 'massaMuscular', label: 'Massa Muscular', unit: 'kg' },
-                { name: 'massaGordura', label: 'Massa de Gordura', unit: 'kg' },
-                { name: 'cintura', label: 'Cintura', unit: 'cm' },
-                { name: 'imc', label: 'IMC' },
-                { name: 'pgc', label: 'PGC', unit: '%' },
-              ]}
+              defaultDate={editingBody ? editingBody.measuredAt.toISOString().slice(0, 10) : today}
+              fields={bodyFields}
+              measurementId={editingBody?.id}
+              defaults={editingBody ? { ...editingBody.values } : undefined}
+              title={editingBody ? 'Editar medição' : 'Nova medição'}
+            />
+            <MeasurementHistory
+              patientId={id}
+              kind="body"
+              aba="bioimpedancia"
+              fields={bodyFields}
+              measurements={body}
             />
             <BodyGoalSettings patientId={id} goal={bodyGoal} defaultDate={today} />
           </div>
@@ -309,13 +333,18 @@ export default async function DashboardPage({
             <MeasurementForm
               patientId={id}
               kind="lab"
-              defaultDate={today}
-              fields={[
-                { name: 'ldl', label: 'LDL', unit: 'mg/dL' },
-                { name: 'hba1c', label: 'HbA1C', unit: '%' },
-                { name: 'insulina', label: 'Insulina', unit: 'µU/mL' },
-                ...customDefs.map((d) => ({ name: `custom${d.slot}`, label: d.name, unit: d.unit })),
-              ]}
+              defaultDate={editingLab ? editingLab.measuredAt.toISOString().slice(0, 10) : today}
+              fields={labFields}
+              measurementId={editingLab?.id}
+              defaults={editingLab ? { ...editingLab.values } : undefined}
+              title={editingLab ? 'Editar medição' : 'Nova medição'}
+            />
+            <MeasurementHistory
+              patientId={id}
+              kind="lab"
+              aba="exames"
+              fields={labFields}
+              measurements={labs}
             />
             <CustomExamSettings patientId={id} defs={customDefs} />
           </div>

@@ -7,6 +7,10 @@ export {
   countPatients,
   addBodyComposition,
   addLabExam,
+  updateBodyComposition,
+  updateLabExam,
+  softDeleteBodyComposition,
+  softDeleteLabExam,
   listBodyComposition,
   listLabExam,
   // Exames personalizados por paciente + metas corporais

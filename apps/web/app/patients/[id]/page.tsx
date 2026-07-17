@@ -65,12 +65,20 @@ export default async function PatientPage({
             {patient.name}
           </h1>
         </div>
-        <Link
-          href="/consultations/new"
-          className="shrink-0 rounded-[10px] border border-ink/15 px-3.5 py-1.5 text-sm text-ink transition-colors hover:bg-surface-muted"
-        >
-          + Nova consulta
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            href={`/patients/${patient.id}/edit`}
+            className="rounded-[10px] border border-ink/15 px-3.5 py-1.5 text-sm text-ink transition-colors hover:bg-surface-muted"
+          >
+            ✏️ Editar cadastro
+          </Link>
+          <Link
+            href="/consultations/new"
+            className="rounded-[10px] border border-ink/15 px-3.5 py-1.5 text-sm text-ink transition-colors hover:bg-surface-muted"
+          >
+            + Nova consulta
+          </Link>
+        </div>
       </header>
 
       {erro && (

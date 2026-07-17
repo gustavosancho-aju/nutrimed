@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import {
   loadPatient,
+  updatePatient,
   setCustomExamDefs,
   setBodyGoal,
   type CustomExamDef,
@@ -37,6 +38,28 @@ async function assertOwner(patientId: string) {
 /** Remove chaves undefined — uma meta parcial (só alguns campos) é válida. */
 function compact<T extends Record<string, number | undefined>>(obj: T): Partial<T> {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as Partial<T>;
+}
+
+/**
+ * Edição dos dados cadastrais do paciente (feedback do piloto): liga o
+ * updatePatient já existente no pacote (recifra PII + audita 'patient-edit').
+ */
+export async function updatePatientAction(formData: FormData): Promise<void> {
+  const patientId = String(formData.get('patientId') ?? '');
+  const { db } = await assertOwner(patientId);
+
+  const name = String(formData.get('name') ?? '').trim();
+  if (!name) {
+    redirect(`/patients/${patientId}/edit?erro=${encodeURIComponent('O nome é obrigatório.')}`);
+  }
+  const birthDate = String(formData.get('birthDate') ?? '').trim() || undefined;
+  const phone = String(formData.get('phone') ?? '').trim() || undefined;
+  const goal = String(formData.get('goal') ?? '').trim() || undefined;
+
+  await updatePatient(db, patientId, { name, birthDate, phone, goal }, getEncryptionKey());
+
+  revalidatePath(`/patients/${patientId}`);
+  redirect(`/patients/${patientId}`);
 }
 
 const SLOTS = [1, 2, 3] as const;
