@@ -30,14 +30,15 @@ function buildLlm(): ILlmProvider {
     return new AnthropicLlmProvider({
       apiKey: process.env.ANTHROPIC_API_KEY,
       personaId: 'aurelio',
-      maxTokens: 2000,
-      longForm: true, // relatório completo em markdown
     });
   }
-  // dev sem key: extração roteirizada + redação fake determinística
+  // dev sem key: extração roteirizada + redação fake determinística — o roteiro
+  // segue a ordem das chamadas de completeText (1ª extração, 2ª redação)
   const fake = new FakeLlmProvider('aurelio', 'sintese');
   const texts = new FakeTextCompleter([
     '[{"food":"arroz branco cozido","quantity":4,"unit":"colher de sopa","meal":"almoco"},{"food":"feijão carioca cozido","meal":"almoco"}]',
+    '## Recordatório alimentar\n(rascunho fake determinístico — dev sem ANTHROPIC_API_KEY)\n\n' +
+      '_Rascunho gerado por IA com base na tabela TACO — revisado e validado pelo médico responsável._',
   ]);
   return {
     complete: (req) => fake.complete(req),
@@ -92,10 +93,9 @@ export async function generateNutritionReportAction(
 
     const computation = computeNutrition(mapRecallToTaco(recall), goal);
     const draft = await writeReportDraft(llm, computation, patientContext);
-    const modelVersion = process.env.ANTHROPIC_API_KEY ? 'claude-haiku-4-5' : 'fake-llm';
-    await saveNutritionReport(db, consultationId, draft, key, {
+    await saveNutritionReport(db, consultationId, draft.text, key, {
       action: 'generate',
-      modelVersion,
+      modelVersion: draft.modelVersion ?? 'unknown',
       data: computation,
     });
     revalidatePath(`/consultations/${consultationId}`);

@@ -4,7 +4,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { runMigrations, type SqlExecutor, pgliteExecutor } from '@nutrimed/db';
 import { createConsultation } from '@nutrimed/consent';
 import { getAuditTrail } from '@nutrimed/audit';
-import type { ILlmProvider, LlmCompletionRequest, PersonaContribution } from '@nutrimed/providers';
+import { FakeTextCompleter, type ILlmProvider, type PersonaContribution } from '@nutrimed/providers';
 import { extractDietRecall, sanitizeRecall, type RecallItem } from './extract';
 import { mapRecallToTaco } from './map';
 import { computeNutrition } from './compute';
@@ -126,30 +126,35 @@ describe('13.2d — redação do relatório', () => {
     expect(prompt).toContain('meta de 2026-07-01');
   });
 
-  it('gera markdown via LLM e rejeita resposta vazia', async () => {
-    let captured: LlmCompletionRequest | null = null;
+  it('gera markdown via completeText e rejeita resposta vazia', async () => {
+    const neverComplete = async (): Promise<PersonaContribution> => {
+      throw new Error('o relatório não deve usar o contrato JSON de contribuição');
+    };
+    const texts = new FakeTextCompleter(['## Recordatório alimentar\n...']);
     const llm: ILlmProvider = {
-      complete: async (req) => {
-        captured = req;
-        return {
-          personaId: 'aurelio',
-          type: 'sintese',
-          severity: 'normal',
-          text: '## Recordatório alimentar\n...',
-        } as PersonaContribution;
-      },
+      complete: neverComplete,
+      completeText: (req) => texts.completeText(req),
     };
     const computation = computeNutrition(mapRecallToTaco([{ food: 'arroz branco cozido' }]));
     const draft = await writeReportDraft(llm, computation);
-    expect(draft).toContain('Recordatório alimentar');
-    expect(captured!.system).toContain('PROIBIDO alterar');
-    expect(captured!.system).toContain('revisado e validado pelo médico');
+    expect(draft.text).toContain('Recordatório alimentar');
+    expect(draft.modelVersion).toBe('fake-text-v1');
+    const req = texts.requests[0]!;
+    expect(req.system).toContain('PROIBIDO alterar');
+    expect(req.system).toContain('revisado e validado pelo médico');
+    expect(req.maxTokens).toBeGreaterThanOrEqual(4000);
 
+    const emptyTexts = new FakeTextCompleter(['  ']);
     const emptyLlm: ILlmProvider = {
-      complete: async () =>
-        ({ personaId: 'aurelio', type: 'sintese', severity: 'normal', text: '  ' }) as PersonaContribution,
+      complete: neverComplete,
+      completeText: (req) => emptyTexts.completeText(req),
     };
     await expect(writeReportDraft(emptyLlm, computation)).rejects.toThrow(/não gerou conteúdo/);
+
+    // sem completeText ⇒ erro claro, sem fallback ao caminho JSON truncável
+    await expect(writeReportDraft({ complete: neverComplete }, computation)).rejects.toThrow(
+      /completeText/,
+    );
   });
 });
 

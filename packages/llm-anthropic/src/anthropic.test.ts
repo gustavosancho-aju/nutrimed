@@ -144,3 +144,58 @@ describe('parseContribution — parse tolerante do JSON do modelo', () => {
     expect(() => parseContribution('{"type":"sugestao"}')).toThrow(/sem texto/);
   });
 });
+
+describe('completeText — texto livre (nota clínica/relatório/CaseState)', () => {
+  const textResponse = {
+    model: 'claude-haiku-4-5-20251001',
+    content: [{ type: 'text', text: '## Resumo da consulta\nNota longa em markdown.' }],
+    usage: { input_tokens: 120, output_tokens: 800 },
+  };
+
+  it('happy path: retorna text + modelVersion real e reporta usage', async () => {
+    const doFetch = fakeFetch(textResponse);
+    const usages: Array<{ inputTokens: number; outputTokens: number }> = [];
+    const provider = new AnthropicLlmProvider({
+      apiKey: 'sk-ant-test',
+      personaId: 'aurelio',
+      fetchImpl: doFetch,
+      onUsage: (u) => usages.push(u),
+    });
+    const result = await provider.completeText({
+      system: 'Você documenta consultas.',
+      prompt: 'Transcrição: paciente relata cansaço.',
+      maxTokens: 4000,
+    });
+    expect(result.text).toContain('Resumo da consulta');
+    expect(result.modelVersion).toBe('claude-haiku-4-5-20251001');
+    expect(usages).toEqual([{ inputTokens: 120, outputTokens: 800 }]);
+
+    const [, init] = doFetch.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string);
+    // maxTokens do request propagado (anti-truncamento — incidente 2026-07-15)
+    expect(body.max_tokens).toBe(4000);
+    // texto livre: SEM contrato JSON de contribuição no system
+    expect(body.system).toBe('Você documenta consultas.');
+    expect(body.messages[0].content).toContain('cansaço');
+  });
+
+  it('erro da API vira AnthropicLlmError "api"', async () => {
+    const provider = new AnthropicLlmProvider({
+      apiKey: 'k',
+      personaId: 'aurelio',
+      fetchImpl: fakeFetch({ error: { message: 'overloaded' } }, 529),
+    });
+    await expect(provider.completeText({ system: 's', prompt: 'p' })).rejects.toThrow(/overloaded/);
+  });
+
+  it('resposta sem bloco de texto vira AnthropicLlmError "parse"', async () => {
+    const provider = new AnthropicLlmProvider({
+      apiKey: 'k',
+      personaId: 'aurelio',
+      fetchImpl: fakeFetch({ model: 'm', content: [] }),
+    });
+    await expect(provider.completeText({ system: 's', prompt: 'p' })).rejects.toThrow(
+      /sem bloco de texto/,
+    );
+  });
+});

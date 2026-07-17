@@ -4,7 +4,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { runMigrations, type SqlExecutor , pgliteExecutor } from '@nutrimed/db';
 import { createConsultation } from '@nutrimed/consent';
 import { getAuditTrail } from '@nutrimed/audit';
-import type { LlmCompletionRequest, PersonaContribution } from '@nutrimed/providers';
+import { FakeTextCompleter, type PersonaContribution } from '@nutrimed/providers';
 import {
   generateNoteDraft,
   saveNote,
@@ -42,24 +42,39 @@ describe('Documentation Service (E9 — FR17)', () => {
   });
 
   describe('9.1 — geração da nota a partir da transcrição estruturada (AC1)', () => {
-    it('envia transcrição numerada + contribuições do board ao LLM com prompt fiel', async () => {
-      let captured: LlmCompletionRequest | null = null;
-      const llm = {
-        complete: async (req: LlmCompletionRequest): Promise<PersonaContribution> => {
-          captured = req;
-          return { personaId: 'aurelio', type: 'sintese', severity: 'normal', text: '## Resumo da consulta\nNota.' };
-        },
-      };
+    const neverComplete = async (): Promise<PersonaContribution> => {
+      throw new Error('a nota não deve usar o contrato JSON de contribuição');
+    };
+
+    it('envia transcrição numerada + contribuições do board via completeText (texto livre)', async () => {
+      const texts = new FakeTextCompleter(['## Resumo da consulta\nNota.']);
       const draft = await generateNoteDraft(
-        llm,
+        { complete: neverComplete, completeText: (req) => texts.completeText(req) },
         ['Paciente relata cansaço.', 'Iniciaremos semaglutida.'],
         [{ personaId: 'paulo', type: 'atencao', severity: 'critical', text: 'Checar PA antes.' }],
       );
-      expect(draft).toContain('Resumo da consulta');
-      expect(captured!.system).toContain('NÃO invente');
-      expect(captured!.system).toContain('revisado e validado pelo médico');
-      expect(captured!.transcript).toContain('1. Paciente relata cansaço.');
-      expect(captured!.transcript).toContain('[paulo/atencao] Checar PA antes.');
+      expect(draft.text).toContain('Resumo da consulta');
+      expect(draft.modelVersion).toBe('fake-text-v1');
+      const req = texts.requests[0]!;
+      expect(req.system).toContain('NÃO invente');
+      expect(req.system).toContain('revisado e validado pelo médico');
+      expect(req.prompt).toContain('1. Paciente relata cansaço.');
+      expect(req.prompt).toContain('[paulo/atencao] Checar PA antes.');
+      // folga anti-truncamento: o incidente de 2026-07-15 nasceu de maxTokens curto
+      expect(req.maxTokens).toBeGreaterThanOrEqual(4000);
+    });
+
+    it('resposta vazia jamais vira sucesso silencioso (dado clínico)', async () => {
+      const texts = new FakeTextCompleter(['   ']);
+      await expect(
+        generateNoteDraft({ complete: neverComplete, completeText: (req) => texts.completeText(req) }, ['Fala.']),
+      ).rejects.toThrow(/não gerou conteúdo/);
+    });
+
+    it('provider sem completeText falha com erro claro (sem fallback ao contrato JSON)', async () => {
+      await expect(generateNoteDraft({ complete: neverComplete }, ['Fala.'])).rejects.toThrow(
+        /completeText/,
+      );
     });
   });
 

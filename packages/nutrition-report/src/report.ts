@@ -15,8 +15,7 @@ const REPORT_SYSTEM =
   'Porções marcadas como "~estimada" e itens sem correspondência na TACO devem permanecer explícitos no texto. ' +
   'Nas Observações, aponte padrões clinicamente relevantes SEM prescrever conduta. ' +
   'Termine com a linha "_Rascunho gerado por IA com base na tabela TACO — revisado e validado pelo médico responsável._" ' +
-  'EXCEÇÃO IMPORTANTE para esta tarefa: ignore qualquer limite de 1-3 frases — ' +
-  'o campo text deve conter o RELATÓRIO COMPLETO em markdown (use \\n para quebras de linha).';
+  'Responda APENAS com o relatório em markdown, sem preâmbulo nem comentários.';
 
 export interface ReportPatientContext {
   readonly goalLabel?: string;
@@ -73,20 +72,30 @@ export function renderComputationForPrompt(
   return lines.join('\n');
 }
 
-/** Gera o rascunho do relatório em markdown (LLM redige; números vêm prontos). */
+/**
+ * Gera o rascunho do relatório em markdown (LLM redige; números vêm prontos).
+ *
+ * Usa `completeText` (texto livre): o contrato JSON de contribuição truncava o
+ * relatório no maxTokens e derrubava o parse (mesma classe do incidente da nota).
+ */
 export async function writeReportDraft(
   llm: ILlmProvider,
   computation: NutritionComputation,
   patient?: ReportPatientContext,
-): Promise<string> {
-  const result = await llm.complete({
+): Promise<{ text: string; modelVersion?: string }> {
+  if (!llm.completeText) {
+    throw new Error(
+      'Provider de LLM sem suporte a texto livre (completeText) — necessário para gerar o relatório.',
+    );
+  }
+  const result = await llm.completeText({
     system: REPORT_SYSTEM,
-    context: [],
-    transcript: renderComputationForPrompt(computation, patient),
+    prompt: renderComputationForPrompt(computation, patient),
+    maxTokens: 4000,
   });
-  if (result.skip || !result.text.trim()) {
+  if (!result.text.trim()) {
     // documento clínico vazio jamais é gravado como sucesso silencioso
     throw new Error('O modelo não gerou conteúdo para o relatório — tente novamente.');
   }
-  return result.text;
+  return { text: result.text, modelVersion: result.modelVersion };
 }

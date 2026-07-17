@@ -28,18 +28,25 @@ const NOTE_SYSTEM =
   'Seja fiel ao que foi dito — NÃO invente achados, exames ou condutas que não apareceram. ' +
   'A nota é um RASCUNHO para o médico revisar e editar: termine com a linha ' +
   '"_Rascunho gerado por IA — revisado e validado pelo médico responsável._" ' +
-  'EXCEÇÃO IMPORTANTE para esta tarefa: ignore qualquer limite de 1-3 frases — ' +
-  'o campo text deve conter a NOTA COMPLETA em markdown, com todas as seções (use \\n para quebras de linha).';
+  'Responda APENAS com a nota em markdown, sem preâmbulo nem comentários.';
 
 /**
  * Gera a transcrição estruturada + rascunho de nota via LLM (FR17/AC1).
  * `boardContributions` (E6) enriquecem a seção do board quando disponíveis.
+ *
+ * Usa `completeText` (texto livre): o contrato JSON de contribuição truncava a
+ * nota no maxTokens e derrubava o parse (incidente do piloto, 2026-07-15).
  */
 export async function generateNoteDraft(
   llm: ILlmProvider,
   transcriptFinals: readonly string[],
   boardContributions: readonly PersonaContribution[] = [],
-): Promise<string> {
+): Promise<{ text: string; modelVersion?: string }> {
+  if (!llm.completeText) {
+    throw new Error(
+      'Provider de LLM sem suporte a texto livre (completeText) — necessário para gerar a nota.',
+    );
+  }
   const transcript = transcriptFinals.map((t, i) => `${i + 1}. ${t}`).join('\n');
   const board =
     boardContributions.length > 0
@@ -47,17 +54,16 @@ export async function generateNoteDraft(
           .map((c) => `- [${c.personaId}/${c.type}] ${c.text}`)
           .join('\n')}`
       : '';
-  const result = await llm.complete({
+  const result = await llm.completeText({
     system: NOTE_SYSTEM,
-    context: [],
-    transcript: `Transcrição estruturada da consulta:\n${transcript}${board}`,
+    prompt: `Transcrição estruturada da consulta:\n${transcript}${board}`,
+    maxTokens: 4000,
   });
-  if (result.skip || !result.text.trim()) {
-    // sem allowSkip o modelo não deveria pular — mas nota VAZIA jamais é
-    // gravada como sucesso silencioso (dado clínico)
+  if (!result.text.trim()) {
+    // nota VAZIA jamais é gravada como sucesso silencioso (dado clínico)
     throw new Error('O modelo não gerou conteúdo para a nota — tente novamente.');
   }
-  return result.text;
+  return { text: result.text, modelVersion: result.modelVersion };
 }
 
 /**

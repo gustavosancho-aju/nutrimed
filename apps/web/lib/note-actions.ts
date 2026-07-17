@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { generateNoteDraft, saveNote } from '@nutrimed/clinical-notes';
 import { AnthropicLlmProvider } from '@nutrimed/llm-anthropic';
-import { FakeLlmProvider } from '@nutrimed/providers';
+import { FakeLlmProvider, FakeTextCompleter, type ILlmProvider } from '@nutrimed/providers';
 import { getCurrentUser } from './auth';
 import { getDb } from './db';
 import { getEncryptionKey } from './crypto-key';
@@ -15,6 +15,28 @@ import { toActionResult, type ActionResult } from './action-result';
  * Server actions da nota clínica (E9 — FR17). Toda escrita é cifrada (NFR9)
  * e auditada (NFR10) pelo Documentation Service.
  */
+
+function buildNoteLlm(): ILlmProvider {
+  if (process.env.ANTHROPIC_API_KEY) {
+    return new AnthropicLlmProvider({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+      personaId: 'aurelio',
+    });
+  }
+  // dev sem key: rascunho fake determinístico via completeText (mesmo padrão
+  // do relatório nutricional — FakeLlmProvider não implementa completeText)
+  const fake = new FakeLlmProvider('aurelio', 'sintese');
+  const texts = new FakeTextCompleter([
+    '## Resumo da consulta\nRascunho fake determinístico (dev sem ANTHROPIC_API_KEY).\n\n' +
+      '## Pontos relatados\n- (fake)\n\n## Pontos levantados pelo board\n- (fake)\n\n' +
+      '## Plano discutido\n- (fake)\n\n' +
+      '_Rascunho gerado por IA — revisado e validado pelo médico responsável._',
+  ]);
+  return {
+    complete: (req) => fake.complete(req),
+    completeText: (req) => texts.completeText(req),
+  };
+}
 
 async function requireConsultation(formData: FormData): Promise<string> {
   const user = await getCurrentUser();
@@ -46,19 +68,12 @@ export async function generateNoteAction(
     if (!inputs || inputs.finals.length === 0) {
       return { ok: false, code: 'no-transcript' };
     }
-    const llm = process.env.ANTHROPIC_API_KEY
-      ? new AnthropicLlmProvider({
-          apiKey: process.env.ANTHROPIC_API_KEY,
-          personaId: 'aurelio',
-          maxTokens: 1000,
-          longForm: true, // nota completa em markdown, sem limite de 1-3 frases
-        })
-      : new FakeLlmProvider('aurelio', 'sintese');
+    const llm = buildNoteLlm();
     const draft = await generateNoteDraft(llm, inputs.finals, inputs.contributions);
     const db = await getDb();
-    await saveNote(db, consultationId, draft, getEncryptionKey(), {
+    await saveNote(db, consultationId, draft.text, getEncryptionKey(), {
       action: 'generate',
-      modelVersion: process.env.ANTHROPIC_API_KEY ? 'claude-haiku-4-5' : 'fake-llm',
+      modelVersion: draft.modelVersion ?? 'unknown',
     });
     revalidatePath(`/consultations/${consultationId}`);
     return { ok: true };
