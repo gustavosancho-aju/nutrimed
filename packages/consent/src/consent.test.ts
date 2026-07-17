@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 import { runMigrations, type SqlExecutor , pgliteExecutor } from '@nutrimed/db';
 import { decryptField } from '@nutrimed/crypto';
+import { getAuditTrail } from '@nutrimed/audit';
 import {
   createConsultation,
   grantConsent,
@@ -11,6 +12,8 @@ import {
   isCaptureAuthorized,
   assertCaptureAuthorized,
   listConsultationsByPatient,
+  setConsultationStatus,
+  getConsultationMeta,
   ConsentRequiredError,
 } from './consent';
 
@@ -155,6 +158,40 @@ describe('Consent Service — gate de gravação (FR20)', () => {
       // ordenação mais-recente-primeiro (sem depender de tie-break por id)
       expect(hist[0]!.createdAt.getTime()).toBeGreaterThanOrEqual(hist[1]!.createdAt.getTime());
       expect(hist[0]!.status).toBe('open');
+    });
+  });
+
+  describe('Ciclo 2 — status da consulta (Encerrar/Reabrir) + metadados com posse', () => {
+    it('setConsultationStatus fecha e reabre, persistindo e auditando cada transição', async () => {
+      const consultationId = await openConsultation();
+
+      await setConsultationStatus(exec, consultationId, 'closed');
+      let meta = await getConsultationMeta(exec, consultationId, userId);
+      expect(meta!.status).toBe('closed');
+
+      await setConsultationStatus(exec, consultationId, 'open');
+      meta = await getConsultationMeta(exec, consultationId, userId);
+      expect(meta!.status).toBe('open');
+
+      const trail = await getAuditTrail(exec, consultationId);
+      expect(trail.some((e) => e.triggeredBy === 'consultation-close')).toBe(true);
+      expect(trail.some((e) => e.triggeredBy === 'consultation-reopen')).toBe(true);
+    });
+
+    it('setConsultationStatus em consulta inexistente falha', async () => {
+      await expect(
+        setConsultationStatus(exec, '00000000-0000-0000-0000-000000000000', 'closed'),
+      ).rejects.toThrow(/não encontrada/);
+    });
+
+    it('getConsultationMeta nega posse: consulta de outro médico ⇒ null (BOLA)', async () => {
+      const consultationId = await openConsultation();
+      const other = await exec.query<{ id: string }>(
+        'INSERT INTO app_user (email, display_name, password_hash) VALUES ($1, $2, $3) RETURNING id',
+        ['outro@nutrimed.test', 'Dra. Outra', 'x'],
+      );
+      expect(await getConsultationMeta(exec, consultationId, other.rows[0]!.id)).toBeNull();
+      expect(await getConsultationMeta(exec, consultationId, userId)).not.toBeNull();
     });
   });
 

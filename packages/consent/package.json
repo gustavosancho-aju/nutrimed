@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@nutrimed/audit": "workspace:*",
     "@nutrimed/crypto": "workspace:*",
     "@nutrimed/db": "workspace:*"
   },

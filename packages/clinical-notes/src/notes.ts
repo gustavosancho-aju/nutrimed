@@ -281,6 +281,82 @@ export async function loadTranscriptReview(
   };
 }
 
+// ── Prontuário manual da consulta (Conduta + Anotações do médico) ──────────
+
+export interface ConsultationRecord {
+  readonly consultationId: string;
+  readonly conduct: string | null;
+  readonly annotations: string | null;
+  readonly updatedAt: Date;
+}
+
+/** Vazio/whitespace ⇒ NULL no banco (limpar um campo é edição legítima). */
+function encNullable(value: string | null, key: Buffer): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? encryptField(trimmed, key) : null;
+}
+
+/**
+ * Upsert do prontuário manual (Conduta + Anotações — ambos de uma vez, o form
+ * envia os dois). 100% manual, nunca gerado por IA ("IA assiste, médico
+ * decide"). Cifrado (NFR9); UMA trilha por save — 'consultation-record-edit'.
+ */
+export async function saveConsultationRecord(
+  db: SqlExecutor,
+  consultationId: string,
+  fields: { conduct: string | null; annotations: string | null },
+  encryptionKey: Buffer,
+): Promise<void> {
+  const conductEnc = encNullable(fields.conduct, encryptionKey);
+  const annotationsEnc = encNullable(fields.annotations, encryptionKey);
+  const existing = await db.query<{ id: string }>(
+    'SELECT id FROM consultation_record WHERE consultation_id = $1',
+    [consultationId],
+  );
+  if (existing.rows.length > 0) {
+    await db.query(
+      `UPDATE consultation_record
+       SET conduct_enc = $2, annotations_enc = $3, updated_at = now()
+       WHERE consultation_id = $1`,
+      [consultationId, conductEnc, annotationsEnc],
+    );
+  } else {
+    await db.query(
+      'INSERT INTO consultation_record (consultation_id, conduct_enc, annotations_enc) VALUES ($1, $2, $3)',
+      [consultationId, conductEnc, annotationsEnc],
+    );
+  }
+  await writeAudit(db, consultationId, {
+    triggeredBy: 'consultation-record-edit',
+    kbSources: [],
+    modelVersion: 'human-edit',
+  });
+}
+
+/** Carrega o prontuário manual (null se o médico nunca preencheu). */
+export async function loadConsultationRecord(
+  db: SqlExecutor,
+  consultationId: string,
+  encryptionKey: Buffer,
+): Promise<ConsultationRecord | null> {
+  const res = await db.query<{
+    conduct_enc: string | null;
+    annotations_enc: string | null;
+    updated_at: Date | string;
+  }>(
+    'SELECT conduct_enc, annotations_enc, updated_at FROM consultation_record WHERE consultation_id = $1',
+    [consultationId],
+  );
+  const row = res.rows[0];
+  if (!row) return null;
+  return {
+    consultationId,
+    conduct: row.conduct_enc ? decryptField(row.conduct_enc, encryptionKey) : null,
+    annotations: row.annotations_enc ? decryptField(row.annotations_enc, encryptionKey) : null,
+    updatedAt: new Date(row.updated_at),
+  };
+}
+
 /** Carrega e decifra a nota da consulta (null se ainda não existe). */
 export async function loadNote(
   db: SqlExecutor,

@@ -395,4 +395,21 @@ CREATE TABLE IF NOT EXISTS consultation_telemetry (
 ALTER TABLE patient ADD COLUMN IF NOT EXISTS profession_enc text;
 `,
   },
+  {
+    name: '0016_consultation_record',
+    sql: `
+-- Prontuário manual da consulta: Conduta + Anotações do médico. 1:1 com a
+-- consulta, ambos opcionais (o médico preenche um sem o outro). 100% manual —
+-- nenhum campo é gerado por IA ("IA assiste, médico decide"). Cifrado (NFR9);
+-- cada save gera trilha 'consultation-record-edit' (NFR10).
+CREATE TABLE IF NOT EXISTS consultation_record (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  consultation_id  uuid NOT NULL UNIQUE REFERENCES consultation(id),
+  conduct_enc      text,
+  annotations_enc  text,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now()
+);
+`,
+  },
 ];

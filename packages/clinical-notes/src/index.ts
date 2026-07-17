@@ -10,7 +10,10 @@ export {
   auditTranscriptPersistStart,
   saveTranscriptReview,
   loadTranscriptReview,
+  saveConsultationRecord,
+  loadConsultationRecord,
   type ClinicalNote,
   type BoardSynthesis,
   type TranscriptReview,
+  type ConsultationRecord,
 } from './notes';

@@ -6,7 +6,10 @@ export {
   isCaptureAuthorized,
   assertCaptureAuthorized,
   listConsultationsByPatient,
+  setConsultationStatus,
+  getConsultationMeta,
   ConsentRequiredError,
   type ConsentStatus,
   type ConsultationSummary,
+  type ConsultationMeta,
 } from './consent';

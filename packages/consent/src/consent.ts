@@ -1,5 +1,6 @@
 import type { SqlExecutor, ConsentRow } from '@nutrimed/db';
 import { encryptField } from '@nutrimed/crypto';
+import { writeAudit } from '@nutrimed/audit';
 
 /**
  * Consent Service (FR20) — consentimento de gravação como GATE de servidor.
@@ -80,6 +81,55 @@ export async function listConsultationsByPatient(
     [patientId],
   );
   return res.rows.map((r) => ({ id: r.id, status: r.status, createdAt: new Date(r.created_at) }));
+}
+
+/**
+ * Muda o status da consulta e AUDITA a transição (NFR10). Criado no ciclo 2:
+ * até então toda consulta ficava 'open' para sempre — 'closed' habilita o modo
+ * releitura do registro da consulta.
+ */
+export async function setConsultationStatus(
+  db: SqlExecutor,
+  consultationId: string,
+  status: 'open' | 'closed',
+): Promise<void> {
+  const res = await db.query<{ id: string }>(
+    'UPDATE consultation SET status = $2 WHERE id = $1 RETURNING id',
+    [consultationId, status],
+  );
+  if (res.rows.length === 0) throw new Error(`Consulta ${consultationId} não encontrada.`);
+  await writeAudit(db, consultationId, {
+    triggeredBy: status === 'closed' ? 'consultation-close' : 'consultation-reopen',
+    kbSources: [],
+    modelVersion: 'human-edit',
+  });
+}
+
+/** Metadados da consulta COM posse (user_id no WHERE) — null se não pertence. */
+export interface ConsultationMeta {
+  readonly id: string;
+  readonly status: string;
+  readonly patientId: string | null;
+  readonly createdAt: Date;
+}
+
+export async function getConsultationMeta(
+  db: SqlExecutor,
+  consultationId: string,
+  userId: string,
+): Promise<ConsultationMeta | null> {
+  const res = await db.query<{ id: string; status: string; patient_id: string | null; created_at: Date }>(
+    'SELECT id, status, patient_id, created_at FROM consultation WHERE id = $1 AND user_id = $2',
+    [consultationId, userId],
+  );
+  const row = res.rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    status: row.status,
+    patientId: row.patient_id,
+    createdAt: new Date(row.created_at),
+  };
 }
 
 /**

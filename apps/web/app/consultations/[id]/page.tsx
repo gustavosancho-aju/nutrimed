@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { redirect, notFound } from 'next/navigation';
-import { getConsentStatus } from '@nutrimed/consent';
+import { getConsentStatus, getConsultationMeta } from '@nutrimed/consent';
 import { getCurrentUser, SESSION_COOKIE } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { grantConsentAction, revokeConsentAction } from '@/lib/consent-actions';
+import { closeConsultationAction, reopenConsultationAction } from '@/lib/consultation-status-actions';
 import { startDemoBoardAction, requestSynthesisAction } from '@/lib/board-actions';
 import { saveNoteAction } from '@/lib/note-actions';
 import { saveNutritionReportAction } from '@/lib/nutrition-report-actions';
@@ -14,8 +15,15 @@ import { loadNutritionReport } from '@nutrimed/nutrition-report';
 import { DiagnosticsPanel } from '@/components/diagnostics-panel';
 import { getBoardRuntime, getTelemetryReport, BOARD_WS_PORT } from '@/lib/board-runtime';
 import { getEncryptionKey } from '@/lib/crypto-key';
-import { loadNote, listSyntheses, listTranscriptFinals, loadTranscriptReview } from '@nutrimed/clinical-notes';
+import {
+  loadNote,
+  listSyntheses,
+  listTranscriptFinals,
+  loadTranscriptReview,
+  loadConsultationRecord,
+} from '@nutrimed/clinical-notes';
 import { saveTranscriptReviewAction } from '@/lib/transcript-actions';
+import { ConsultationRecordSection } from '@/components/consultation-record-section';
 import { ConsultationRoom } from '@/components/consultation-room';
 import { TelemetryReport } from '@/components/telemetry-report';
 
@@ -33,10 +41,16 @@ export default async function ConsultationPage({
 
   const { id } = await params;
   const db = await getDb();
+  // Posse ANTES de qualquer dado: consulta de outro médico ⇒ 404 (BOLA).
+  const meta = await getConsultationMeta(db, id, user.id);
+  if (!meta) notFound();
   const consent = await getConsentStatus(db, id);
   if (!consent) notFound();
 
   const authorized = consent.granted;
+  // Registro da consulta (ciclo 2): encerrada ⇒ modo releitura, sem a Sala do
+  // Board — só transcrição + prontuário (nota/conduta/anotações) + relatório.
+  const isClosed = meta.status === 'closed';
 
   await getBoardRuntime();
   const sessionToken = (await cookies()).get(SESSION_COOKIE)?.value ?? '';
@@ -64,7 +78,8 @@ export default async function ConsultationPage({
   const transcriptText = transcriptReview?.content ?? transcriptFinals.join('\n');
   const hasTranscript = transcriptText.trim().length > 0;
   const syntheses = authorized ? await listSyntheses(db, id, getEncryptionKey()) : [];
-  const telemetry = authorized ? await getTelemetryReport(id) : null;
+  const record = authorized ? await loadConsultationRecord(db, id, getEncryptionKey()) : null;
+  const telemetry = authorized && !isClosed ? await getTelemetryReport(id) : null;
 
   return (
     <main className="min-h-screen">
@@ -84,9 +99,30 @@ export default async function ConsultationPage({
             >
               {authorized ? '🟢 gravação autorizada' : '🔒 gravação bloqueada'}
             </span>
+            {isClosed && (
+              <span className="rounded-full border border-white/20 bg-white/5 px-3 py-1 text-[11px] font-medium tracking-wide text-white/70">
+                ⏹ Encerrada
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-4">
-            {authorized ? (
+            {authorized && !isClosed ? (
+              <form action={closeConsultationAction}>
+                <input type="hidden" name="consultationId" value={id} />
+                <button type="submit" className="text-xs text-white/70 hover:text-white hover:underline">
+                  ⏹ Encerrar consulta
+                </button>
+              </form>
+            ) : null}
+            {isClosed ? (
+              <form action={reopenConsultationAction}>
+                <input type="hidden" name="consultationId" value={id} />
+                <button type="submit" className="text-xs text-white/70 hover:text-white hover:underline">
+                  ↺ Reabrir consulta
+                </button>
+              </form>
+            ) : null}
+            {authorized && !isClosed ? (
               <form action={revokeConsentAction}>
                 <input type="hidden" name="consultationId" value={id} />
                 <button type="submit" className="text-xs text-red-300/90 hover:text-red-200 hover:underline">
@@ -125,6 +161,18 @@ export default async function ConsultationPage({
         </section>
       ) : (
         <div className="mt-4">
+          {isClosed && (
+            <section className="card-premium gold-hairline p-6">
+              <h2 className="font-display text-lg font-semibold text-ink">
+                📁 Registro da consulta
+              </h2>
+              <p className="mt-1 text-sm text-ink-muted">
+                Consulta encerrada em modo de releitura: transcrição, prontuário e relatório ficam
+                salvos aqui. Para retomar a consulta ao vivo, use “Reabrir consulta” no topo.
+              </p>
+            </section>
+          )}
+          {!isClosed && (
           <ConsultationRoom
             consultationId={id}
             token={sessionToken}
@@ -152,6 +200,7 @@ export default async function ConsultationPage({
               </form>
             }
           />
+          )}
 
           {/* Transcrição Confiável: o médico corrige o que o STT ouviu ANTES de gerar
               os documentos — a versão revisada vira a fonte da nota e do relatório.
@@ -163,9 +212,9 @@ export default async function ConsultationPage({
                   📝 Transcrição da consulta
                 </h2>
                 <p className="text-xs text-ink-muted">
-                  Revise e corrija o que a transcrição automática captou. A nota clínica e o
-                  relatório nutricional são gerados a partir desta versão — o médico decide o que
-                  vira registro. Cifrada em repouso e auditada.
+                  {isClosed
+                    ? 'Registro do que foi dito na consulta. Para corrigir a transcrição, reabra a consulta.'
+                    : 'Revise e corrija o que a transcrição automática captou. A nota clínica e o relatório nutricional são gerados a partir desta versão — o médico decide o que vira registro. Cifrada em repouso e auditada.'}
                 </p>
               </div>
               <form action={saveTranscriptReviewAction} className="mt-4 space-y-3">
@@ -175,21 +224,28 @@ export default async function ConsultationPage({
                   name="content"
                   defaultValue={transcriptText}
                   rows={12}
+                  readOnly={isClosed}
                   aria-label="Transcrição da consulta"
-                  className="w-full rounded-[10px] border border-ink/15 bg-white p-4 text-sm leading-relaxed text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                  className={`w-full rounded-[10px] border border-ink/15 p-4 text-sm leading-relaxed text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 ${
+                    isClosed ? 'bg-surface' : 'bg-white'
+                  }`}
                 />
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-xs text-ink-muted">
                     {transcriptReview
-                      ? `Revisada em ${transcriptReview.updatedAt.toLocaleString('pt-BR')} — regenere a nota e o relatório para refletir as correções.`
-                      : 'Ainda mostra a transcrição automática. Corrija termos clínicos e alimentos antes de gerar os documentos.'}
+                      ? `Revisada em ${transcriptReview.updatedAt.toLocaleString('pt-BR')}${isClosed ? '.' : ' — regenere a nota e o relatório para refletir as correções.'}`
+                      : isClosed
+                        ? 'Transcrição automática (não revisada pelo médico).'
+                        : 'Ainda mostra a transcrição automática. Corrija termos clínicos e alimentos antes de gerar os documentos.'}
                   </p>
-                  <button
-                    type="submit"
-                    className="shrink-0 rounded-[10px] bg-brand px-4 py-2 text-xs font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
-                  >
-                    💾 Salvar transcrição corrigida
-                  </button>
+                  {!isClosed && (
+                    <button
+                      type="submit"
+                      className="shrink-0 rounded-[10px] bg-brand px-4 py-2 text-xs font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+                    >
+                      💾 Salvar transcrição corrigida
+                    </button>
+                  )}
                 </div>
               </form>
             </section>
@@ -243,6 +299,9 @@ export default async function ConsultationPage({
             )}
           </section>
 
+          {/* Ciclo 2 — prontuário manual: Conduta + Anotações do médico (nos 2 modos) */}
+          <ConsultationRecordSection consultationId={id} record={record} />
+
           {/* E13 — Relatório nutricional (TACO): recordatório da transcrição,
               quantificado deterministicamente; IA redige, médico decide */}
           <section aria-label="Relatório nutricional" className="card-premium mt-6 p-6">
@@ -257,7 +316,9 @@ export default async function ConsultationPage({
                   edite e salve. Cifrado em repouso e auditado.
                 </p>
               </div>
-              <NutritionReportForm consultationId={id} hasReport={Boolean(nutritionReport)} />
+              {!isClosed && (
+                <NutritionReportForm consultationId={id} hasReport={Boolean(nutritionReport)} />
+              )}
             </div>
 
             {nutritionReport ? (
@@ -351,20 +412,25 @@ export default async function ConsultationPage({
                     name="content"
                     defaultValue={nutritionReport.content}
                     rows={14}
+                    readOnly={isClosed}
                     aria-label="Conteúdo do relatório nutricional"
-                    className="font-mono-data w-full rounded-[10px] border border-ink/15 bg-white p-4 text-sm leading-relaxed text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                    className={`font-mono-data w-full rounded-[10px] border border-ink/15 p-4 text-sm leading-relaxed text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 ${
+                      isClosed ? 'bg-surface' : 'bg-white'
+                    }`}
                   />
                   <div className="flex items-center justify-between">
                     <p className="text-xs text-ink-muted">
                       Última atualização: {nutritionReport.updatedAt.toLocaleString('pt-BR')} ·
                       rascunho gerado por IA com base na tabela TACO — IA assiste, o médico decide.
                     </p>
-                    <button
-                      type="submit"
-                      className="rounded-[10px] bg-brand px-4 py-2 text-xs font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
-                    >
-                      💾 Salvar relatório
-                    </button>
+                    {!isClosed && (
+                      <button
+                        type="submit"
+                        className="rounded-[10px] bg-brand px-4 py-2 text-xs font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+                      >
+                        💾 Salvar relatório
+                      </button>
+                    )}
                   </div>
                 </form>
               </>
@@ -400,8 +466,8 @@ export default async function ConsultationPage({
             <TelemetryReport report={telemetry.report} summary={telemetry.summary} />
           ) : null}
 
-          {/* A5 — triagem do pipeline em 30s (médico/suporte) */}
-          <DiagnosticsPanel consultationId={id} />
+          {/* A5 — triagem do pipeline em 30s (médico/suporte) — só no ao-vivo */}
+          {!isClosed && <DiagnosticsPanel consultationId={id} />}
         </div>
       )}
       </div>

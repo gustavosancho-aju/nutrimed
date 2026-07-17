@@ -16,6 +16,8 @@ import {
   auditTranscriptPersistStart,
   saveTranscriptReview,
   loadTranscriptReview,
+  saveConsultationRecord,
+  loadConsultationRecord,
 } from './notes';
 
 
@@ -223,6 +225,66 @@ describe('Documentation Service (E9 — FR17)', () => {
       expect(count.rows[0]!.n).toBe(1);
       // o transcript cru do STT permanece como proveniência (o segmento seq 99 salvo acima)
       expect(await listTranscriptFinals(exec, consultationId, KEY)).toContain('dor primordial');
+    });
+  });
+
+  describe('Ciclo 2 — prontuário manual (Conduta + Anotações do médico)', () => {
+    it('nunca preenchido ⇒ null', async () => {
+      expect(await loadConsultationRecord(exec, consultationId, KEY)).toBeNull();
+    });
+
+    it('salva só a conduta (annotations NULL), cifrada e auditada', async () => {
+      await saveConsultationRecord(
+        exec,
+        consultationId,
+        { conduct: 'Iniciar dieta hipocalórica com reavaliação em 30 dias.', annotations: null },
+        KEY,
+      );
+      const raw = await exec.query<{ conduct_enc: string | null; annotations_enc: string | null }>(
+        'SELECT conduct_enc, annotations_enc FROM consultation_record WHERE consultation_id = $1',
+        [consultationId],
+      );
+      expect(raw.rows[0]!.conduct_enc).not.toContain('hipocalórica'); // NFR9
+      expect(raw.rows[0]!.annotations_enc).toBeNull(); // sem placeholder cifrado
+
+      const record = await loadConsultationRecord(exec, consultationId, KEY);
+      expect(record!.conduct).toBe('Iniciar dieta hipocalórica com reavaliação em 30 dias.');
+      expect(record!.annotations).toBeNull();
+
+      const trail = await getAuditTrail(exec, consultationId);
+      const edit = trail.find((e) => e.triggeredBy === 'consultation-record-edit');
+      expect(edit).toBeDefined();
+      expect(edit!.modelVersion).toBe('human-edit');
+    });
+
+    it('upsert: 2º save substitui os dois campos (1 linha por consulta)', async () => {
+      await saveConsultationRecord(
+        exec,
+        consultationId,
+        { conduct: 'Conduta revisada.', annotations: 'Paciente relatou melhora do sono.' },
+        KEY,
+      );
+      const record = await loadConsultationRecord(exec, consultationId, KEY);
+      expect(record!.conduct).toBe('Conduta revisada.');
+      expect(record!.annotations).toBe('Paciente relatou melhora do sono.');
+
+      const count = await exec.query<{ n: number }>(
+        'SELECT count(*)::int AS n FROM consultation_record WHERE consultation_id = $1',
+        [consultationId],
+      );
+      expect(count.rows[0]!.n).toBe(1);
+    });
+
+    it('limpar um campo (vazio/whitespace) ⇒ NULL — edição legítima', async () => {
+      await saveConsultationRecord(
+        exec,
+        consultationId,
+        { conduct: '   ', annotations: 'Só a anotação fica.' },
+        KEY,
+      );
+      const record = await loadConsultationRecord(exec, consultationId, KEY);
+      expect(record!.conduct).toBeNull();
+      expect(record!.annotations).toBe('Só a anotação fica.');
     });
   });
 });
