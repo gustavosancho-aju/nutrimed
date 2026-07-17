@@ -46,6 +46,7 @@ describe('Migrations 0001 — schema base (AC1, AC3)', () => {
       '0011_custom_exams_body_goal',
       '0012_totp_2fa',
       '0013_soft_delete',
+      '0014_consultation_telemetry',
     ]);
   });
 

@@ -121,6 +121,31 @@ export class TelemetryRegistry {
     return rec;
   }
 
+  /**
+   * A consulta é conhecida deste registry EM MEMÓRIA? SEM side effect —
+   * `record()` criaria a entry e faria o fallback persistido nunca disparar.
+   */
+  has(consultationId: string): boolean {
+    return this.records.get(consultationId)?.startedAt != null;
+  }
+
+  /**
+   * Dados da sessão que NÃO estão no ConsultationReport, para as colunas planas
+   * da persistência (F4). Sem side effect (não cria record).
+   */
+  sessionBounds(consultationId: string): {
+    startedAt: number | null;
+    endedAt: number | null;
+    sttSegments: number;
+  } {
+    const rec = this.records.get(consultationId);
+    return {
+      startedAt: rec?.startedAt ?? null,
+      endedAt: rec?.endedAt ?? null,
+      sttSegments: rec?.sttSegments ?? 0,
+    };
+  }
+
   sessionStarted(consultationId: string, at = Date.now()): void {
     const rec = this.record(consultationId);
     rec.startedAt = rec.startedAt ?? at;

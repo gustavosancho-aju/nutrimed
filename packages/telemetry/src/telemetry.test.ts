@@ -122,3 +122,28 @@ describe('TelemetryRegistry (E10)', () => {
     expect(report.acceptance.rate).toBeNull();
   });
 });
+
+describe('F4 — has()/sessionBounds() sem side effect (fallback persistido)', () => {
+  it('has() é false antes de sessionStarted e true depois', () => {
+    const t = new TelemetryRegistry();
+    expect(t.has('c1')).toBe(false);
+    t.sessionStarted('c1', 1000);
+    expect(t.has('c1')).toBe(true);
+  });
+
+  it('report()/summary() NÃO tornam has() true (record() criaria a entry)', () => {
+    const t = new TelemetryRegistry();
+    t.report('fantasma');
+    t.summary();
+    expect(t.has('fantasma')).toBe(false);
+  });
+
+  it('sessionBounds devolve started/ended/sttSegments coerentes (e zeros sem sessão)', () => {
+    const t = new TelemetryRegistry();
+    expect(t.sessionBounds('c2')).toEqual({ startedAt: null, endedAt: null, sttSegments: 0 });
+    t.sessionStarted('c2', 5000);
+    t.sttSegment('c2');
+    t.sessionEnded('c2', 65_000);
+    expect(t.sessionBounds('c2')).toEqual({ startedAt: 5000, endedAt: 65_000, sttSegments: 1 });
+  });
+});

@@ -27,6 +27,7 @@ import {
 import type { SqlExecutor } from '@nutrimed/db';
 import { getDb } from './db';
 import { getEncryptionKey } from './crypto-key';
+import { saveTelemetryReport, loadTelemetryReport } from './telemetry-store';
 
 /**
  * Runtime do board no processo do Next (demo do walking skeleton — E3).
@@ -54,6 +55,8 @@ interface BoardRuntime {
       events: FullBoardEvent[];
       /** Drena a fila de persistência do transcript (A4) — aguardar antes de reiniciar/ler. */
       flushTranscript: () => Promise<void>;
+      /** F4: flush periódico da telemetria (cobre crash/deploy no meio da consulta). */
+      telemetryTimer?: ReturnType<typeof setInterval>;
     }
   >;
   /** Último final por consulta (diagnóstico A5 — "recebendo há Xs"). */
@@ -296,6 +299,42 @@ function telemetryHooks(runtime: BoardRuntime, consultationId: string) {
   };
 }
 
+/**
+ * F4: persiste o snapshot da telemetria da consulta (upsert). NUNCA lança —
+ * telemetria não pode derrubar consulta nem encerramento (só loga).
+ */
+async function flushTelemetry(
+  runtime: BoardRuntime,
+  db: SqlExecutor,
+  consultationId: string,
+): Promise<void> {
+  try {
+    await saveTelemetryReport(
+      db,
+      runtime.telemetry.report(consultationId),
+      runtime.telemetry.sessionBounds(consultationId),
+    );
+  } catch (error) {
+    console.error('[telemetria] flush falhou:', error);
+  }
+}
+
+/** F4: flush periódico enquanto a consulta está ativa (cobre crash/deploy). */
+const TELEMETRY_FLUSH_MS = 60_000;
+
+function startTelemetryTimer(
+  runtime: BoardRuntime,
+  db: SqlExecutor,
+  consultationId: string,
+): ReturnType<typeof setInterval> {
+  const timer = setInterval(() => {
+    void flushTelemetry(runtime, db, consultationId);
+  }, TELEMETRY_FLUSH_MS);
+  // não segura o processo vivo por causa da telemetria
+  timer.unref?.();
+  return timer;
+}
+
 /** Inicia a demo do BOARD COMPLETO (E6) — gate de consentimento incluso (1.4). */
 export async function startDemoBoard(consultationId: string): Promise<{ llmLabel: string }> {
   const db = await getDb();
@@ -307,6 +346,7 @@ export async function startDemoBoard(consultationId: string): Promise<{ llmLabel
     previous.orchestrator.stop();
     await previous.session.stop();
     await previous.flushTranscript().catch(() => {});
+    if (previous.telemetryTimer) clearInterval(previous.telemetryTimer);
   }
 
   const session = await startConsultationSession(db, consultationId, new ScriptedDemoStt(), {
@@ -336,7 +376,13 @@ export async function startDemoBoard(consultationId: string): Promise<{ llmLabel
     persistSynthesisEvents(db, consultationId, event); // histórico salvo (cifrado+auditado)
   });
   orchestrator.start();
-  runtime.active.set(consultationId, { session, orchestrator, events, flushTranscript: wired.flushTranscript });
+  runtime.active.set(consultationId, {
+    session,
+    orchestrator,
+    events,
+    flushTranscript: wired.flushTranscript,
+    telemetryTimer: startTelemetryTimer(runtime, db, consultationId),
+  });
   return { llmLabel: label };
 }
 
@@ -498,6 +544,7 @@ export async function startLiveBoard(consultationId: string): Promise<void> {
     previous.orchestrator.stop();
     await previous.session.stop();
     await previous.flushTranscript().catch(() => {});
+    if (previous.telemetryTimer) clearInterval(previous.telemetryTimer);
     runtime.gateway.unregisterAudioSink(consultationId);
   }
 
@@ -536,7 +583,13 @@ export async function startLiveBoard(consultationId: string): Promise<void> {
       persistSynthesisEvents(db, consultationId, event); // histórico salvo (cifrado+auditado)
     });
     orchestrator.start();
-    runtime.active.set(consultationId, { session, orchestrator, events, flushTranscript: wired.flushTranscript });
+    runtime.active.set(consultationId, {
+      session,
+      orchestrator,
+      events,
+      flushTranscript: wired.flushTranscript,
+      telemetryTimer: startTelemetryTimer(runtime, db, consultationId),
+    });
   } catch (error) {
     // rollback completo: nada fica órfão (sink, sessão STT ou orchestrator)
     runtime.gateway.unregisterAudioSink(consultationId);
@@ -554,13 +607,27 @@ export async function stopLiveBoard(consultationId: string): Promise<void> {
   if (active) {
     active.orchestrator.stop();
     await active.session.stop();
+    if (active.telemetryTimer) clearInterval(active.telemetryTimer);
   }
   runtime.telemetry.sessionEnded(consultationId);
+  // F4: snapshot final durável — o relato do piloto sobrevive a deploy/restart
+  await flushTelemetry(runtime, await getDb(), consultationId);
 }
 
-/** Relatório de telemetria da consulta + sumário da instância (E10). */
+/**
+ * Relatório de telemetria da consulta + sumário da instância (E10).
+ * F4: consulta desconhecida do registry em memória (pós-restart/deploy) cai
+ * para o snapshot persistido — foi a cegueira do incidente de 15/07.
+ */
 export async function getTelemetryReport(consultationId: string) {
   const runtime = await getBoardRuntime();
+  if (!runtime.telemetry.has(consultationId)) {
+    const persisted = await loadTelemetryReport(await getDb(), consultationId).catch((error) => {
+      console.error('[telemetria] leitura persistida falhou:', error);
+      return null;
+    });
+    if (persisted) return { report: persisted, summary: runtime.telemetry.summary() };
+  }
   return { report: runtime.telemetry.report(consultationId), summary: runtime.telemetry.summary() };
 }
 

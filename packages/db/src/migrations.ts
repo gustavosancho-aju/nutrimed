@@ -364,4 +364,27 @@ ALTER TABLE body_composition ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
 ALTER TABLE lab_exam         ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
 `,
   },
+  {
+    name: '0014_consultation_telemetry',
+    sql: `
+-- Telemetria agregada persistida por consulta (E10): o registry em memória
+-- morria a cada deploy e cegava a investigação de relatos do piloto (15/07).
+-- SEM conteúdo clínico — só contadores/durações (NFR9 ok, sem cifra).
+-- report = ConsultationReport pronto (JSONB) — a fonte do painel; colunas
+-- planas só para agregação SQL.
+CREATE TABLE IF NOT EXISTS consultation_telemetry (
+  consultation_id uuid PRIMARY KEY REFERENCES consultation(id),
+  started_at      timestamptz,
+  ended_at        timestamptz,
+  llm_calls       integer NOT NULL DEFAULT 0,
+  llm_input_tokens  bigint NOT NULL DEFAULT 0,
+  llm_output_tokens bigint NOT NULL DEFAULT 0,
+  stt_segments    integer NOT NULL DEFAULT 0,
+  contributions_delivered integer NOT NULL DEFAULT 0,
+  case_state_updates      integer NOT NULL DEFAULT 0,
+  report          jsonb NOT NULL,
+  updated_at      timestamptz NOT NULL DEFAULT now()
+);
+`,
+  },
 ];
