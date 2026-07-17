@@ -55,8 +55,9 @@ export async function updatePatientAction(formData: FormData): Promise<void> {
   const birthDate = String(formData.get('birthDate') ?? '').trim() || undefined;
   const phone = String(formData.get('phone') ?? '').trim() || undefined;
   const goal = String(formData.get('goal') ?? '').trim() || undefined;
+  const profession = String(formData.get('profession') ?? '').trim() || undefined;
 
-  await updatePatient(db, patientId, { name, birthDate, phone, goal }, getEncryptionKey());
+  await updatePatient(db, patientId, { name, birthDate, phone, goal, profession }, getEncryptionKey());
 
   revalidatePath(`/patients/${patientId}`);
   redirect(`/patients/${patientId}`);

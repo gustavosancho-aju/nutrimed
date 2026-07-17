@@ -28,6 +28,7 @@ export interface PatientInput {
   /** Data de nascimento em ISO `YYYY-MM-DD`. Idade é derivada, nunca persistida. */
   readonly birthDate?: string;
   readonly goal?: string;
+  readonly profession?: string;
 }
 
 export interface Patient {
@@ -37,6 +38,7 @@ export interface Patient {
   readonly phone: string | null;
   readonly birthDate: string | null;
   readonly goal: string | null;
+  readonly profession: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -124,14 +126,15 @@ export async function createPatient(
   origin: WriteOrigin = { action: 'patient-create' },
 ): Promise<string> {
   const res = await db.query<{ id: string }>(
-    `INSERT INTO patient (user_id, name_enc, phone_enc, birth_date_enc, goal_enc)
-     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+    `INSERT INTO patient (user_id, name_enc, phone_enc, birth_date_enc, goal_enc, profession_enc)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
     [
       userId,
       encryptField(input.name, key),
       encOptional(input.phone, key),
       encOptional(input.birthDate, key),
       encOptional(input.goal, key),
+      encOptional(input.profession, key),
     ],
   );
   const patientId = res.rows[0]!.id;
@@ -153,7 +156,8 @@ export async function updatePatient(
 ): Promise<void> {
   await db.query(
     `UPDATE patient
-     SET name_enc = $2, phone_enc = $3, birth_date_enc = $4, goal_enc = $5, updated_at = now()
+     SET name_enc = $2, phone_enc = $3, birth_date_enc = $4, goal_enc = $5,
+         profession_enc = $6, updated_at = now()
      WHERE id = $1`,
     [
       patientId,
@@ -161,6 +165,7 @@ export async function updatePatient(
       encOptional(input.phone, key),
       encOptional(input.birthDate, key),
       encOptional(input.goal, key),
+      encOptional(input.profession, key),
     ],
   );
   await writeAudit(db, patientId, {
@@ -177,6 +182,7 @@ interface PatientRow {
   phone_enc: string | null;
   birth_date_enc: string | null;
   goal_enc: string | null;
+  profession_enc: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -189,6 +195,7 @@ function toPatient(row: PatientRow, key: Buffer): Patient {
     phone: decOptional(row.phone_enc, key),
     birthDate: decOptional(row.birth_date_enc, key),
     goal: decOptional(row.goal_enc, key),
+    profession: decOptional(row.profession_enc, key),
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
   };

@@ -92,7 +92,7 @@ export default async function PatientPage({
 
       {/* Dados do paciente */}
       <section className="card-premium gold-hairline mt-8 p-7">
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm sm:grid-cols-3">
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm sm:grid-cols-4">
           <div>
             <dt className="text-xs uppercase tracking-wide text-ink-muted">Idade</dt>
             <dd className="mt-0.5 text-ink">{age !== null ? `${age} anos` : '—'}</dd>
@@ -104,6 +104,10 @@ export default async function PatientPage({
           <div>
             <dt className="text-xs uppercase tracking-wide text-ink-muted">Telefone</dt>
             <dd className="mt-0.5 text-ink">{patient.phone ?? '—'}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-ink-muted">Profissão</dt>
+            <dd className="mt-0.5 text-ink">{patient.profession ?? '—'}</dd>
           </div>
         </dl>
         {patient.goal && (

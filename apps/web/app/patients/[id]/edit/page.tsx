@@ -78,6 +78,15 @@ export default async function EditPatientPage({
           <span className="text-xs text-ink-muted">Principal objetivo</span>
           <input name="goal" type="text" defaultValue={patient.goal ?? ''} className={inputClass} />
         </label>
+        <label className="block space-y-1">
+          <span className="text-xs text-ink-muted">Profissão</span>
+          <input
+            name="profession"
+            type="text"
+            defaultValue={patient.profession ?? ''}
+            className={inputClass}
+          />
+        </label>
         <div className="flex items-center gap-3 pt-2">
           <button
             type="submit"

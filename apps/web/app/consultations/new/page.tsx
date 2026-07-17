@@ -101,6 +101,12 @@ export default async function NewConsultationPage() {
               placeholder="Principal objetivo (opcional)"
               className="w-full rounded-[10px] border border-ink/15 bg-white px-3.5 py-2.5 text-sm text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
             />
+            <input
+              name="patientProfession"
+              type="text"
+              placeholder="Profissão (opcional)"
+              className="w-full rounded-[10px] border border-ink/15 bg-white px-3.5 py-2.5 text-sm text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+            />
           </fieldset>
 
           <button

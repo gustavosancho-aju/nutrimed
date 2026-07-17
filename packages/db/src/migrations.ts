@@ -387,4 +387,12 @@ CREATE TABLE IF NOT EXISTS consultation_telemetry (
 );
 `,
   },
+  {
+    name: '0015_patient_profession',
+    sql: `
+-- Profissão do paciente (pedido do piloto). PII => cifrada (NFR9); opcional,
+-- espelho de goal_enc.
+ALTER TABLE patient ADD COLUMN IF NOT EXISTS profession_enc text;
+`,
+  },
 ];

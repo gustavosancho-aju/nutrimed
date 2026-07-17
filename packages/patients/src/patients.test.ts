@@ -91,16 +91,40 @@ describe('Patient Service (E11 — 11.2)', () => {
 
     it('campos opcionais ausentes ⇒ null (sem placeholder cifrado)', async () => {
       const patientId = await createPatient(exec, userId, { name: 'Só Nome' }, KEY);
-      const raw = await exec.query<{ phone_enc: string | null; goal_enc: string | null }>(
-        'SELECT phone_enc, goal_enc FROM patient WHERE id = $1',
-        [patientId],
-      );
+      const raw = await exec.query<{
+        phone_enc: string | null;
+        goal_enc: string | null;
+        profession_enc: string | null;
+      }>('SELECT phone_enc, goal_enc, profession_enc FROM patient WHERE id = $1', [patientId]);
       expect(raw.rows[0]!.phone_enc).toBeNull();
       expect(raw.rows[0]!.goal_enc).toBeNull();
+      expect(raw.rows[0]!.profession_enc).toBeNull();
 
       const patient = await loadPatient(exec, patientId, KEY);
       expect(patient!.phone).toBeNull();
       expect(patient!.goal).toBeNull();
+      expect(patient!.profession).toBeNull();
+    });
+
+    it('profissão: round-trip cifrado (storage ilegível) + update reflete', async () => {
+      const patientId = await createPatient(
+        exec,
+        userId,
+        { name: 'Com Profissão', profession: 'Engenheira civil' },
+        KEY,
+      );
+      const raw = await exec.query<{ profession_enc: string }>(
+        'SELECT profession_enc FROM patient WHERE id = $1',
+        [patientId],
+      );
+      expect(raw.rows[0]!.profession_enc).not.toContain('Engenheira');
+
+      let patient = await loadPatient(exec, patientId, KEY);
+      expect(patient!.profession).toBe('Engenheira civil');
+
+      await updatePatient(exec, patientId, { name: 'Com Profissão', profession: 'Arquiteta' }, KEY);
+      patient = await loadPatient(exec, patientId, KEY);
+      expect(patient!.profession).toBe('Arquiteta');
     });
 
     it('paciente inexistente ⇒ null', async () => {

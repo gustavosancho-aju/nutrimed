@@ -47,7 +47,8 @@ export async function startConsultationAction(formData: FormData): Promise<void>
     const birthDate = String(formData.get('patientBirthDate') ?? '').trim() || undefined;
     const phone = String(formData.get('patientPhone') ?? '').trim() || undefined;
     const goal = String(formData.get('patientGoal') ?? '').trim() || undefined;
-    patientId = await createPatient(db, user.id, { name, birthDate, phone, goal }, key);
+    const profession = String(formData.get('patientProfession') ?? '').trim() || undefined;
+    patientId = await createPatient(db, user.id, { name, birthDate, phone, goal, profession }, key);
     patientLabel = name;
   }
 
