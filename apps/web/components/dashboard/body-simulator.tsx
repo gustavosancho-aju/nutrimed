@@ -47,7 +47,7 @@ export function BodySimulator({
 
   return (
     <div className="flex flex-col items-center">
-      <BodyFigure imc={imc} ghostImc={metaImc ?? undefined} className="h-[340px] w-auto" />
+      <BodyFigure imc={imc} ghostImc={metaImc ?? undefined} showLandmarks className="h-[340px] w-auto" />
 
       <p className="mt-3 rounded-full border border-ink/10 bg-surface-muted px-4 py-1.5 text-sm font-semibold text-ink">
         {categoria.label}

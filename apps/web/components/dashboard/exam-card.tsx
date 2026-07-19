@@ -57,7 +57,7 @@ export function ExamCard({
       ) : (
         <>
           <div className="mt-1 flex items-center gap-3">
-            <span className="font-display text-2xl font-semibold text-ink">{fmt(trend.current)}</span>
+            <span className="font-display text-3xl font-bold text-ink">{fmt(trend.current)}</span>
             {marker && (() => {
               const status = classifyExam(marker, trend.current);
               return (

@@ -110,7 +110,7 @@ export default async function DashboardPage({
       : `Saudável ${HEALTHY_IMC.min}–${HEALTHY_IMC.max} · meta ~${TARGET_IMC}`;
 
   return (
-    <main className="mx-auto min-h-screen max-w-4xl p-8">
+    <main className="mx-auto min-h-screen max-w-7xl p-8">
       <header className="flex items-start justify-between gap-4 border-b border-ink/10 pb-5">
         <div>
           <Link href={`/patients/${id}`} className="text-sm text-ink-muted transition-colors hover:text-ink">

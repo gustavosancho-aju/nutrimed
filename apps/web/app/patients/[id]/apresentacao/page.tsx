@@ -156,7 +156,7 @@ export default async function ApresentacaoPage({ params }: { params: Promise<{ i
   ];
 
   return (
-    <main className="mx-auto min-h-screen max-w-5xl p-8">
+    <main className="mx-auto min-h-screen max-w-7xl p-8">
       <header className="flex items-start justify-between gap-4 pb-4">
         <div>
           <Link

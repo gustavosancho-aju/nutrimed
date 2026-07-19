@@ -214,24 +214,34 @@ export async function loadPatient(
 
 /**
  * Lista os pacientes do médico dono (escopo por user_id — nunca vaza paciente
- * de outro médico). Ordenado por criação mais recente.
+ * de outro médico). Ordem padrão: alfabética pelo nome. Como o nome é cifrado
+ * (NFR9), o ORDER BY não pode acontecer no SQL: carregamos o escopo do médico,
+ * deciframos e ordenamos em memória — a paginação (limit/offset) é aplicada
+ * depois da ordenação. `orderBy: 'recent'` mantém o comportamento antigo.
  */
 export async function listPatients(
   db: SqlExecutor,
   userId: string,
   key: Buffer,
-  opts?: { limit?: number; offset?: number },
+  opts?: { limit?: number; offset?: number; orderBy?: 'name' | 'recent' },
 ): Promise<Patient[]> {
-  let sql = 'SELECT * FROM patient WHERE user_id = $1 ORDER BY created_at DESC, id DESC';
-  const params: unknown[] = [userId];
-  if (opts?.limit !== undefined) {
-    params.push(Math.max(1, Math.floor(opts.limit)));
-    sql += ` LIMIT $${params.length}`;
-    params.push(Math.max(0, Math.floor(opts.offset ?? 0)));
-    sql += ` OFFSET $${params.length}`;
+  const orderBy = opts?.orderBy ?? 'name';
+  const res = await db.query<PatientRow>(
+    'SELECT * FROM patient WHERE user_id = $1 ORDER BY created_at DESC, id DESC',
+    [userId],
+  );
+  let patients = res.rows.map((r) => toPatient(r, key));
+  if (orderBy === 'name') {
+    patients = patients
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
   }
-  const res = await db.query<PatientRow>(sql, params);
-  return res.rows.map((r) => toPatient(r, key));
+  if (opts?.limit !== undefined) {
+    const offset = Math.max(0, Math.floor(opts.offset ?? 0));
+    const limit = Math.max(1, Math.floor(opts.limit));
+    patients = patients.slice(offset, offset + limit);
+  }
+  return patients;
 }
 
 /** Total de pacientes do médico (para paginação da lista). */

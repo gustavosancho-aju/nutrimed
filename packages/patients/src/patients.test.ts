@@ -146,6 +146,28 @@ describe('Patient Service (E11 — 11.2)', () => {
       expect(listB.map((p) => p.name)).toContain('Paciente de B');
     });
 
+    it('ordena alfabeticamente pelo nome decifrado (acentos e caixa não atrapalham)', async () => {
+      const dr = await insertUser(exec, 'alfabetica@nutrimed.test');
+      // Criados fora de ordem — inclusive com acento, que deve ordenar junto
+      // da letra base (Á entre A's, não depois do Z).
+      await createPatient(exec, dr, { name: 'zuleica' }, KEY);
+      await createPatient(exec, dr, { name: 'Bruno' }, KEY);
+      await createPatient(exec, dr, { name: 'Álvaro' }, KEY);
+      await createPatient(exec, dr, { name: 'ana' }, KEY);
+
+      const list = await listPatients(exec, dr, KEY);
+      expect(list.map((p) => p.name)).toEqual(['Álvaro', 'ana', 'Bruno', 'zuleica']);
+
+      // Paginação acontece DEPOIS da ordenação alfabética.
+      const page2 = await listPatients(exec, dr, KEY, { limit: 2, offset: 2 });
+      expect(page2.map((p) => p.name)).toEqual(['Bruno', 'zuleica']);
+
+      // orderBy: 'recent' não reordena alfabeticamente (comportamento antigo) —
+      // sem asserção de posição exata: created_at pode empatar no mesmo ms.
+      const recent = await listPatients(exec, dr, KEY, { orderBy: 'recent' });
+      expect(recent.map((p) => p.name).sort()).toEqual(['Bruno', 'ana', 'zuleica', 'Álvaro'].sort());
+    });
+
     it('pagina com limit/offset e conta o total (sem sobreposição entre páginas)', async () => {
       const dr = await insertUser(exec, 'paginacao@nutrimed.test');
       for (let i = 0; i < 5; i += 1) await createPatient(exec, dr, { name: `P${i}` }, KEY);

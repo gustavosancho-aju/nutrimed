@@ -5,6 +5,7 @@ import { logoutAction } from '@/lib/auth-actions';
 import { getDb } from '@/lib/db';
 import { getEncryptionKey } from '@/lib/crypto-key';
 import { listPatients, countPatients, computeAge } from '@nutrimed/patients';
+import { PatientAvatar } from '@/components/patient-avatar';
 
 const PAGE_SIZE = 20;
 
@@ -36,7 +37,7 @@ export default async function DashboardPage({
   const now = new Date();
 
   return (
-    <main className="mx-auto min-h-screen max-w-3xl p-8">
+    <main className="mx-auto min-h-screen max-w-5xl p-8">
       <header className="flex items-center justify-between border-b border-ink/10 pb-5">
         <div>
           <h1 className="font-display text-2xl font-semibold tracking-tight text-ink">NutriMed</h1>
@@ -101,14 +102,17 @@ export default async function DashboardPage({
               <li key={p.id}>
                 <Link
                   href={`/patients/${p.id}`}
-                  className="card-premium gold-hairline flex items-center justify-between gap-4 p-5 transition-colors hover:bg-surface-muted"
+                  className="card-premium gold-hairline flex items-center justify-between gap-5 p-6 transition-colors hover:bg-surface-muted"
                 >
-                  <div className="min-w-0">
-                    <p className="truncate font-display text-base font-semibold text-ink">{p.name}</p>
-                    <p className="mt-0.5 truncate text-sm text-ink-muted">
-                      {age !== null ? `${age} anos` : 'idade não informada'}
-                      {p.goal ? ` · ${p.goal}` : ''}
-                    </p>
+                  <div className="flex min-w-0 items-center gap-4">
+                    <PatientAvatar id={p.id} name={p.name} />
+                    <div className="min-w-0">
+                      <p className="truncate font-display text-lg font-semibold text-ink">{p.name}</p>
+                      <p className="mt-0.5 truncate text-sm text-ink-muted">
+                        {age !== null ? `${age} anos` : 'idade não informada'}
+                        {p.goal ? ` · ${p.goal}` : ''}
+                      </p>
+                    </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
                     {p.phone && <span className="text-sm text-ink-muted">{p.phone}</span>}

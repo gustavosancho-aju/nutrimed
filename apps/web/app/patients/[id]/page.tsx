@@ -7,6 +7,7 @@ import { loadPatient, computeAge, loadCurrentNutritionGoal } from '@nutrimed/pat
 import { listConsultationsByPatient } from '@nutrimed/consent';
 import { getLinkStatus } from '@nutrimed/telegram-link';
 import { setGoalAction } from '@/lib/telegram-actions';
+import { startConsultationAction } from '@/lib/consent-actions';
 import { TelegramLinkPanel } from '@/components/telegram-link-panel';
 
 /** Formata uma data ISO/Date para dd/mm/aaaa (pt-BR), no servidor (estático). */
@@ -55,7 +56,7 @@ export default async function PatientPage({
   ];
 
   return (
-    <main className="mx-auto min-h-screen max-w-3xl p-8">
+    <main className="mx-auto min-h-screen max-w-5xl p-8">
       <header className="flex items-center justify-between border-b border-ink/10 pb-5">
         <div className="min-w-0">
           <Link href="/" className="text-sm text-ink-muted transition-colors hover:text-ink">
@@ -72,12 +73,17 @@ export default async function PatientPage({
           >
             ✏️ Editar cadastro
           </Link>
-          <Link
-            href="/consultations/new"
-            className="rounded-[10px] border border-ink/15 px-3.5 py-1.5 text-sm text-ink transition-colors hover:bg-surface-muted"
-          >
-            + Nova consulta
-          </Link>
+          {/* Vai DIRETO à consulta deste paciente (gate de consentimento na própria
+              tela da consulta) — sem passar pela tela genérica de nova consulta. */}
+          <form action={startConsultationAction}>
+            <input type="hidden" name="patientId" value={patient.id} />
+            <button
+              type="submit"
+              className="rounded-[10px] bg-brand px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+            >
+              + Nova consulta
+            </button>
+          </form>
         </div>
       </header>
 

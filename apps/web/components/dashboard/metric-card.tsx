@@ -39,7 +39,7 @@ export function MetricCard({
         <p className="mt-2 text-sm text-ink-muted">Sem medições.</p>
       ) : (
         <>
-          <p className="mt-1 font-display text-2xl font-semibold text-ink">
+          <p className="mt-1 font-display text-3xl font-bold text-ink">
             {fmt(trend.current)}
             {unit && <span className="ml-1 text-base font-normal text-ink-muted">{unit}</span>}
           </p>

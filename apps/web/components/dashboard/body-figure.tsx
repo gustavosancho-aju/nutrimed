@@ -60,14 +60,24 @@ function torsoPath({ shoulder, chest, waist, hip }: ReturnType<typeof bodyDims>)
   ].join(' ');
 }
 
+/** Pontos de referência anatômicos (nível vertical no viewBox + rótulo). */
+const LANDMARKS = [
+  { label: 'Tórax', y: 148, dim: 'chest' as const },
+  { label: 'Cintura', y: 192, dim: 'waist' as const },
+  { label: 'Quadril', y: 236, dim: 'hip' as const },
+];
+
 export function BodyFigure({
   imc,
   ghostImc,
+  showLandmarks = false,
   className = '',
 }: {
   imc: number;
   /** IMC da silhueta-alvo (meta) — desenhada como contorno tracejado por cima. */
   ghostImc?: number;
+  /** Marca os pontos de referência (tórax/cintura/quadril) com guia + rótulo. */
+  showLandmarks?: boolean;
   className?: string;
 }) {
   const tone = classifyImc(imc).tone;
@@ -138,6 +148,37 @@ export function BodyFigure({
           opacity="0.9"
         />
       )}
+
+      {/* pontos de referência: guia horizontal no nível anatômico + rótulo à
+          direita — onde cada medida (tórax/cintura/quadril) é tomada. */}
+      {showLandmarks &&
+        LANDMARKS.map(({ label, y, dim }) => {
+          const half = d[dim];
+          return (
+            <g key={label} stroke="#44403c" opacity="0.75">
+              <line
+                x1={cx - half - 10}
+                y1={y}
+                x2={cx + half + 10}
+                y2={y}
+                strokeWidth="1.25"
+                strokeDasharray="3 3"
+              />
+              <circle cx={cx - half - 10} cy={y} r="2.5" fill="#44403c" strokeWidth="0" />
+              <circle cx={cx + half + 10} cy={y} r="2.5" fill="#44403c" strokeWidth="0" />
+              <text
+                x={cx + half + 16}
+                y={y + 3.5}
+                stroke="none"
+                fill="#44403c"
+                fontSize="11"
+                fontWeight="600"
+              >
+                {label}
+              </text>
+            </g>
+          );
+        })}
     </svg>
   );
 }

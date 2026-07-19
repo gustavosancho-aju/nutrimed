@@ -78,7 +78,7 @@ export function TrendChart({
             width={W - 2 * PAD}
             height={Math.max(0, y(band.min) - y(band.max))}
             fill="#10b981"
-            fillOpacity="0.10"
+            fillOpacity="0.16"
           />
         )}
         {/* linha base sutil */}
@@ -91,8 +91,8 @@ export function TrendChart({
             x2={W - PAD}
             y2={y(target)}
             stroke="#059669"
-            strokeWidth="1.5"
-            strokeDasharray="4 3"
+            strokeWidth="2.5"
+            strokeDasharray="5 4"
             vectorEffect="non-scaling-stroke"
           />
         )}
@@ -101,17 +101,17 @@ export function TrendChart({
             points={pts.join(' ')}
             fill="none"
             stroke="currentColor"
-            strokeWidth="2"
+            strokeWidth="3.5"
             strokeLinejoin="round"
             strokeLinecap="round"
             vectorEffect="non-scaling-stroke"
           />
         )}
         {sorted.map((p, i) => (
-          <circle key={i} cx={x(i)} cy={y(p.value)} r="2.5" fill="currentColor" />
+          <circle key={i} cx={x(i)} cy={y(p.value)} r="3.5" fill="currentColor" />
         ))}
         {/* último ponto em destaque (onde o paciente está agora) */}
-        <circle cx={x(sorted.length - 1)} cy={y(last.value)} r="4" fill="currentColor" />
+        <circle cx={x(sorted.length - 1)} cy={y(last.value)} r="5.5" fill="currentColor" />
       </svg>
     </figure>
   );
