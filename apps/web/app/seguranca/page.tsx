@@ -10,6 +10,26 @@ import {
   confirmTotpAction,
   disableTotpAction,
 } from '@/lib/twofa-actions';
+import { setThemeAction } from '@/lib/theme-actions';
+import { THEMES, type Theme } from '@/lib/theme';
+
+const THEME_INFO: Record<Theme, { label: string; description: string; swatch: string[] }> = {
+  unic: {
+    label: 'UNIC',
+    description: 'Dourado + verde-sálvia sobre marfim — identidade padrão, reforçada.',
+    swatch: ['#5c4720', '#4a5233', '#f8f5ee'],
+  },
+  authority: {
+    label: 'Autoridade',
+    description: 'Escuro, alto contraste — âmbar sobre grafite.',
+    swatch: ['#e0a83e', '#2f9e82', '#17191f'],
+  },
+  classic: {
+    label: 'Clássico clínico',
+    description: 'Azul-marinho sóbrio sobre branco-gelo.',
+    swatch: ['#1d436e', '#2c5b73', '#f7f9fb'],
+  },
+};
 
 /** Agrupa a chave base32 em blocos de 4 para leitura/digitação. */
 function grouped(s: string): string {
@@ -141,6 +161,46 @@ export default async function SecurityPage({
             </form>
           </div>
         )}
+      </section>
+
+      <section className="card-premium gold-hairline mt-6 p-7">
+        <h2 className="font-display text-base font-semibold text-ink">Tema visual</h2>
+        <p className="mt-1 text-sm text-ink-muted">
+          Escolha a combinação de cores do NutriMed. Vale para toda a conta, em qualquer dispositivo.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          {THEMES.map((theme) => {
+            const info = THEME_INFO[theme];
+            const active = user.theme === theme;
+            return (
+              <form key={theme} action={setThemeAction}>
+                <input type="hidden" name="theme" value={theme} />
+                <button
+                  type="submit"
+                  aria-pressed={active}
+                  className={`w-full rounded-[10px] border p-4 text-left transition-colors ${
+                    active ? 'border-brand ring-2 ring-brand/30' : 'border-ink/15 hover:bg-surface-muted'
+                  }`}
+                >
+                  <div className="flex gap-1.5">
+                    {info.swatch.map((color, i) => (
+                      <span
+                        key={i}
+                        aria-hidden
+                        className="h-6 w-6 rounded-full border border-ink/10"
+                        style={{ backgroundColor: color }}
+                      />
+                    ))}
+                  </div>
+                  <p className="mt-2 text-sm font-semibold text-ink">
+                    {info.label} {active && <span className="text-xs font-normal text-brand">· atual</span>}
+                  </p>
+                  <p className="mt-0.5 text-xs text-ink-muted">{info.description}</p>
+                </button>
+              </form>
+            );
+          })}
+        </div>
       </section>
     </main>
   );

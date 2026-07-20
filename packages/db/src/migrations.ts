@@ -453,4 +453,15 @@ CREATE TABLE IF NOT EXISTS board_final_review (
 );
 `,
   },
+  {
+    name: '0019_user_theme',
+    sql: `
+-- Briefing do piloto (2026-07-19): tema visual escolhível por médico ("as
+-- cores ficam muito clean; de repente algumas opções de combinações"). Não é
+-- dado sensível ⇒ sem cifra. Valores válidos aplicados pela UI: 'unic'
+-- (default reforçado) | 'authority' | 'classic' — coluna solta (sem CHECK)
+-- para não travar deploy se um 4º tema for adicionado antes de uma migration.
+ALTER TABLE app_user ADD COLUMN IF NOT EXISTS theme text NOT NULL DEFAULT 'unic';
+`,
+  },
 ];

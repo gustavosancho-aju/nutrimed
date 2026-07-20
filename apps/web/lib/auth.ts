@@ -8,6 +8,8 @@ export interface CurrentUser {
   id: string;
   email: string;
   displayName: string;
+  /** Tema visual escolhido (briefing do piloto 2026-07-19) — 'unic' (default) | 'authority' | 'classic'. */
+  theme: string;
 }
 
 /** Identidade do usuário autenticado, lida da sessão. Null se não autenticado. */
@@ -19,10 +21,12 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   const session = await validateSession(db, token);
   if (!session) return null;
 
-  const res = await db.query<{ id: string; email: string; display_name: string }>(
-    'SELECT id, email, display_name FROM app_user WHERE id = $1',
+  const res = await db.query<{ id: string; email: string; display_name: string; theme: string }>(
+    'SELECT id, email, display_name, theme FROM app_user WHERE id = $1',
     [session.userId],
   );
   const user = res.rows[0];
-  return user ? { id: user.id, email: user.email, displayName: user.display_name } : null;
+  return user
+    ? { id: user.id, email: user.email, displayName: user.display_name, theme: user.theme }
+    : null;
 }
