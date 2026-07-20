@@ -55,6 +55,7 @@ export default async function PatientPage({
     { name: 'protein', label: 'Proteína (g)', value: goal?.values.protein },
     { name: 'carbs', label: 'Carbo (g)', value: goal?.values.carbs },
     { name: 'fat', label: 'Gordura (g)', value: goal?.values.fat },
+    { name: 'waterMl', label: 'Água (ml)', value: goal?.values.waterMl },
   ];
 
   return (
@@ -146,9 +147,9 @@ export default async function PatientPage({
       <section className="card-premium gold-hairline mt-8 p-7">
         <h2 className="font-display text-base font-semibold text-ink">Assistente no Telegram</h2>
         <p className="mt-1 text-sm text-ink-muted">
-          Vincule o Telegram do paciente e defina as metas. Ele envia a foto do prato e recebe a
-          estimativa nutricional frente às metas. O código de vínculo é o consentimento do paciente
-          (revogável a qualquer momento).
+          Vincule o Telegram do paciente e defina as metas. Ele envia a foto do prato (/agua para
+          água, /dormi e /acordei para o sono) e recebe o progresso frente às metas. O código de
+          vínculo é o consentimento do paciente (revogável a qualquer momento).
         </p>
         <div className="mt-4">
           <TelegramLinkPanel patientId={patient.id} active={link?.granted ?? false} />
@@ -161,13 +162,14 @@ export default async function PatientPage({
               Atuais (desde {formatDate(goal.effectiveFrom)}): ~{Math.round(goal.values.kcal)} kcal · P{' '}
               {Math.round(goal.values.protein)} g · C {Math.round(goal.values.carbs)} g · G{' '}
               {Math.round(goal.values.fat)} g
+              {goal.values.waterMl !== undefined ? ` · Água ${Math.round(goal.values.waterMl)} ml` : ''}
             </p>
           ) : (
             <p className="mt-1 text-xs text-ink-muted">Nenhuma meta definida ainda.</p>
           )}
           <form action={setGoalAction} className="mt-3">
             <input type="hidden" name="patientId" value={patient.id} />
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
               {goalFields.map((f) => (
                 <label key={f.name} className="text-xs text-ink-muted">
                   {f.label}

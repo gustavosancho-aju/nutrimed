@@ -464,4 +464,27 @@ CREATE TABLE IF NOT EXISTS board_final_review (
 ALTER TABLE app_user ADD COLUMN IF NOT EXISTS theme text NOT NULL DEFAULT 'unic';
 `,
   },
+  {
+    name: '0020_patient_self_log',
+    sql: `
+-- Pedido do médico (2026-07-20): água e sono via Telegram (/agua, /dormi,
+-- /acordei). Uma tabela para os dois — espelha food_log_entry, mas sem
+-- estimativa por IA: o paciente informa o valor direto. kind='water' guarda
+-- {ml}; kind='sleep_start'/'sleep_end' são só o INSTANTE do evento (values_enc
+-- cifra um objeto vazio, reservado para futuras notas) — a duração/qualidade
+-- do sono é calculada em código, pareando o último sleep_start com o
+-- sleep_end mais recente. Cifrado (NFR9); cada insert audita (NFR10).
+CREATE TABLE IF NOT EXISTS patient_self_log (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  patient_id  uuid NOT NULL REFERENCES patient(id),
+  kind        text NOT NULL,
+  logged_at   timestamptz NOT NULL,
+  values_enc  text NOT NULL,
+  source      text NOT NULL DEFAULT 'telegram',
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS patient_self_log_patient_kind_idx
+  ON patient_self_log (patient_id, kind, logged_at);
+`,
+  },
 ];

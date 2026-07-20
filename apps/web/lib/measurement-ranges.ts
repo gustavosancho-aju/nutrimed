@@ -34,6 +34,8 @@ export const RANGES: Readonly<Record<string, Range>> = {
   protein: { min: 0, max: 5_000, label: 'Proteína', unit: 'g' },
   carbs: { min: 0, max: 5_000, label: 'Carbo', unit: 'g' },
   fat: { min: 0, max: 5_000, label: 'Gordura', unit: 'g' },
+  // Meta de água (pedido do médico, 2026-07-20)
+  waterMl: { min: 0, max: 10_000, label: 'Água', unit: 'ml' },
 };
 
 /** Número "bonito" para a mensagem (inteiro sem casas, senão 1 casa). */

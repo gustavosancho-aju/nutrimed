@@ -663,6 +663,11 @@ export interface NutritionGoalValues {
   readonly protein: number;
   readonly carbs: number;
   readonly fat: number;
+  /**
+   * Meta diária de água em ml (pedido do médico, 2026-07-20) — OPCIONAL:
+   * metas antigas não têm o campo (decodifica undefined, sem quebrar).
+   */
+  readonly waterMl?: number;
 }
 
 export interface NutritionGoal {
@@ -978,4 +983,196 @@ export async function sumFoodLogForDay(
     : null;
 
   return { day: dayISO, consumed, goal: goalValues, remaining };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Água + sono via Telegram (pedido do médico, 2026-07-20) — auto-registro do
+// paciente, sem estimativa por IA: ele informa o valor (água) ou o instante
+// (deitar/acordar) e o CÓDIGO calcula duração/progresso deterministicamente,
+// mesmo espírito da TACO (E13): a IA nunca inventa o número. Uma tabela
+// (`patient_self_log`) para os dois tipos — `kind` distingue.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface WaterLogEntry {
+  readonly id: string;
+  readonly patientId: string;
+  readonly loggedAt: Date;
+  readonly ml: number;
+  readonly createdAt: Date;
+}
+
+/** Progresso de água do dia: consumido vs. meta vigente (null se sem meta). */
+export interface WaterProgress {
+  readonly day: string;
+  readonly consumedMl: number;
+  readonly goalMl: number | null;
+  readonly remainingMl: number | null;
+}
+
+interface SelfLogRow {
+  id: string;
+  patient_id: string;
+  kind: string;
+  logged_at: Date;
+  values_enc: string;
+  created_at: Date;
+}
+
+/** Registra um consumo de água (blob cifrado + auditado). */
+export async function addWaterLog(
+  db: SqlExecutor,
+  patientId: string,
+  ml: number,
+  loggedAt: Date,
+  key: Buffer,
+  origin: WriteOrigin = { action: 'water-log-add' },
+): Promise<string> {
+  const res = await db.query<{ id: string }>(
+    `INSERT INTO patient_self_log (patient_id, kind, logged_at, values_enc, source)
+     VALUES ($1, 'water', $2, $3, 'telegram') RETURNING id`,
+    [patientId, loggedAt, encryptField(JSON.stringify({ ml }), key)],
+  );
+  const id = res.rows[0]!.id;
+  await writeAudit(db, patientId, {
+    triggeredBy: origin.action,
+    kbSources: [],
+    modelVersion: origin.modelVersion ?? 'human-edit',
+  });
+  return id;
+}
+
+/** Registros de água do dia LOCAL `dayISO` (mesma janela de fuso do food log). */
+export async function listWaterLogByDay(
+  db: SqlExecutor,
+  patientId: string,
+  dayISO: string,
+  tzOffsetMinutes: number,
+  key: Buffer,
+): Promise<WaterLogEntry[]> {
+  const { start, end } = localDayRangeUtc(dayISO, tzOffsetMinutes);
+  const res = await db.query<SelfLogRow>(
+    `SELECT id, patient_id, kind, logged_at, values_enc, created_at
+     FROM patient_self_log
+     WHERE patient_id = $1 AND kind = 'water' AND logged_at >= $2 AND logged_at < $3
+     ORDER BY logged_at ASC, id ASC`,
+    [patientId, start, end],
+  );
+  return res.rows.map((r) => ({
+    id: r.id,
+    patientId: r.patient_id,
+    loggedAt: new Date(r.logged_at),
+    ml: (JSON.parse(decryptField(r.values_enc, key)) as { ml: number }).ml,
+    createdAt: new Date(r.created_at),
+  }));
+}
+
+/** Soma a água do dia e compara com a meta vigente (`waterMl` da meta nutricional). */
+export async function sumWaterForDay(
+  db: SqlExecutor,
+  patientId: string,
+  dayISO: string,
+  tzOffsetMinutes: number,
+  key: Buffer,
+): Promise<WaterProgress> {
+  const entries = await listWaterLogByDay(db, patientId, dayISO, tzOffsetMinutes, key);
+  const consumedMl = entries.reduce((acc, e) => acc + e.ml, 0);
+  const goal = await loadCurrentNutritionGoal(db, patientId, key, dayISO);
+  const goalMl = goal?.values.waterMl ?? null;
+  return {
+    day: dayISO,
+    consumedMl,
+    goalMl,
+    remainingMl: goalMl !== null ? goalMl - consumedMl : null,
+  };
+}
+
+/** Instante de deitar (`sleep_start`) ou acordar (`sleep_end`) informado pelo paciente. */
+export type SleepEventKind = 'sleep_start' | 'sleep_end';
+
+/**
+ * Registra o instante de deitar/acordar (auditado). `values_enc` cifra `{}` —
+ * reservado para uma nota futura; hoje só o instante (`logged_at`) importa.
+ */
+export async function addSleepEvent(
+  db: SqlExecutor,
+  patientId: string,
+  kind: SleepEventKind,
+  loggedAt: Date,
+  key: Buffer,
+  origin: WriteOrigin = { action: 'sleep-log-add' },
+): Promise<string> {
+  const res = await db.query<{ id: string }>(
+    `INSERT INTO patient_self_log (patient_id, kind, logged_at, values_enc, source)
+     VALUES ($1, $2, $3, $4, 'telegram') RETURNING id`,
+    [patientId, kind, loggedAt, encryptField('{}', key)],
+  );
+  const id = res.rows[0]!.id;
+  await writeAudit(db, patientId, {
+    triggeredBy: origin.action,
+    kbSources: [],
+    modelVersion: origin.modelVersion ?? 'human-edit',
+  });
+  return id;
+}
+
+/** Rótulo de qualidade por duração — apoio visual, não diagnóstico. */
+export type SleepQuality = 'curta' | 'boa' | 'longa';
+
+/** Classifica a duração do sono (minutos) numa faixa simples — puro/testável. */
+export function classifySleepDuration(minutes: number): SleepQuality {
+  if (minutes < 360) return 'curta'; // < 6h
+  if (minutes > 570) return 'longa'; // > 9h30
+  return 'boa';
+}
+
+export interface SleepSession {
+  readonly start: Date;
+  readonly end: Date;
+  readonly durationMinutes: number;
+  readonly quality: SleepQuality;
+}
+
+/** Teto de plausibilidade para parear deitar→acordar (uma noite real). */
+const MAX_SLEEP_SESSION_MS = 16 * 60 * 60 * 1000; // 16h
+
+/**
+ * Última "noite" do paciente: pega o `sleep_end` mais recente e o
+ * `sleep_start` mais recente ANTES dele, dentro de uma janela plausível
+ * (≤16h) — evita parear um "acordei" de hoje com um "dormi" de 3 dias atrás
+ * se o paciente esqueceu de registrar no meio. Sem par válido ⇒ null (o
+ * evento solto continua salvo, só não vira sessão).
+ */
+export async function findLastSleepSession(
+  db: SqlExecutor,
+  patientId: string,
+  // assinatura consistente com o resto do pacote (tudo aqui é cifrado); sleep
+  // events só cifram `{}` hoje, nada a decifrar — mantido para o dia em que
+  // uma nota opcional entrar no evento.
+  _key: Buffer,
+): Promise<SleepSession | null> {
+  const endRes = await db.query<SelfLogRow>(
+    `SELECT id, patient_id, kind, logged_at, values_enc, created_at
+     FROM patient_self_log WHERE patient_id = $1 AND kind = 'sleep_end'
+     ORDER BY logged_at DESC LIMIT 1`,
+    [patientId],
+  );
+  const endRow = endRes.rows[0];
+  if (!endRow) return null;
+  const end = new Date(endRow.logged_at);
+
+  const startRes = await db.query<SelfLogRow>(
+    `SELECT id, patient_id, kind, logged_at, values_enc, created_at
+     FROM patient_self_log
+     WHERE patient_id = $1 AND kind = 'sleep_start' AND logged_at < $2
+     ORDER BY logged_at DESC LIMIT 1`,
+    [patientId, end],
+  );
+  const startRow = startRes.rows[0];
+  if (!startRow) return null;
+  const start = new Date(startRow.logged_at);
+
+  const durationMinutes = (end.getTime() - start.getTime()) / 60_000;
+  if (end.getTime() - start.getTime() > MAX_SLEEP_SESSION_MS || durationMinutes <= 0) return null;
+
+  return { start, end, durationMinutes, quality: classifySleepDuration(durationMinutes) };
 }

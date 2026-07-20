@@ -28,6 +28,13 @@ export {
   updateFoodLogEntryValues,
   listFoodLogByDay,
   sumFoodLogForDay,
+  // Água + sono via Telegram (2026-07-20)
+  addWaterLog,
+  listWaterLogByDay,
+  sumWaterForDay,
+  addSleepEvent,
+  findLastSleepSession,
+  classifySleepDuration,
   type Patient,
   type PatientInput,
   type WriteOrigin,
@@ -45,4 +52,9 @@ export {
   type FoodLogEntry,
   type FoodLogInput,
   type DailyProgress,
+  type WaterLogEntry,
+  type WaterProgress,
+  type SleepEventKind,
+  type SleepQuality,
+  type SleepSession,
 } from './patients';

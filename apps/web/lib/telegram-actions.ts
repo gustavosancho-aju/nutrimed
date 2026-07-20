@@ -49,11 +49,13 @@ export async function setGoalAction(formData: FormData): Promise<void> {
   const patientId = String(formData.get('patientId') ?? '');
   const { user, db } = await assertOwner(patientId);
 
+  const waterMl = parseDecimal(formData.get('waterMl'));
   const values: NutritionGoalValues = {
     kcal: parseDecimal(formData.get('kcal')) ?? 0,
     protein: parseDecimal(formData.get('protein')) ?? 0,
     carbs: parseDecimal(formData.get('carbs')) ?? 0,
     fat: parseDecimal(formData.get('fat')) ?? 0,
+    ...(waterMl !== undefined ? { waterMl } : {}),
   };
   const rangeError = checkRanges({ ...values });
   if (rangeError) {
