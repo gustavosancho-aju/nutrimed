@@ -12,8 +12,11 @@ export {
   loadTranscriptReview,
   saveConsultationRecord,
   loadConsultationRecord,
+  saveBoardFinalReview,
+  listBoardFinalReview,
   type ClinicalNote,
   type BoardSynthesis,
   type TranscriptReview,
   type ConsultationRecord,
+  type BoardFinalReviewEntry,
 } from './notes';

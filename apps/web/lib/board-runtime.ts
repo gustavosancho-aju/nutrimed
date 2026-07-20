@@ -5,9 +5,11 @@ import { BoardGateway } from '@nutrimed/board-gateway';
 import {
   FullBoardOrchestrator,
   DEFAULT_SEMANTIC_DEDUP_THRESHOLD,
+  runFinalReview,
   type FullBoardEvent,
   type FullBoardConfig,
 } from '@nutrimed/board';
+import { setConsultationBoardMode, setFinalReviewStatus, type BoardMode } from '@nutrimed/consent';
 import { startConsultationSession, type ConsultationSession } from '@nutrimed/session';
 import { AnthropicLlmProvider } from '@nutrimed/llm-anthropic';
 import { NamespacedKnowledgeStore, ingest, seedSources } from '@nutrimed/kb';
@@ -23,6 +25,7 @@ import {
   listSyntheses,
   auditTranscriptPersistStart,
   loadTranscriptReview,
+  saveBoardFinalReview,
 } from '@nutrimed/clinical-notes';
 import type { SqlExecutor } from '@nutrimed/db';
 import { getDb } from './db';
@@ -532,12 +535,21 @@ function createAudioQueue() {
  * gateway → fila → DeepgramSttProvider (streaming PT-BR + boost clínico) →
  * sessão (2.3) → board completo (E6). A key do vendor NUNCA vai ao browser.
  */
-export async function startLiveBoard(consultationId: string): Promise<void> {
+export async function startLiveBoard(
+  consultationId: string,
+  opts: { boardMode?: BoardMode } = {},
+): Promise<void> {
   if (!process.env.DEEPGRAM_API_KEY) {
     throw new Error('DEEPGRAM_API_KEY ausente — configure o STT para a consulta ao vivo.');
   }
+  const boardMode = opts.boardMode ?? 'live';
   const db = await getDb();
   const runtime = await getBoardRuntime();
+  // best-effort: o modo escolhido fica registrado mesmo se o resto falhar depois
+  // (o encerramento decide o parecer final a partir daqui, não do runtime em memória)
+  await setConsultationBoardMode(db, consultationId, boardMode).catch((error) =>
+    console.error('[board] falha ao gravar board_mode:', error),
+  );
 
   const previous = runtime.active.get(consultationId);
   if (previous) {
@@ -582,7 +594,10 @@ export async function startLiveBoard(consultationId: string): Promise<void> {
       events.push(event);
       persistSynthesisEvents(db, consultationId, event); // histórico salvo (cifrado+auditado)
     });
-    orchestrator.start();
+    // 'final_only' (briefing do piloto): STT/transcript seguem normalmente, mas
+    // o orchestrator NUNCA é ligado — nenhuma contribuição reativa nem case
+    // review ao vivo. O parecer sai inteiro ao encerrar (finalizeBoard).
+    if (boardMode !== 'final_only') orchestrator.start();
     runtime.active.set(consultationId, {
       session,
       orchestrator,
@@ -612,6 +627,54 @@ export async function stopLiveBoard(consultationId: string): Promise<void> {
   runtime.telemetry.sessionEnded(consultationId);
   // F4: snapshot final durável — o relato do piloto sobrevive a deploy/restart
   await flushTelemetry(runtime, await getDb(), consultationId);
+}
+
+/**
+ * Parecer final do board (briefing do piloto 2026-07-19) — chamado no
+ * encerramento da consulta, DEPOIS de `stopLiveBoard`. As 3 personas revisam
+ * a transcrição completa (já persistida/revisada) e devolvem, por escrito, o
+ * que faltou perguntar, exames a considerar e condutas a considerar. Roda
+ * SEMPRE (nos dois modos — 'live' e 'final_only'), pois é o único lugar onde
+ * o board fala no modo final_only.
+ *
+ * Fire-and-forget do chamador: `final_review_status` é o sinal de progresso
+ * (pending → done/failed) — o cliente faz polling leve nesse campo. Uma
+ * persona que falhar não derruba as demais (runFinalReview já isola).
+ */
+export async function finalizeBoard(consultationId: string): Promise<void> {
+  const db = await getDb();
+  await setFinalReviewStatus(db, consultationId, 'pending').catch((error) =>
+    console.error('[board] falha ao marcar final_review_status=pending:', error),
+  );
+  try {
+    const inputs = await getNoteInputs(consultationId);
+    const finals = inputs?.finals ?? [];
+    const { llm } = makeLlm();
+    const sections = await runFinalReview(llm, finals);
+    if (sections.length === 0) {
+      // sem transcrição: não é erro (nada a revisar) — só sem completeText/todas
+      // as personas falharam numa consulta com fala É que conta como falha
+      // (o médico pode tentar de novo).
+      await setFinalReviewStatus(db, consultationId, finals.length === 0 ? 'done' : 'failed');
+      return;
+    }
+    for (const section of sections) {
+      await saveBoardFinalReview(
+        db,
+        consultationId,
+        section.personaId,
+        section,
+        getEncryptionKey(),
+        section.modelVersion,
+      );
+    }
+    // parcial (1-2 de 3 personas) ainda é útil ao médico — 'done' exibe o que
+    // veio; só marca 'failed' quando NENHUMA persona produziu parecer.
+    await setFinalReviewStatus(db, consultationId, 'done');
+  } catch (error) {
+    console.error('[board] finalizeBoard falhou:', error);
+    await setFinalReviewStatus(db, consultationId, 'failed').catch(() => {});
+  }
 }
 
 /**

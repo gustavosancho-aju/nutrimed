@@ -1,7 +1,7 @@
 import type { SqlExecutor } from '@nutrimed/db';
 import { encryptField, decryptField } from '@nutrimed/crypto';
 import { writeAudit } from '@nutrimed/audit';
-import type { ILlmProvider, PersonaContribution } from '@nutrimed/providers';
+import type { ILlmProvider, PersonaContribution, PersonaId } from '@nutrimed/providers';
 
 /**
  * Documentation Service (E9 — FR17/A1): transcrição estruturada + NOTA CLÍNICA
@@ -375,4 +375,77 @@ export async function loadNote(
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
   };
+}
+
+// ── Parecer final do board (briefing do piloto 2026-07-19) ─────────────────
+
+export interface BoardFinalReviewEntry {
+  readonly personaId: PersonaId;
+  readonly faltouPerguntar: readonly string[];
+  readonly examesSolicitar: readonly string[];
+  readonly condutas: readonly string[];
+  readonly modelVersion: string | null;
+  readonly createdAt: Date;
+}
+
+/**
+ * Upsert do parecer final de UMA persona (cifrado — NFR9; auditado — NFR10).
+ * UNIQUE(consultation_id, persona_id): reabrir e re-encerrar a consulta
+ * substitui o parecer anterior daquela persona (não acumula duplicatas).
+ */
+export async function saveBoardFinalReview(
+  db: SqlExecutor,
+  consultationId: string,
+  personaId: PersonaId,
+  fields: { faltouPerguntar: readonly string[]; examesSolicitar: readonly string[]; condutas: readonly string[] },
+  encryptionKey: Buffer,
+  modelVersion?: string,
+): Promise<void> {
+  const contentEnc = encryptField(JSON.stringify(fields), encryptionKey);
+  await db.query(
+    `INSERT INTO board_final_review (consultation_id, persona_id, content_enc, model_version)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (consultation_id, persona_id)
+     DO UPDATE SET content_enc = $3, model_version = $4, updated_at = now()`,
+    [consultationId, personaId, contentEnc, modelVersion ?? null],
+  );
+  await writeAudit(db, consultationId, {
+    triggeredBy: 'board-final-review',
+    kbSources: [],
+    modelVersion: modelVersion ?? 'unknown',
+  });
+}
+
+/** Pareceres finais salvos da consulta, decifrados (ordem: aurelio, paulo, yara). */
+export async function listBoardFinalReview(
+  db: SqlExecutor,
+  consultationId: string,
+  encryptionKey: Buffer,
+): Promise<BoardFinalReviewEntry[]> {
+  const res = await db.query<{
+    persona_id: string;
+    content_enc: string;
+    model_version: string | null;
+    created_at: Date;
+  }>(
+    `SELECT persona_id, content_enc, model_version, created_at
+     FROM board_final_review WHERE consultation_id = $1
+     ORDER BY created_at ASC, persona_id ASC`,
+    [consultationId],
+  );
+  return res.rows.map((r) => {
+    const parsed = JSON.parse(decryptField(r.content_enc, encryptionKey)) as {
+      faltouPerguntar?: string[];
+      examesSolicitar?: string[];
+      condutas?: string[];
+    };
+    return {
+      personaId: r.persona_id as PersonaId,
+      faltouPerguntar: parsed.faltouPerguntar ?? [],
+      examesSolicitar: parsed.examesSolicitar ?? [],
+      condutas: parsed.condutas ?? [],
+      modelVersion: r.model_version,
+      createdAt: new Date(r.created_at),
+    };
+  });
 }

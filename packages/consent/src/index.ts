@@ -8,8 +8,12 @@ export {
   listConsultationsByPatient,
   setConsultationStatus,
   getConsultationMeta,
+  setConsultationBoardMode,
+  setFinalReviewStatus,
   ConsentRequiredError,
   type ConsentStatus,
   type ConsultationSummary,
   type ConsultationMeta,
+  type BoardMode,
+  type FinalReviewStatus,
 } from './consent';

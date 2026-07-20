@@ -14,6 +14,8 @@ import {
   listConsultationsByPatient,
   setConsultationStatus,
   getConsultationMeta,
+  setConsultationBoardMode,
+  setFinalReviewStatus,
   ConsentRequiredError,
 } from './consent';
 
@@ -192,6 +194,28 @@ describe('Consent Service — gate de gravação (FR20)', () => {
       );
       expect(await getConsultationMeta(exec, consultationId, other.rows[0]!.id)).toBeNull();
       expect(await getConsultationMeta(exec, consultationId, userId)).not.toBeNull();
+    });
+
+    it('board_mode: default "live"; setConsultationBoardMode muda para final_only', async () => {
+      const consultationId = await openConsultation();
+      let meta = await getConsultationMeta(exec, consultationId, userId);
+      expect(meta!.boardMode).toBe('live');
+      expect(meta!.finalReviewStatus).toBeNull();
+
+      await setConsultationBoardMode(exec, consultationId, 'final_only');
+      meta = await getConsultationMeta(exec, consultationId, userId);
+      expect(meta!.boardMode).toBe('final_only');
+    });
+
+    it('setFinalReviewStatus transita pending → done', async () => {
+      const consultationId = await openConsultation();
+      await setFinalReviewStatus(exec, consultationId, 'pending');
+      let meta = await getConsultationMeta(exec, consultationId, userId);
+      expect(meta!.finalReviewStatus).toBe('pending');
+
+      await setFinalReviewStatus(exec, consultationId, 'done');
+      meta = await getConsultationMeta(exec, consultationId, userId);
+      expect(meta!.finalReviewStatus).toBe('done');
     });
   });
 

@@ -18,6 +18,8 @@ import {
   loadTranscriptReview,
   saveConsultationRecord,
   loadConsultationRecord,
+  saveBoardFinalReview,
+  listBoardFinalReview,
 } from './notes';
 
 
@@ -26,6 +28,7 @@ const KEY = randomBytes(32);
 describe('Documentation Service (E9 — FR17)', () => {
   let db: PGlite;
   let exec: SqlExecutor;
+  let userId: string;
   let consultationId: string;
 
   beforeAll(async () => {
@@ -36,7 +39,8 @@ describe('Documentation Service (E9 — FR17)', () => {
       'INSERT INTO app_user (email, display_name, password_hash) VALUES ($1, $2, $3) RETURNING id',
       ['nutro@nutrimed.test', 'Dra. Demo', 'x'],
     );
-    consultationId = await createConsultation(exec, res.rows[0]!.id, 'P', KEY);
+    userId = res.rows[0]!.id;
+    consultationId = await createConsultation(exec, userId, 'P', KEY);
   });
 
   afterAll(async () => {
@@ -285,6 +289,68 @@ describe('Documentation Service (E9 — FR17)', () => {
       const record = await loadConsultationRecord(exec, consultationId, KEY);
       expect(record!.conduct).toBeNull();
       expect(record!.annotations).toBe('Só a anotação fica.');
+    });
+  });
+
+  describe('Parecer final do board (briefing do piloto 2026-07-19)', () => {
+    it('nunca gerado ⇒ lista vazia', async () => {
+      const other = await createConsultation(exec, userId, 'P2', KEY);
+      expect(await listBoardFinalReview(exec, other, KEY)).toEqual([]);
+    });
+
+    it('salva cifrado (ilegível no storage), carrega decifrado e audita', async () => {
+      await saveBoardFinalReview(
+        exec,
+        consultationId,
+        'paulo',
+        {
+          faltouPerguntar: ['dor torácica aos esforços'],
+          examesSolicitar: ['ECG de repouso'],
+          condutas: [],
+        },
+        KEY,
+        'claude-haiku-4-5',
+      );
+      const raw = await exec.query<{ content_enc: string }>(
+        'SELECT content_enc FROM board_final_review WHERE consultation_id = $1 AND persona_id = $2',
+        [consultationId, 'paulo'],
+      );
+      expect(raw.rows[0]!.content_enc).not.toContain('torácica');
+
+      const list = await listBoardFinalReview(exec, consultationId, KEY);
+      const paulo = list.find((r) => r.personaId === 'paulo');
+      expect(paulo).toBeDefined();
+      expect(paulo!.examesSolicitar).toEqual(['ECG de repouso']);
+      expect(paulo!.modelVersion).toBe('claude-haiku-4-5');
+
+      const trail = await getAuditTrail(exec, consultationId);
+      expect(trail.some((e) => e.triggeredBy === 'board-final-review')).toBe(true);
+    });
+
+    it('upsert por persona: 2º save da mesma persona substitui (reabrir/re-encerrar)', async () => {
+      await saveBoardFinalReview(
+        exec,
+        consultationId,
+        'paulo',
+        { faltouPerguntar: [], examesSolicitar: ['novo exame'], condutas: [] },
+        KEY,
+      );
+      const list = await listBoardFinalReview(exec, consultationId, KEY);
+      const paulos = list.filter((r) => r.personaId === 'paulo');
+      expect(paulos).toHaveLength(1);
+      expect(paulos[0]!.examesSolicitar).toEqual(['novo exame']);
+    });
+
+    it('personas distintas coexistem (1 linha cada, por consulta)', async () => {
+      await saveBoardFinalReview(
+        exec,
+        consultationId,
+        'yara',
+        { faltouPerguntar: ['sintomas de hipotireoidismo'], examesSolicitar: [], condutas: [] },
+        KEY,
+      );
+      const list = await listBoardFinalReview(exec, consultationId, KEY);
+      expect(list.map((r) => r.personaId).sort()).toEqual(['paulo', 'yara']);
     });
   });
 });

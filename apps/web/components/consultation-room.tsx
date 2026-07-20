@@ -22,14 +22,14 @@ export function ConsultationRoom({
   consultationId,
   token,
   wsBaseUrl,
-  startForm,
-  synthesisForm,
+  advancedPanel,
 }: {
   consultationId: string;
   token: string;
   wsBaseUrl: string;
-  startForm: React.ReactNode;
-  synthesisForm: React.ReactNode;
+  /** "Consulta simulada" + "Síntese" — pouco usadas no dia a dia (feedback do
+   * piloto), agrupadas atrás de um `<details>` em vez de botões sempre à vista. */
+  advancedPanel: React.ReactNode;
 }) {
   useBoardStream(consultationId, { baseUrl: wsBaseUrl, token });
   useUiTelemetry(consultationId); // E10 — ruído/aceite (R3/§9)
@@ -124,7 +124,10 @@ export function ConsultationRoom({
         >
           🔇 Modo Foco <kbd className="ml-1 rounded bg-black/20 px-1">F</kbd>
         </button>
-        <div className="flex items-start gap-2">{synthesisForm}{startForm}<LiveMicButton consultationId={consultationId} token={token} wsBaseUrl={wsBaseUrl} /></div>
+        <div className="relative flex items-start gap-2">
+          {advancedPanel}
+          <LiveMicButton consultationId={consultationId} token={token} wsBaseUrl={wsBaseUrl} />
+        </div>
       </div>
     </section>
   );

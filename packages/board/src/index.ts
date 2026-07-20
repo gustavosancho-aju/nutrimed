@@ -25,3 +25,8 @@ export {
   type CaseReviewResult,
   type CaseReviewContribution,
 } from './case-review';
+export {
+  runFinalReview,
+  parseFinalReviewSection,
+  type FinalReviewSection,
+} from './final-review';

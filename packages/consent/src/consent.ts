@@ -105,11 +105,19 @@ export async function setConsultationStatus(
   });
 }
 
+/** Modo do board durante a consulta ao vivo (briefing do piloto 2026-07-19). */
+export type BoardMode = 'live' | 'final_only';
+
+/** Desfecho do parecer final gerado ao encerrar a consulta. */
+export type FinalReviewStatus = 'pending' | 'done' | 'failed';
+
 /** Metadados da consulta COM posse (user_id no WHERE) — null se não pertence. */
 export interface ConsultationMeta {
   readonly id: string;
   readonly status: string;
   readonly patientId: string | null;
+  readonly boardMode: BoardMode;
+  readonly finalReviewStatus: FinalReviewStatus | null;
   readonly createdAt: Date;
 }
 
@@ -118,8 +126,16 @@ export async function getConsultationMeta(
   consultationId: string,
   userId: string,
 ): Promise<ConsultationMeta | null> {
-  const res = await db.query<{ id: string; status: string; patient_id: string | null; created_at: Date }>(
-    'SELECT id, status, patient_id, created_at FROM consultation WHERE id = $1 AND user_id = $2',
+  const res = await db.query<{
+    id: string;
+    status: string;
+    patient_id: string | null;
+    board_mode: string;
+    final_review_status: string | null;
+    created_at: Date;
+  }>(
+    `SELECT id, status, patient_id, board_mode, final_review_status, created_at
+     FROM consultation WHERE id = $1 AND user_id = $2`,
     [consultationId, userId],
   );
   const row = res.rows[0];
@@ -128,8 +144,36 @@ export async function getConsultationMeta(
     id: row.id,
     status: row.status,
     patientId: row.patient_id,
+    boardMode: row.board_mode === 'final_only' ? 'final_only' : 'live',
+    finalReviewStatus: (row.final_review_status as FinalReviewStatus | null) ?? null,
     createdAt: new Date(row.created_at),
   };
+}
+
+/** Define o modo do board (escolhido ao iniciar a consulta ao vivo). */
+export async function setConsultationBoardMode(
+  db: SqlExecutor,
+  consultationId: string,
+  mode: BoardMode,
+): Promise<void> {
+  await db.query('UPDATE consultation SET board_mode = $2 WHERE id = $1', [consultationId, mode]);
+}
+
+/**
+ * Atualiza o status do parecer final (pending ao encerrar → done/failed
+ * quando as chamadas ao LLM terminam). Não audita por transição — a
+ * auditoria clínica do parecer em si acontece em `saveBoardFinalReview`
+ * (NFR10); este campo é só controle de UI (spinner/retry).
+ */
+export async function setFinalReviewStatus(
+  db: SqlExecutor,
+  consultationId: string,
+  status: FinalReviewStatus,
+): Promise<void> {
+  await db.query('UPDATE consultation SET final_review_status = $2 WHERE id = $1', [
+    consultationId,
+    status,
+  ]);
 }
 
 /**

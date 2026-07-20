@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { BoardMode } from '@nutrimed/consent';
 import { startLiveBoardAction, stopLiveBoardAction } from '@/lib/board-actions';
 import { ACTION_ERROR_MESSAGES } from '@/lib/action-result';
 import { checkMicrophone, createAudioSource, pickRecorderMime, type AudioSource } from '@/lib/microphone';
@@ -48,6 +49,9 @@ export function LiveMicButton({
   const [state, setState] = useState<LiveState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  // Briefing do piloto: "atrapalha a consulta, tira o foco" — as personas podem
+  // ficar caladas até o encerramento (o parecer final roda de qualquer forma).
+  const [boardMode, setBoardMode] = useState<BoardMode>('live');
   const cleanupRef = useRef<(() => void) | null>(null);
 
   // Watchdog (A3): "ao vivo" mas NENHUM transcript (nem parcial) em 10s —
@@ -121,7 +125,7 @@ export function LiveMicButton({
 
       // 3) servidor arma o pipeline (Deepgram + sessão + board) — gate 1.4 incluso.
       // callAction isola um throw de infra (deploy stale) do resultado tipado.
-      const result = await callAction(() => startLiveBoardAction(consultationId));
+      const result = await callAction(() => startLiveBoardAction(consultationId, boardMode));
       if (!result.ok) {
         stopMic();
         setError(ACTION_ERROR_MESSAGES[result.code]);
@@ -186,7 +190,7 @@ export function LiveMicButton({
       setError(err instanceof Error ? err.message : 'Falha ao iniciar a consulta ao vivo.');
       setState('error');
     }
-  }, [consultationId, token, wsBaseUrl]);
+  }, [consultationId, token, wsBaseUrl, boardMode]);
 
   return (
     <div className="flex flex-col items-end gap-1">
@@ -199,14 +203,27 @@ export function LiveMicButton({
           ⏹ Encerrar (ao vivo)
         </button>
       ) : (
-        <button
-          type="button"
-          onClick={() => void start()}
-          disabled={state === 'starting'}
-          className="rounded-md border border-white/25 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/10 disabled:opacity-50"
-        >
-          {state === 'starting' ? '… preparando' : '🎙️ Consulta ao vivo'}
-        </button>
+        <>
+          {(state === 'idle' || state === 'error') && (
+            <label className="flex items-center gap-1.5 text-[10px] text-white/70">
+              <input
+                type="checkbox"
+                checked={boardMode === 'final_only'}
+                onChange={(e) => setBoardMode(e.target.checked ? 'final_only' : 'live')}
+                className="h-3 w-3 accent-white"
+              />
+              Especialistas só no final
+            </label>
+          )}
+          <button
+            type="button"
+            onClick={() => void start()}
+            disabled={state === 'starting'}
+            className="rounded-md border border-white/25 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/10 disabled:opacity-50"
+          >
+            {state === 'starting' ? '… preparando' : '🎙️ Consulta ao vivo'}
+          </button>
+        </>
       )}
       {error ? <p className="max-w-[220px] text-right text-[10px] text-red-300">{error}</p> : null}
       {warning && !error ? (

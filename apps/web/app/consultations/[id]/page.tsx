@@ -21,11 +21,19 @@ import {
   listTranscriptFinals,
   loadTranscriptReview,
   loadConsultationRecord,
+  listBoardFinalReview,
 } from '@nutrimed/clinical-notes';
 import { saveTranscriptReviewAction } from '@/lib/transcript-actions';
 import { ConsultationRecordSection } from '@/components/consultation-record-section';
 import { ConsultationRoom } from '@/components/consultation-room';
 import { TelemetryReport } from '@/components/telemetry-report';
+import { FinalReviewPoller } from '@/components/final-review-poller';
+
+const PERSONA_LABEL: Record<string, string> = {
+  aurelio: 'Dr. Aurélio Bastos (Nutrologia)',
+  paulo: 'Dr. Paulo Tavares (Cardiologia)',
+  yara: 'Dra. Yara Nakamura (Endocrinologia)',
+};
 
 /**
  * Tela de Consulta (E7 — frontend-spec §4): header fino, gate de consentimento
@@ -80,6 +88,7 @@ export default async function ConsultationPage({
   const syntheses = authorized ? await listSyntheses(db, id, getEncryptionKey()) : [];
   const record = authorized ? await loadConsultationRecord(db, id, getEncryptionKey()) : null;
   const telemetry = authorized && !isClosed ? await getTelemetryReport(id) : null;
+  const finalReview = authorized && isClosed ? await listBoardFinalReview(db, id, getEncryptionKey()) : [];
 
   return (
     <main className="min-h-screen">
@@ -163,12 +172,14 @@ export default async function ConsultationPage({
         <div className="mt-4">
           {isClosed && (
             <section className="card-premium gold-hairline p-6">
+              {meta.finalReviewStatus === 'pending' && <FinalReviewPoller />}
               <h2 className="font-display text-lg font-semibold text-ink">
-                📁 Registro da consulta
+                📁 Evolução do prontuário
               </h2>
               <p className="mt-1 text-sm text-ink-muted">
-                Consulta encerrada em modo de releitura: transcrição, prontuário e relatório ficam
-                salvos aqui. Para retomar a consulta ao vivo, use “Reabrir consulta” no topo.
+                Consulta em {meta.createdAt.toLocaleString('pt-BR', { dateStyle: 'long', timeStyle: 'short' })}
+                . Prontuário e relatório ficam salvos aqui; a transcrição fica recolhida abaixo. Para
+                retomar a consulta ao vivo, use “Reabrir consulta” no topo.
               </p>
             </section>
           )}
@@ -177,46 +188,108 @@ export default async function ConsultationPage({
             consultationId={id}
             token={sessionToken}
             wsBaseUrl={wsBaseUrl}
-            startForm={
-              <form action={startDemoBoardAction}>
-                <input type="hidden" name="consultationId" value={id} />
-                <button
-                  type="submit"
-                  className="rounded-[10px] bg-white px-3 py-2 text-xs font-semibold text-surface-deep shadow-sm transition-colors hover:bg-white/90"
-                >
-                  ▶ Consulta simulada
-                </button>
-              </form>
-            }
-            synthesisForm={
-              <form action={requestSynthesisAction}>
-                <input type="hidden" name="consultationId" value={id} />
-                <button
-                  type="submit"
-                  className="rounded-[10px] border border-white/25 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/10"
-                >
-                  📋 Síntese
-                </button>
-              </form>
+            advancedPanel={
+              <details className="group">
+                <summary className="cursor-pointer list-none rounded-[10px] border border-white/25 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/10">
+                  ⚙ Painel avançado
+                </summary>
+                <div className="absolute right-6 z-20 mt-2 flex flex-col gap-2 rounded-[10px] border border-white/15 bg-surface-deep p-2 shadow-lg">
+                  <form action={startDemoBoardAction}>
+                    <input type="hidden" name="consultationId" value={id} />
+                    <button
+                      type="submit"
+                      className="w-full rounded-[10px] bg-white px-3 py-2 text-xs font-semibold text-surface-deep shadow-sm transition-colors hover:bg-white/90"
+                    >
+                      ▶ Consulta simulada
+                    </button>
+                  </form>
+                  <form action={requestSynthesisAction}>
+                    <input type="hidden" name="consultationId" value={id} />
+                    <button
+                      type="submit"
+                      className="w-full rounded-[10px] border border-white/25 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/10"
+                    >
+                      📋 Síntese
+                    </button>
+                  </form>
+                </div>
+              </details>
             }
           />
           )}
 
+          {/* Parecer final do board (briefing do piloto): cada persona revisa a
+              transcrição completa e devolve, por escrito, o que faltou perguntar,
+              exames a considerar e condutas a considerar — só na consulta encerrada. */}
+          {isClosed && (
+            <section aria-label="Parecer do board" className="card-premium mt-6 p-6">
+              <h2 className="font-display text-base font-semibold text-ink">
+                🩺 Parecer do board
+              </h2>
+              <p className="text-xs text-ink-muted">
+                Cada especialista revisou a consulta inteira e devolveu o parecer abaixo — sugestão,
+                a conduta é sempre do médico.
+              </p>
+              {meta.finalReviewStatus === 'pending' ? (
+                <p className="mt-4 flex items-center gap-2 text-sm text-ink-muted">
+                  <span aria-hidden>⏳</span> Gerando o parecer das 3 personas…
+                </p>
+              ) : finalReview.length === 0 ? (
+                <p className="mt-4 rounded-[10px] border border-dashed border-ink/15 p-4 text-sm text-ink-muted">
+                  {meta.finalReviewStatus === 'failed'
+                    ? 'Não foi possível gerar o parecer desta vez — reabra e encerre a consulta novamente para tentar de novo.'
+                    : 'Sem parecer para esta consulta (sem transcrição registrada).'}
+                </p>
+              ) : (
+                <ul className="mt-4 space-y-4">
+                  {finalReview.map((section) => (
+                    <li key={section.personaId} className="rounded-[10px] border border-ink/10 bg-surface p-4">
+                      <p className="font-display text-sm font-semibold text-ink">
+                        {PERSONA_LABEL[section.personaId] ?? section.personaId}
+                      </p>
+                      {(
+                        [
+                          ['Faltou perguntar', section.faltouPerguntar],
+                          ['Exames a considerar', section.examesSolicitar],
+                          ['Condutas a considerar', section.condutas],
+                        ] as const
+                      ).map(([label, items]) =>
+                        items.length > 0 ? (
+                          <div key={label} className="mt-2">
+                            <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
+                              {label}
+                            </p>
+                            <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm text-ink">
+                              {items.map((item, i) => (
+                                <li key={i}>{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null,
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+
           {/* Transcrição Confiável: o médico corrige o que o STT ouviu ANTES de gerar
               os documentos — a versão revisada vira a fonte da nota e do relatório.
-              Só aparece quando há transcrição persistida (consulta ao vivo). */}
+              Só aparece quando há transcrição persistida (consulta ao vivo). Recolhida
+              por padrão na consulta encerrada — o foco passa a ser o prontuário/parecer. */}
           {hasTranscript && (
-            <section aria-label="Transcrição da consulta" className="card-premium mt-6 p-6">
-              <div>
-                <h2 className="font-display text-base font-semibold text-ink">
+            <details className="card-premium mt-6 p-6" open={!isClosed}>
+              <summary className={isClosed ? 'cursor-pointer' : 'cursor-default'}>
+                <h2 className="inline font-display text-base font-semibold text-ink">
                   📝 Transcrição da consulta
                 </h2>
-                <p className="text-xs text-ink-muted">
-                  {isClosed
-                    ? 'Registro do que foi dito na consulta. Para corrigir a transcrição, reabra a consulta.'
-                    : 'Revise e corrija o que a transcrição automática captou. A nota clínica e o relatório nutricional são gerados a partir desta versão — o médico decide o que vira registro. Cifrada em repouso e auditada.'}
-                </p>
-              </div>
+              </summary>
+              <p className="mt-1 text-xs text-ink-muted">
+                {isClosed
+                  ? 'Registro do que foi dito na consulta. Para corrigir a transcrição, reabra a consulta.'
+                  : 'Revise e corrija o que a transcrição automática captou. A nota clínica e o relatório nutricional são gerados a partir desta versão — o médico decide o que vira registro. Cifrada em repouso e auditada.'}
+              </p>
               <form action={saveTranscriptReviewAction} className="mt-4 space-y-3">
                 <input type="hidden" name="consultationId" value={id} />
                 <textarea
@@ -248,7 +321,7 @@ export default async function ConsultationPage({
                   )}
                 </div>
               </form>
-            </section>
+            </details>
           )}
 
           {/* E9 — Nota clínica (FR17/A1): rascunho gerado por IA, editável pelo médico */}
@@ -266,7 +339,17 @@ export default async function ConsultationPage({
                   repouso e auditada.
                 </p>
               </div>
-              <NoteGeneratorForm consultationId={id} hasNote={Boolean(note)} />
+              <div className="flex shrink-0 items-center gap-2">
+                {note && (
+                  <Link
+                    href={`/consultations/${id}/note`}
+                    className="rounded-[10px] border border-ink/15 px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-surface-muted"
+                  >
+                    ⛶ Expandir
+                  </Link>
+                )}
+                <NoteGeneratorForm consultationId={id} hasNote={Boolean(note)} />
+              </div>
             </div>
 
             {note ? (

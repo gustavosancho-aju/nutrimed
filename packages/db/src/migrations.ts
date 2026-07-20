@@ -426,4 +426,31 @@ ALTER TABLE patient ADD COLUMN IF NOT EXISTS height_cm_enc text;
 ALTER TABLE patient ADD COLUMN IF NOT EXISTS photo_enc text;
 `,
   },
+  {
+    name: '0018_board_final_review',
+    sql: `
+-- Briefing do piloto (2026-07-19): parecer do board NO FINAL da consulta, em
+-- vez de (ou além de) contribuir ao vivo — "atrapalha a consulta, tira o
+-- foco". board_mode escolhido ao iniciar a consulta ao vivo: 'live' preserva
+-- o comportamento atual (contribuições reativas + parecer final ao encerrar);
+-- 'final_only' mantém as personas caladas durante a consulta (só STT/transcript
+-- rodam) e o parecer sai inteiramente ao encerrar.
+ALTER TABLE consultation ADD COLUMN IF NOT EXISTS board_mode text NOT NULL DEFAULT 'live';
+ALTER TABLE consultation ADD COLUMN IF NOT EXISTS final_review_status text;
+
+-- Um parecer por persona (o que faltou perguntar / exames a considerar /
+-- condutas a considerar), cifrado (NFR9). UNIQUE por consulta+persona com
+-- upsert: reabrir e re-encerrar a consulta substitui o parecer anterior.
+CREATE TABLE IF NOT EXISTS board_final_review (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  consultation_id  uuid NOT NULL REFERENCES consultation(id),
+  persona_id       text NOT NULL,
+  content_enc      text NOT NULL,
+  model_version    text,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (consultation_id, persona_id)
+);
+`,
+  },
 ];

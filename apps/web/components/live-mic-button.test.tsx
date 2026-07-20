@@ -11,7 +11,7 @@ import { LiveMicButton } from './live-mic-button';
  */
 
 const { startLiveBoardAction, stopLiveBoardAction } = vi.hoisted(() => ({
-  startLiveBoardAction: vi.fn<(id: string) => Promise<ActionResult>>(),
+  startLiveBoardAction: vi.fn<(id: string, boardMode?: string) => Promise<ActionResult>>(),
   stopLiveBoardAction: vi.fn<(id: string) => Promise<ActionResult>>(),
 }));
 
@@ -130,7 +130,19 @@ describe('<LiveMicButton> (A2 — mic e formato ANTES do servidor)', () => {
     renderButton();
     clickStart();
     await waitFor(() => {
-      expect(startLiveBoardAction).toHaveBeenCalledWith('c1');
+      expect(startLiveBoardAction).toHaveBeenCalledWith('c1', 'live');
+    });
+  });
+});
+
+describe('<LiveMicButton> (briefing do piloto — toggle "especialistas só no final")', () => {
+  it('default é "live"; marcar o toggle envia "final_only" ao servidor', async () => {
+    startLiveBoardAction.mockResolvedValue({ ok: false, code: 'internal' });
+    renderButton();
+    fireEvent.click(screen.getByRole('checkbox', { name: /especialistas só no final/i }));
+    clickStart();
+    await waitFor(() => {
+      expect(startLiveBoardAction).toHaveBeenCalledWith('c1', 'final_only');
     });
   });
 });

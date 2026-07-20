@@ -50,6 +50,7 @@ describe('Migrations 0001 — schema base (AC1, AC3)', () => {
       '0015_patient_profession',
       '0016_consultation_record',
       '0017_patient_lifecycle',
+      '0018_board_final_review',
     ]);
   });
 
