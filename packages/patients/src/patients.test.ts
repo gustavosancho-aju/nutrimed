@@ -18,6 +18,7 @@ import {
   updateLabExam,
   softDeleteBodyComposition,
   softDeleteLabExam,
+  softDeletePatient,
   setCustomExamDefs,
   loadCustomExamDefs,
   setBodyGoal,
@@ -129,6 +130,55 @@ describe('Patient Service (E11 — 11.2)', () => {
 
     it('paciente inexistente ⇒ null', async () => {
       expect(await loadPatient(exec, '00000000-0000-0000-0000-000000000000', KEY)).toBeNull();
+    });
+
+    it('altura: round-trip cifrado (ilegível no storage) e ausente ⇒ null', async () => {
+      const patientId = await createPatient(
+        exec,
+        userId,
+        { name: 'Com Altura', heightCm: 172.5 },
+        KEY,
+      );
+      const raw = await exec.query<{ height_cm_enc: string }>(
+        'SELECT height_cm_enc FROM patient WHERE id = $1',
+        [patientId],
+      );
+      expect(raw.rows[0]!.height_cm_enc).not.toContain('172');
+
+      let patient = await loadPatient(exec, patientId, KEY);
+      expect(patient!.heightCm).toBe(172.5);
+
+      // Update sem altura limpa o campo (espelho dos demais opcionais).
+      await updatePatient(exec, patientId, { name: 'Com Altura' }, KEY);
+      patient = await loadPatient(exec, patientId, KEY);
+      expect(patient!.heightCm).toBeNull();
+    });
+
+    it('softDeletePatient: some das listagens/carga, mantém a linha e audita', async () => {
+      const dr = await insertUser(exec, 'delete@nutrimed.test');
+      const patientId = await createPatient(exec, dr, { name: 'A Excluir' }, KEY);
+
+      // Outro médico não consegue excluir (posse no WHERE).
+      await expect(softDeletePatient(exec, userId, patientId)).rejects.toThrow(
+        'Paciente não encontrado',
+      );
+
+      await softDeletePatient(exec, dr, patientId);
+      expect(await loadPatient(exec, patientId, KEY)).toBeNull();
+      expect(await countPatients(exec, dr)).toBe(0);
+      expect((await listPatients(exec, dr, KEY)).map((p) => p.id)).not.toContain(patientId);
+
+      // A linha permanece (trilha/retensão) e a exclusão foi auditada.
+      const raw = await exec.query<{ deleted_at: Date | null }>(
+        'SELECT deleted_at FROM patient WHERE id = $1',
+        [patientId],
+      );
+      expect(raw.rows[0]!.deleted_at).not.toBeNull();
+      const trail = await getAuditTrail(exec, patientId);
+      expect(trail.some((t) => t.triggeredBy === 'patient-delete')).toBe(true);
+
+      // Excluir duas vezes ⇒ erro (já excluído).
+      await expect(softDeletePatient(exec, dr, patientId)).rejects.toThrow();
     });
   });
 

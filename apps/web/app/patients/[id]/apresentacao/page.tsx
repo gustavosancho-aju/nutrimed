@@ -124,8 +124,9 @@ export default async function ApresentacaoPage({ params }: { params: Promise<{ i
   const pesoInicial = firstOf(body, 'peso');
   const deltaPeso = peso !== null && pesoInicial !== null && body.length > 1 ? peso - pesoInicial : null;
 
-  // Altura derivada da medição mais recente com peso+IMC (mesma regra da dashboard).
-  let heightM: number | null = null;
+  // Altura: a do cadastro tem precedência; senão deriva da medição mais recente
+  // com peso+IMC (mesma regra da dashboard).
+  let heightM: number | null = patient.heightCm !== null ? patient.heightCm / 100 : null;
   for (let i = body.length - 1; i >= 0 && heightM === null; i -= 1) {
     heightM = deriveHeightMeters(body[i]!.values.peso, body[i]!.values.imc);
   }

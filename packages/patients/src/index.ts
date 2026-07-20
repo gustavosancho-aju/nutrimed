@@ -5,6 +5,7 @@ export {
   loadPatient,
   listPatients,
   countPatients,
+  softDeletePatient,
   addBodyComposition,
   addLabExam,
   updateBodyComposition,

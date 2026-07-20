@@ -73,10 +73,10 @@ export default async function DashboardPage({
           </p>
         </div>
         <Link
-          href="/consultations/new"
+          href="/patients/new"
           className="shrink-0 rounded-[10px] bg-brand px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
         >
-          + Nova consulta
+          + Novo paciente
         </Link>
       </section>
 
@@ -84,14 +84,14 @@ export default async function DashboardPage({
         <section className="card-premium gold-hairline mt-8 p-10 text-center">
           <h3 className="font-display text-base font-semibold text-ink">Comece pelo primeiro paciente</h3>
           <p className="mx-auto mt-1 max-w-md text-sm text-ink-muted">
-            Inicie uma nova consulta para cadastrar um paciente. Ele passa a integrar seu
+            Cadastre o paciente e inicie a consulta pela ficha dele. Ele passa a integrar seu
             acompanhamento longitudinal — consultas, evolução e dashboard.
           </p>
           <Link
-            href="/consultations/new"
+            href="/patients/new"
             className="mt-5 inline-block rounded-[10px] bg-brand px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
           >
-            Iniciar primeira consulta
+            Cadastrar primeiro paciente
           </Link>
         </section>
       ) : (

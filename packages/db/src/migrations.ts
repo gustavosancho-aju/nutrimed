@@ -412,4 +412,18 @@ CREATE TABLE IF NOT EXISTS consultation_record (
 );
 `,
   },
+  {
+    name: '0017_patient_lifecycle',
+    sql: `
+-- Briefing do piloto (2026-07-19): ciclo de vida do paciente.
+-- deleted_at: SOFT-delete do paciente (mesmo padrão de 0013 — a linha fica
+-- para trilha/retensão até o parecer CJ-2; o audit_log registra quem/quando).
+-- height_cm_enc: altura informada pelo médico — dado clínico => cifrado (NFR9);
+-- quando ausente, o dashboard segue derivando de peso+IMC da bioimpedância.
+-- photo_enc: foto do paciente (base64 pequena) — PII => cifrada; opcional.
+ALTER TABLE patient ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+ALTER TABLE patient ADD COLUMN IF NOT EXISTS height_cm_enc text;
+ALTER TABLE patient ADD COLUMN IF NOT EXISTS photo_enc text;
+`,
+  },
 ];

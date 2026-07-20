@@ -29,6 +29,8 @@ export interface PatientInput {
   readonly birthDate?: string;
   readonly goal?: string;
   readonly profession?: string;
+  /** Altura em cm informada pelo médico (dado clínico ⇒ cifrada). */
+  readonly heightCm?: number;
 }
 
 export interface Patient {
@@ -39,6 +41,7 @@ export interface Patient {
   readonly birthDate: string | null;
   readonly goal: string | null;
   readonly profession: string | null;
+  readonly heightCm: number | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -102,6 +105,20 @@ function decOptional(value: string | null, key: Buffer): string | null {
   return value === null ? null : decryptField(value, key);
 }
 
+/** Cifra a altura (número em cm) — ausente/inválida ⇒ null. */
+function encHeight(heightCm: number | undefined, key: Buffer): string | null {
+  if (heightCm === undefined || !Number.isFinite(heightCm) || heightCm <= 0) return null;
+  return encryptField(String(heightCm), key);
+}
+
+/** Decifra a altura para número; blob ausente ou não numérico ⇒ null. */
+function decHeight(value: string | null, key: Buffer): number | null {
+  const raw = decOptional(value, key);
+  if (raw === null) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 /**
  * Idade em anos completos a partir da data de nascimento ISO (`YYYY-MM-DD`).
  * Recebe `now` explicitamente (testável; sem relógio implícito). Retorna null
@@ -126,8 +143,8 @@ export async function createPatient(
   origin: WriteOrigin = { action: 'patient-create' },
 ): Promise<string> {
   const res = await db.query<{ id: string }>(
-    `INSERT INTO patient (user_id, name_enc, phone_enc, birth_date_enc, goal_enc, profession_enc)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+    `INSERT INTO patient (user_id, name_enc, phone_enc, birth_date_enc, goal_enc, profession_enc, height_cm_enc)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
     [
       userId,
       encryptField(input.name, key),
@@ -135,6 +152,7 @@ export async function createPatient(
       encOptional(input.birthDate, key),
       encOptional(input.goal, key),
       encOptional(input.profession, key),
+      encHeight(input.heightCm, key),
     ],
   );
   const patientId = res.rows[0]!.id;
@@ -157,8 +175,8 @@ export async function updatePatient(
   await db.query(
     `UPDATE patient
      SET name_enc = $2, phone_enc = $3, birth_date_enc = $4, goal_enc = $5,
-         profession_enc = $6, updated_at = now()
-     WHERE id = $1`,
+         profession_enc = $6, height_cm_enc = $7, updated_at = now()
+     WHERE id = $1 AND deleted_at IS NULL`,
     [
       patientId,
       encryptField(input.name, key),
@@ -166,6 +184,7 @@ export async function updatePatient(
       encOptional(input.birthDate, key),
       encOptional(input.goal, key),
       encOptional(input.profession, key),
+      encHeight(input.heightCm, key),
     ],
   );
   await writeAudit(db, patientId, {
@@ -183,6 +202,7 @@ interface PatientRow {
   birth_date_enc: string | null;
   goal_enc: string | null;
   profession_enc: string | null;
+  height_cm_enc: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -196,20 +216,49 @@ function toPatient(row: PatientRow, key: Buffer): Patient {
     birthDate: decOptional(row.birth_date_enc, key),
     goal: decOptional(row.goal_enc, key),
     profession: decOptional(row.profession_enc, key),
+    heightCm: decHeight(row.height_cm_enc, key),
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
   };
 }
 
-/** Carrega e decifra um paciente (null se não existe). */
+/** Carrega e decifra um paciente (null se não existe ou foi excluído). */
 export async function loadPatient(
   db: SqlExecutor,
   patientId: string,
   key: Buffer,
 ): Promise<Patient | null> {
-  const res = await db.query<PatientRow>('SELECT * FROM patient WHERE id = $1', [patientId]);
+  const res = await db.query<PatientRow>(
+    'SELECT * FROM patient WHERE id = $1 AND deleted_at IS NULL',
+    [patientId],
+  );
   const row = res.rows[0];
   return row ? toPatient(row, key) : null;
+}
+
+/**
+ * SOFT-delete do paciente: a linha (e o histórico clínico) permanece para
+ * trilha/retensão (CJ-2 sem parecer), mas o paciente some das listagens e a
+ * ficha passa a responder notFound. O WHERE amarra id + user_id (posse) —
+ * paciente de outro médico nunca é tocado. Audita quem/quando (NFR10).
+ */
+export async function softDeletePatient(
+  db: SqlExecutor,
+  userId: string,
+  patientId: string,
+  origin: WriteOrigin = { action: 'patient-delete' },
+): Promise<void> {
+  const res = await db.query<{ id: string }>(
+    `UPDATE patient SET deleted_at = now(), updated_at = now()
+     WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL RETURNING id`,
+    [patientId, userId],
+  );
+  if (res.rows.length === 0) throw new Error('Paciente não encontrado para este médico.');
+  await writeAudit(db, patientId, {
+    triggeredBy: origin.action,
+    kbSources: [],
+    modelVersion: origin.modelVersion ?? 'human-edit',
+  });
 }
 
 /**
@@ -227,7 +276,8 @@ export async function listPatients(
 ): Promise<Patient[]> {
   const orderBy = opts?.orderBy ?? 'name';
   const res = await db.query<PatientRow>(
-    'SELECT * FROM patient WHERE user_id = $1 ORDER BY created_at DESC, id DESC',
+    `SELECT * FROM patient WHERE user_id = $1 AND deleted_at IS NULL
+     ORDER BY created_at DESC, id DESC`,
     [userId],
   );
   let patients = res.rows.map((r) => toPatient(r, key));
@@ -247,7 +297,7 @@ export async function listPatients(
 /** Total de pacientes do médico (para paginação da lista). */
 export async function countPatients(db: SqlExecutor, userId: string): Promise<number> {
   const res = await db.query<{ n: number }>(
-    'SELECT count(*)::int AS n FROM patient WHERE user_id = $1',
+    'SELECT count(*)::int AS n FROM patient WHERE user_id = $1 AND deleted_at IS NULL',
     [userId],
   );
   return res.rows[0]?.n ?? 0;

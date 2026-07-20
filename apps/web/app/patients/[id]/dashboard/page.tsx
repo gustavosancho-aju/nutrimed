@@ -83,9 +83,11 @@ export default async function DashboardPage({
   const editingBody = aba === 'bioimpedancia' && editar ? body.find((m) => m.id === editar) : undefined;
   const editingLab = aba === 'exames' && editar ? labs.find((m) => m.id === editar) : undefined;
 
-  // Parâmetros ideais (apoio visual, referência OMS): altura derivada da medição
-  // mais recente que tenha peso + IMC juntos → faixa/meta de peso saudável.
-  let heightM: number | null = null;
+  // Parâmetros ideais (apoio visual, referência OMS). Altura: a informada no
+  // cadastro tem precedência; sem ela, deriva da medição mais recente com
+  // peso + IMC juntos (comportamento anterior como fallback).
+  let heightM: number | null = patient.heightCm !== null ? patient.heightCm / 100 : null;
+  const heightFromRegistration = heightM !== null;
   for (let i = body.length - 1; i >= 0 && heightM === null; i -= 1) {
     heightM = deriveHeightMeters(body[i]!.values.peso, body[i]!.values.imc);
   }
@@ -187,8 +189,20 @@ export default async function DashboardPage({
                 </p>
                 <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
                   <div>
-                    <dt className="text-xs text-ink-muted">Altura estimada</dt>
-                    <dd className="mt-0.5 font-medium text-ink">{heightM.toFixed(2)} m</dd>
+                    <dt className="text-xs text-ink-muted">
+                      {heightFromRegistration ? 'Altura' : 'Altura estimada'}
+                    </dt>
+                    <dd className="mt-0.5 font-medium text-ink">
+                      {heightM.toFixed(2)} m
+                      {!heightFromRegistration && (
+                        <Link
+                          href={`/patients/${id}/edit`}
+                          className="ml-2 text-xs text-ink-muted underline hover:text-ink"
+                        >
+                          editar
+                        </Link>
+                      )}
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-xs text-ink-muted">Idade</dt>
@@ -212,7 +226,9 @@ export default async function DashboardPage({
                 </p>
               </div>
             )}
-            <div className="grid gap-4 sm:grid-cols-3">
+            {/* 5 métricas no formato pedido pelo piloto: Peso · IMC · % Gordura ·
+                Massa Muscular · Cintura */}
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
               <MetricCard
                 label="Peso"
                 points={seriesOf(body, 'peso')}
@@ -222,11 +238,11 @@ export default async function DashboardPage({
                 targetLabel={pesoTargetLabel}
               />
               <MetricCard
-                label="Massa Muscular"
-                points={seriesOf(body, 'massaMuscular')}
-                unit="kg"
-                target={goal?.massaMuscular}
-                targetLabel={goal?.massaMuscular !== undefined ? doctorLabel : undefined}
+                label="IMC"
+                points={seriesOf(body, 'imc')}
+                band={HEALTHY_IMC}
+                target={imcTarget}
+                targetLabel={imcTargetLabel}
               />
               <MetricCard
                 label="% Gordura"
@@ -234,6 +250,20 @@ export default async function DashboardPage({
                 unit="%"
                 target={goal?.pgc}
                 targetLabel={goal?.pgc !== undefined ? doctorLabel : undefined}
+              />
+              <MetricCard
+                label="Massa Muscular"
+                points={seriesOf(body, 'massaMuscular')}
+                unit="kg"
+                target={goal?.massaMuscular}
+                targetLabel={goal?.massaMuscular !== undefined ? doctorLabel : undefined}
+              />
+              <MetricCard
+                label="Cintura"
+                points={seriesOf(body, 'cintura')}
+                unit="cm"
+                target={goal?.cintura}
+                targetLabel={goal?.cintura !== undefined ? doctorLabel : undefined}
               />
             </div>
             {body.length === 0 && (

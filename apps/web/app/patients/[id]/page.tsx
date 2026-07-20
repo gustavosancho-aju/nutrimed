@@ -8,6 +8,8 @@ import { listConsultationsByPatient } from '@nutrimed/consent';
 import { getLinkStatus } from '@nutrimed/telegram-link';
 import { setGoalAction } from '@/lib/telegram-actions';
 import { startConsultationAction } from '@/lib/consent-actions';
+import { deletePatientAction } from '@/lib/patient-settings-actions';
+import { ConfirmDeleteButton } from '@/components/dashboard/confirm-delete-button';
 import { TelegramLinkPanel } from '@/components/telegram-link-panel';
 
 /** Formata uma data ISO/Date para dd/mm/aaaa (pt-BR), no servidor (estático). */
@@ -67,6 +69,14 @@ export default async function PatientPage({
           </h1>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <form action={deletePatientAction}>
+            <input type="hidden" name="patientId" value={patient.id} />
+            <ConfirmDeleteButton
+              label="🗑 Excluir"
+              message={`Excluir o paciente ${patient.name}? Ele sai das listagens; o histórico permanece guardado para fins de trilha.`}
+              className="rounded-[10px] border border-red-300/60 px-3.5 py-1.5 text-sm text-red-700 transition-colors hover:bg-red-400/10"
+            />
+          </form>
           <Link
             href={`/patients/${patient.id}/edit`}
             className="rounded-[10px] border border-ink/15 px-3.5 py-1.5 text-sm text-ink transition-colors hover:bg-surface-muted"
