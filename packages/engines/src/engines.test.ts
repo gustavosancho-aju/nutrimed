@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { PersonaId, ContributionSeverity } from '@nutrimed/providers';
-import { TriggerDetector, PAULO_TRIGGERS, YARA_TRIGGERS } from './triggers';
+import { TriggerDetector, PAULO_TRIGGERS, YARA_TRIGGERS, AURELIO_TRIGGERS } from './triggers';
 import {
   scoreMatch,
   RelevanceGate,
@@ -80,6 +80,34 @@ describe('Story 4.1 — TriggerDetector (FR3/FR4/FR5, sem LLM)', () => {
     expect(personas.has('paulo')).toBe(true);
     expect(personas.has('yara')).toBe(true);
   });
+
+  it('calibração 2026-07-20: temas de anamnese antes descobertos disparam a persona certa', () => {
+    // Paulo — histórico familiar CV + edema/tontura
+    expect(
+      detector.detect('tem história familiar de infarto, o pai teve aos 50', 0).some((m) => m.trigger.id === 'paulo-historico-familiar-cv'),
+    ).toBe(true);
+    expect(detector.detect('relata inchaço nas pernas e tontura', 0).some((m) => m.trigger.id === 'paulo-edema-tontura')).toBe(true);
+
+    // Yara — sono + ciclo hormonal
+    expect(detector.detect('tem insônia e dorme mal há semanas', 0).some((m) => m.trigger.id === 'yara-sono')).toBe(true);
+    expect(detector.detect('usa anticoncepcional e o ciclo está irregular', 0).some((m) => m.trigger.id === 'yara-ciclo-hormonal')).toBe(
+      true,
+    );
+
+    // Aurélio — atividade física, intestino, histórico familiar (escopo ampliado)
+    expect(detector.detect('é bem sedentária, não faz nenhuma atividade física', 0).some((m) => m.trigger.id === 'aurelio-atividade-fisica')).toBe(
+      true,
+    );
+    expect(detector.detect('relata intestino preso, com constipação frequente', 0).some((m) => m.trigger.id === 'aurelio-intestino')).toBe(
+      true,
+    );
+    expect(
+      detector.detect('tem história familiar de obesidade e diabetes', 0).some((m) => m.trigger.id === 'aurelio-historico-familiar'),
+    ).toBe(true);
+    expect(
+      detector.detect('a mãe é obesa e o pai é diabético', 0).some((m) => m.trigger.id === 'aurelio-historico-familiar'),
+    ).toBe(true);
+  });
 });
 
 describe('Story 4.2 — Scorer + RelevanceGate (NFR1)', () => {
@@ -101,6 +129,41 @@ describe('Story 4.2 — Scorer + RelevanceGate (NFR1)', () => {
     expect(gate.passes(0.35, 'critical')).toBe(true); // recall p/ críticos
     expect(gate.passes(0.2, 'critical')).toBe(false);
   });
+
+  it('default do limiar não-crítico é 0.55 (calibração 2026-07-20)', () => {
+    const gate = new RelevanceGate();
+    expect(gate.passes(0.54, 'normal')).toBe(false);
+    expect(gate.passes(0.55, 'normal')).toBe(true);
+  });
+
+  it('calibração 2026-07-20: densidade tem PISO 0.4 — frase longa não zera o score', () => {
+    const detector = new TriggerDetector(PAULO_TRIGGERS);
+    const longuissima = detector.detect(
+      'então ' + 'sibutramina '.repeat(1) + 'e depois conversamos sobre muitas outras coisas da rotina dela ao longo dessa consulta inteira, incluindo trabalho, família, sono, estresse e vários outros assuntos que vieram à tona espontaneamente durante a conversa',
+      0,
+    )[0]!;
+    // baseWeight 0.9 (crítico) * 0.8 + piso 0.4 * 0.2 = 0.72 + 0.08 = 0.8 — nunca cai abaixo disso
+    expect(scoreMatch(longuissima)).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it('gatilhos "mortos" pela fórmula antiga agora alcançam o limiar (bug real corrigido)', () => {
+    // aurelio-dieta-habitos (baseWeight 0.55) e paulo-risco-cv (0.6): com a
+    // fórmula ANTIGA (12 palavras, sem piso) e baseWeight antigo (0.4/0.5),
+    // o score MÁXIMO possível ficava abaixo do limiar 0.6 — nunca entregavam.
+    const gate = new RelevanceGate(); // defaults novos (threshold 0.55)
+    const aurelioDetector = new TriggerDetector(AURELIO_TRIGGERS);
+    const dieta = aurelioDetector.detect(
+      'ela relata que mudou bastante a rotina alimentar nos últimos meses, com mais vegetais e menos ultraprocessados',
+      0,
+    )[0]!;
+    expect(gate.passes(scoreMatch(dieta), 'normal')).toBe(true);
+
+    const paulo = new TriggerDetector(PAULO_TRIGGERS).detect(
+      'o colesterol dela subiu bastante nos últimos exames de rotina que fizemos',
+      0,
+    )[0]!;
+    expect(gate.passes(scoreMatch(paulo), 'normal')).toBe(true);
+  });
 });
 
 describe('Story 4.3 — Rate-limit por doutor + fila (NFR2)', () => {
@@ -111,6 +174,14 @@ describe('Story 4.3 — Rate-limit por doutor + fila (NFR2)', () => {
     expect(limiter.allow('paulo', 'normal', 2000)).toBe(false); // estourou
     expect(limiter.allow('yara', 'normal', 2000)).toBe(true); // cota própria
     expect(limiter.allow('paulo', 'normal', 61_001)).toBe(true); // janela girou
+  });
+
+  it('default do teto por doutor é 3/min (calibração 2026-07-20)', () => {
+    const limiter = new DoctorRateLimiter();
+    expect(limiter.allow('paulo', 'normal', 0)).toBe(true);
+    expect(limiter.allow('paulo', 'normal', 1)).toBe(true);
+    expect(limiter.allow('paulo', 'normal', 2)).toBe(true);
+    expect(limiter.allow('paulo', 'normal', 3)).toBe(false); // 4ª estoura
   });
 
   it('crítico fura a fila e NÃO consome cota', () => {
@@ -191,6 +262,33 @@ describe('Story 4.5 — PauseGate (FR12 / A4)', () => {
     gate.submit(candidate({ id: 'high', score: 0.9, at: 2 }), 20);
     const released = gate.flushIfPaused(200);
     expect(released.map((c) => c.id)).toEqual(['high', 'low']);
+  });
+
+  it('calibração 2026-07-20 — válvula de escape: sem pausa real, retido demora mas SAI (achado do piloto)', () => {
+    // Médico narrando sem silêncio de 2,5s+: com a PauseGate antiga, este
+    // candidato ficaria retido para SEMPRE (nunca há pausa). Agora, passado
+    // `maxHoldMs`, ele sai mesmo sem pausa.
+    const gate = new PauseGate({ pauseMs: 2500, maxHoldMs: 5000 });
+    gate.onSpeech(0);
+    const c = candidate({ severity: 'normal', at: 1000 });
+    expect(gate.submit(c, 1000)).toBeNull(); // retido — sem pausa
+    gate.onSpeech(2000); // médico continua falando (nunca pausa 2,5s)
+    expect(gate.flushIfPaused(3000)).toHaveLength(0); // < maxHoldMs, continua falando: nada sai
+    gate.onSpeech(5500);
+    expect(gate.flushIfPaused(5900)).toHaveLength(0); // ainda < 5000ms de espera
+    const released = gate.flushIfPaused(6001); // 6001-1000=5001ms ≥ maxHoldMs
+    expect(released).toHaveLength(1);
+    expect(released[0]!.id).toBe(c.id);
+    expect(gate.heldCount).toBe(0);
+  });
+
+  it('válvula de escape não libera antes da hora nem interfere com pausa real', () => {
+    const gate = new PauseGate({ pauseMs: 2500, maxHoldMs: 12_000 });
+    gate.onSpeech(0);
+    gate.submit(candidate({ id: 'novo', at: 500 }), 500);
+    expect(gate.flushIfPaused(1000)).toHaveLength(0); // nem pausa, nem maxHoldMs
+    // uma pausa real de 2,5s ainda libera normalmente, sem esperar o teto
+    expect(gate.flushIfPaused(3001)).toHaveLength(1);
   });
 });
 

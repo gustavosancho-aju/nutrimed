@@ -31,7 +31,11 @@ export interface Candidate {
 // ---------------------------------------------------------------------------
 
 export interface ScorerConfig {
-  /** Limiar p/ não-críticos (default 0.6). */
+  /**
+   * Limiar p/ não-críticos (default 0.55 — calibração 2026-07-20; era 0.6,
+   * mas combinado com o piso de densidade novo isso já cobre a maioria das
+   * falas clínicas reais de tamanho razoável).
+   */
   readonly threshold?: number;
   /** Limiar p/ ⚠️ críticos — menor: recall > precisão (default 0.3). */
   readonly criticalThreshold?: number;
@@ -40,9 +44,13 @@ export interface ScorerConfig {
 /** Score barato: peso do gatilho + densidade de termos clínicos no segmento. */
 export function scoreMatch(match: TriggerMatch): number {
   const base = match.trigger.baseWeight;
-  // densidade: segmentos curtos e diretos pontuam mais que falas longas difusas
+  // Densidade: segmentos curtos e diretos pontuam mais que falas longas
+  // difusas — mas com um PISO (0.4), não zerando. Calibração 2026-07-20: a
+  // fórmula original (12 palavras, sem piso) matava matematicamente qualquer
+  // gatilho com baseWeight < 0.5 assim que a frase passava de ~12 palavras —
+  // e fala clínica real quase nunca é telegráfica como o roteiro de demo.
   const words = match.segmentText.split(/\s+/).length;
-  const density = Math.min(1, 12 / Math.max(words, 1));
+  const density = Math.max(0.4, Math.min(1, 20 / Math.max(words, 1)));
   return Math.min(1, base * 0.8 + density * 0.2);
 }
 
@@ -51,7 +59,7 @@ export class RelevanceGate {
   private readonly criticalThreshold: number;
 
   constructor(config: ScorerConfig = {}) {
-    this.threshold = config.threshold ?? 0.6;
+    this.threshold = config.threshold ?? 0.55;
     this.criticalThreshold = config.criticalThreshold ?? 0.3;
   }
 
@@ -65,7 +73,11 @@ export class RelevanceGate {
 // ---------------------------------------------------------------------------
 
 export interface RateLimiterConfig {
-  /** Teto de contribuições NÃO-críticas por minuto, POR doutor (default 2). */
+  /**
+   * Teto de contribuições NÃO-críticas por minuto, POR doutor (default 3 —
+   * calibração 2026-07-20; era 2, apertado demais quando vários gatilhos
+   * normais da mesma persona batem em menos de 1 minuto de consulta real).
+   */
   readonly maxPerMinutePerDoctor?: number;
   readonly windowMs?: number;
 }
@@ -76,7 +88,7 @@ export class DoctorRateLimiter {
   private readonly delivered = new Map<PersonaId, number[]>();
 
   constructor(config: RateLimiterConfig = {}) {
-    this.max = config.maxPerMinutePerDoctor ?? 2;
+    this.max = config.maxPerMinutePerDoctor ?? 3;
     this.windowMs = config.windowMs ?? 60_000;
   }
 
@@ -166,17 +178,30 @@ export class Deduplicator {
 // ---------------------------------------------------------------------------
 
 export interface PauseGateConfig {
-  /** Silêncio mínimo p/ pausa natural (default 2500ms — frontend-spec A4). */
+  /**
+   * Silêncio mínimo p/ pausa natural (default 1500ms — calibração
+   * 2026-07-20; era 2500ms, frontend-spec A4).
+   */
   readonly pauseMs?: number;
+  /**
+   * Válvula de escape (calibração 2026-07-20 — achado do piloto: médico
+   * narrando sem pausa real prendia TODO candidato não-crítico até o fim da
+   * consulta, porque `flushIfPaused` só liberava em pausa natural). Um
+   * candidato retido há mais tempo que isso sai mesmo SEM pausa. Default
+   * 12s — ainda dá espaço pra pausas curtas resolverem primeiro.
+   */
+  readonly maxHoldMs?: number;
 }
 
 export class PauseGate {
   private readonly pauseMs: number;
+  private readonly maxHoldMs: number;
   private lastSpeechAt = 0;
   private held: Candidate[] = [];
 
   constructor(config: PauseGateConfig = {}) {
-    this.pauseMs = config.pauseMs ?? 2500;
+    this.pauseMs = config.pauseMs ?? 1500;
+    this.maxHoldMs = config.maxHoldMs ?? 12_000;
   }
 
   /** Alimentado por todo segmento FINAL da sessão (2.3). */
@@ -195,17 +220,30 @@ export class PauseGate {
     return null;
   }
 
-  /** Em pausa natural, libera os retidos em ordem de prioridade. */
+  /**
+   * Em pausa natural, libera TODOS os retidos, em ordem de prioridade. Fora
+   * de pausa, libera só quem já esperou `maxHoldMs` (válvula de escape) — os
+   * demais continuam represados esperando uma pausa real ou o próprio prazo.
+   */
   flushIfPaused(now: number): Candidate[] {
-    if (now - this.lastSpeechAt < this.pauseMs || this.held.length === 0) return [];
-    const released = [...this.held].sort(
+    if (this.held.length === 0) return [];
+    const inPause = now - this.lastSpeechAt >= this.pauseMs;
+    let toRelease: Candidate[];
+    if (inPause) {
+      toRelease = this.held;
+      this.held = [];
+    } else {
+      toRelease = this.held.filter((c) => now - c.at >= this.maxHoldMs);
+      if (toRelease.length === 0) return [];
+      const releasedIds = new Set(toRelease.map((c) => c.id));
+      this.held = this.held.filter((c) => !releasedIds.has(c.id));
+    }
+    return [...toRelease].sort(
       (a, b) =>
         Number(b.severity === 'critical') - Number(a.severity === 'critical') ||
         b.score - a.score ||
         a.at - b.at,
     );
-    this.held = [];
-    return released;
   }
 
   get heldCount(): number {

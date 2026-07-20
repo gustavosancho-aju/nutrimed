@@ -49,6 +49,8 @@ interface ConsultationRecord {
   caseStateUpdates: number;
   /** B4/B5: reviews periódicos por desfecho. */
   caseReviews: Map<CaseReviewOutcome, number>;
+  /** Calibração 2026-07-20: segmentos finais sem NENHUM gatilho disparado. */
+  triggerlessSegments: number;
 }
 
 export interface ConsultationReport {
@@ -78,6 +80,10 @@ export interface ConsultationReport {
     readonly caseReviews: Readonly<Record<CaseReviewOutcome, number>>;
     /** llm-skip / (llm-skip + entregues) — proporção de chamadas em que o modelo se calou. */
     readonly skipRate: number | null;
+    /** Calibração 2026-07-20: segmentos finais sem NENHUM gatilho disparado. */
+    readonly triggerlessSegments: number;
+    /** triggerlessSegments / sttSegments — "buraco" da cobertura de keyword. */
+    readonly triggerlessRate: number | null;
   };
 }
 
@@ -115,6 +121,7 @@ export class TelemetryRegistry {
         contributionsDelivered: 0,
         caseStateUpdates: 0,
         caseReviews: new Map(),
+        triggerlessSegments: 0,
       };
       this.records.set(consultationId, rec);
     }
@@ -194,6 +201,11 @@ export class TelemetryRegistry {
     rec.caseReviews.set(outcome, (rec.caseReviews.get(outcome) ?? 0) + 1);
   }
 
+  /** Calibração 2026-07-20: segmento final sem NENHUM gatilho disparado. */
+  triggerlessSegment(consultationId: string): void {
+    this.record(consultationId).triggerlessSegments += 1;
+  }
+
   report(consultationId: string, now = Date.now()): ConsultationReport {
     const rec = this.record(consultationId);
     const durationMs = rec.startedAt !== null ? (rec.endedAt ?? now) - rec.startedAt : 0;
@@ -260,6 +272,8 @@ export class TelemetryRegistry {
           decisions['llm-skip'] + rec.contributionsDelivered > 0
             ? decisions['llm-skip'] / (decisions['llm-skip'] + rec.contributionsDelivered)
             : null,
+        triggerlessSegments: rec.triggerlessSegments,
+        triggerlessRate: rec.sttSegments > 0 ? rec.triggerlessSegments / rec.sttSegments : null,
       },
     };
   }

@@ -61,7 +61,23 @@ describe('TelemetryRegistry (E10)', () => {
       caseStateUpdates: 2,
       caseReviews: { skip: 2, contribution: 1, discarded: 1 },
       skipRate: 2 / 3, // 2 skips / (2 skips + 1 entregue)
+      triggerlessSegments: 0,
+      triggerlessRate: null, // sem sttSegment() nesta consulta
     });
+  });
+
+  it('calibração 2026-07-20 — segmentos sem gatilho contados e proporcionalizados', () => {
+    const t = new TelemetryRegistry();
+    t.sttSegment('c1');
+    t.sttSegment('c1');
+    t.sttSegment('c1');
+    t.sttSegment('c1');
+    t.triggerlessSegment('c1');
+    t.triggerlessSegment('c1');
+
+    const { autonomy } = t.report('c1');
+    expect(autonomy.triggerlessSegments).toBe(2);
+    expect(autonomy.triggerlessRate).toBeCloseTo(0.5, 5); // 2 de 4 falas sem gatilho
   });
 
   it('B5 — consulta sem atividade: autonomia zerada com skipRate null', () => {

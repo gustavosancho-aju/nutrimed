@@ -17,7 +17,7 @@ export function TelemetryReport({
     <section aria-label="Telemetria da consulta" className="card-premium mt-6 p-6">
       <h2 className="font-display text-base font-semibold text-ink">📊 Telemetria (piloto)</h2>
 
-      <div className="mt-3 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mt-3 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-6">
         <div data-testid="tm-cost">
           <h3 className="text-xs font-semibold uppercase text-ink-muted">Custo (NFR7)</h3>
           <p className="font-mono-data mt-1 text-lg font-medium text-ink">{usd(report.cost.totalUsd)}</p>
@@ -57,6 +57,16 @@ export function TelemetryReport({
             {report.autonomy.caseStateUpdates} updates do caso · 🔎 reviews:{' '}
             {report.autonomy.caseReviews.contribution} contrib. / {report.autonomy.caseReviews.skip} skip /{' '}
             {report.autonomy.caseReviews.discarded} descartados
+          </p>
+        </div>
+
+        <div data-testid="tm-coverage">
+          <h3 className="text-xs font-semibold uppercase text-ink-muted">Cobertura de gatilho</h3>
+          <p className="font-mono-data mt-1 text-xs text-ink">
+            🎯 {report.autonomy.triggerlessSegments} fala(s) sem nenhum gatilho
+            {report.autonomy.triggerlessRate !== null
+              ? ` (${(report.autonomy.triggerlessRate * 100).toFixed(0)}% do falado)`
+              : ''}
           </p>
         </div>
 

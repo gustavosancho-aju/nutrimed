@@ -280,12 +280,21 @@ function envNumber(name: string, fallback: number): number {
 /**
  * Knobs de calibração do board por env — ajustáveis entre consultas via
  * `fly secrets set` + restart, sem novo deploy. Antes eram números mágicos no
- * call site (dívida do code review). Defaults = valores do piloto.
+ * call site (dívida do code review). Defaults = calibração 2026-07-20 (piloto
+ * relatou "os médicos não entraram para ajudar" — diagnóstico completo em
+ * packages/engines/src/gate.ts e triggers.ts).
  */
-function boardTuningFromEnv(): Pick<FullBoardConfig, 'caseReviewMs' | 'semanticDedupThreshold'> {
+function boardTuningFromEnv(): Pick<
+  FullBoardConfig,
+  'caseReviewMs' | 'semanticDedupThreshold' | 'threshold' | 'maxHoldMs'
+> {
   return {
-    caseReviewMs: envNumber('BOARD_CASE_REVIEW_MS', 90_000),
+    // era 90s — muito espaçado como fallback deliberativo do que os gatilhos
+    // de keyword não cobrem; 45s dá mais chances numa consulta de 15-20min.
+    caseReviewMs: envNumber('BOARD_CASE_REVIEW_MS', 45_000),
     semanticDedupThreshold: envNumber('BOARD_SEMANTIC_DEDUP_THRESHOLD', DEFAULT_SEMANTIC_DEDUP_THRESHOLD),
+    threshold: envNumber('BOARD_RELEVANCE_THRESHOLD', 0.55),
+    maxHoldMs: envNumber('BOARD_MAX_HOLD_MS', 12_000),
   };
 }
 
@@ -299,6 +308,7 @@ function telemetryHooks(runtime: BoardRuntime, consultationId: string) {
     onContributionLatency: (ms: number) => t.contributionLatency(consultationId, ms),
     onCaseStateUpdate: () => t.caseStateUpdate(consultationId), // B3/B5
     onCaseReview: (outcome: CaseReviewOutcome) => t.caseReview(consultationId, outcome), // B4/B5
+    onTriggerlessSegment: () => t.triggerlessSegment(consultationId), // calibração 2026-07-20
   };
 }
 
@@ -359,14 +369,16 @@ export async function startDemoBoard(consultationId: string): Promise<{ llmLabel
   runtime.telemetry.sessionStarted(consultationId);
   const { llm, label } = makeLlm(hooks.onUsage);
   const orchestrator = new FullBoardOrchestrator(db, session, llm, runtime.kb, {
-    pauseMs: 2500,
+    pauseMs: 1500,
     tickMs: 1000,
     synthesisQuietMs: 10_000,
-    maxPerMinutePerDoctor: 2,
+    maxPerMinutePerDoctor: 3,
     onDecision: hooks.onDecision,
     onContributionLatency: hooks.onContributionLatency,
+    ...boardTuningFromEnv(), // mesma calibração do ao vivo, p/ a demo refletir o real
     onCaseStateUpdate: hooks.onCaseStateUpdate, // B5
     onCaseReview: hooks.onCaseReview,
+    onTriggerlessSegment: hooks.onTriggerlessSegment,
   });
   runtime.gateway.bind(consultationId, orchestrator);
   // transcrição ao vivo p/ o painel (texto via WS — áudio nunca passa aqui, §7).
@@ -577,15 +589,18 @@ export async function startLiveBoard(
     runtime.telemetry.sessionStarted(consultationId);
     const { llm } = makeLlm(hooks.onUsage);
     orchestrator = new FullBoardOrchestrator(db, session, llm, runtime.kb, {
-      pauseMs: 2500,
+      pauseMs: 1500,
       tickMs: 1000,
       synthesisQuietMs: 20_000,
-      maxPerMinutePerDoctor: 2,
+      maxPerMinutePerDoctor: 3,
       onDecision: hooks.onDecision,
       onContributionLatency: hooks.onContributionLatency,
-      ...boardTuningFromEnv(), // B4: caseReviewMs + threshold do dedup por env (calibração do piloto)
+      // B4/calibração 2026-07-20: caseReviewMs + threshold do dedup/relevância
+      // + maxHoldMs por env (ajustável entre consultas sem novo deploy)
+      ...boardTuningFromEnv(),
       onCaseStateUpdate: hooks.onCaseStateUpdate,
       onCaseReview: hooks.onCaseReview,
+      onTriggerlessSegment: hooks.onTriggerlessSegment,
     });
     runtime.gateway.bind(consultationId, orchestrator);
     const wired = wireSessionBroadcast(runtime, consultationId, session, db, { persistTranscript: true });

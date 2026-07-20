@@ -64,6 +64,27 @@ export const PAULO_TRIGGERS: readonly PersonaTriggerDef[] = [
     pattern: /dislipidemia|colesterol|diabetes|tabagis|sobrepeso|obesidade/i,
     typeHint: 'sugestao',
     severityHint: 'normal',
+    // calibração 2026-07-20: baseWeight 0.5 era matematicamente MORTO — com a
+    // fórmula antiga do scorer, nenhuma frase (curta ou longa) alcançava o
+    // limiar 0.6. Ver packages/engines/src/gate.ts (scoreMatch).
+    baseWeight: 0.6,
+  },
+  {
+    // histórico familiar CV — anamnese comum em consulta real, não coberta antes.
+    id: 'paulo-historico-familiar-cv',
+    personaId: 'paulo',
+    pattern:
+      /hist[óo]ria familiar.{0,40}(infarto|avc|derrame|cardi[ao]|cora[çc][ãa]o)|(pai|m[ãa]e|irm[ãa]o|irm[ãa]|av[ôo]|av[óo]).{0,20}(infarto|avc|derrame)/i,
+    typeHint: 'hipotese',
+    severityHint: 'normal',
+    baseWeight: 0.55,
+  },
+  {
+    id: 'paulo-edema-tontura',
+    personaId: 'paulo',
+    pattern: /incha[çc]o|edema|p[ée]s inchados|pernas inchadas|tontura|tontear/i,
+    typeHint: 'sugestao',
+    severityHint: 'normal',
     baseWeight: 0.5,
   },
 ];
@@ -92,11 +113,32 @@ export const YARA_TRIGGERS: readonly PersonaTriggerDef[] = [
     pattern: /resist[êe]ncia insul[íi]nica|pr[ée]-?diabetes|diabetes|GLP-?1|semaglutida/i,
     typeHint: 'sugestao',
     severityHint: 'normal',
+    baseWeight: 0.6,
+  },
+  {
+    id: 'yara-sono',
+    personaId: 'yara',
+    pattern: /ins[ôo]nia|dorme mal|dificuldade (pra|para) dormir|apneia( do sono)?/i,
+    typeHint: 'hipotese',
+    severityHint: 'normal',
     baseWeight: 0.55,
+  },
+  {
+    id: 'yara-ciclo-hormonal',
+    personaId: 'yara',
+    pattern: /ciclo (menstrual )?irregular|menstrua[çc][ãa]o irregular|anticoncepcional|reposi[çc][ãa]o hormonal|menopausa/i,
+    typeHint: 'sugestao',
+    severityHint: 'normal',
+    baseWeight: 0.5,
   },
 ];
 
-/** Aurélio (nutro): dieta/hábitos + sinais de deficiência (KB seed). */
+/**
+ * Aurélio (nutro): dieta/hábitos + sinais de deficiência (KB seed) + ampliação
+ * (calibração 2026-07-20 — piloto relatou "os médicos não entraram para
+ * ajudar"): o catálogo original tinha só 2 regras para o escopo mais amplo do
+ * board (condução geral do caso) — anamnese real toca em muito mais temas.
+ */
 export const AURELIO_TRIGGERS: readonly PersonaTriggerDef[] = [
   {
     id: 'aurelio-dieta-habitos',
@@ -104,13 +146,39 @@ export const AURELIO_TRIGGERS: readonly PersonaTriggerDef[] = [
     pattern: /dieta|alimenta[çc][ãa]o|h[áa]bitos?|rotina alimentar|peso/i,
     typeHint: 'sugestao',
     severityHint: 'normal',
-    baseWeight: 0.4,
+    // calibração 2026-07-20: 0.4 era matematicamente MORTO (nunca alcançava
+    // o limiar antigo, mesmo na frase mais curta possível). Ver gate.ts.
+    baseWeight: 0.55,
   },
   {
     id: 'aurelio-deficiencias',
     personaId: 'aurelio',
     pattern: /cansa[çc]o|queda de cabelo|unhas (fracas|quebradi[çc]as)|defici[êe]ncia/i,
     typeHint: 'sugestao',
+    severityHint: 'normal',
+    baseWeight: 0.6,
+  },
+  {
+    id: 'aurelio-atividade-fisica',
+    personaId: 'aurelio',
+    pattern: /sedentari[oa]|atividade f[íi]sica|exerc[íi]cio|caminhada|academia|treino/i,
+    typeHint: 'sugestao',
+    severityHint: 'normal',
+    baseWeight: 0.5,
+  },
+  {
+    id: 'aurelio-intestino',
+    personaId: 'aurelio',
+    pattern: /intestino (preso|solto)?|constipa[çc][ãa]o|preso do intestino|diarreia/i,
+    typeHint: 'sugestao',
+    severityHint: 'normal',
+    baseWeight: 0.5,
+  },
+  {
+    id: 'aurelio-historico-familiar',
+    personaId: 'aurelio',
+    pattern: /hist[óo]ria familiar.{0,30}(obesidade|diabetes)|(pai|m[ãa]e|fam[íi]lia).{0,20}(obes[oa]|diab[ée]tic[oa])/i,
+    typeHint: 'hipotese',
     severityHint: 'normal',
     baseWeight: 0.5,
   },

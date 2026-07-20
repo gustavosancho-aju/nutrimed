@@ -56,6 +56,13 @@ export interface FullBoardConfig extends GatekeeperConfig {
   readonly onDecision?: (kind: string) => void;
   /** Telemetria (E10): latência gatilho→publicação por contribuição (§11). */
   readonly onContributionLatency?: (latencyMs: number) => void;
+  /**
+   * Telemetria (calibração 2026-07-20): segmento FINAL que não bateu em
+   * NENHUM gatilho de NENHUMA persona — mede o "buraco" da cobertura de
+   * keyword, complementar às decisões do gate (que só contam candidatos que
+   * chegaram a existir).
+   */
+  readonly onTriggerlessSegment?: () => void;
   /** B3: atualiza o CaseState a cada N finais (default 6). */
   readonly caseStateEveryNFinals?: number;
   /** B3: telemetria — update do CaseState concluído. */
@@ -75,8 +82,14 @@ export interface FullBoardConfig extends GatekeeperConfig {
   readonly semanticDedupThreshold?: number;
 }
 
-/** B2: default do limiar de dedup semântico (compartilhado pré e pós LLM). */
-export const DEFAULT_SEMANTIC_DEDUP_THRESHOLD = 0.5;
+/**
+ * B2: default do limiar de dedup semântico (compartilhado pré e pós LLM).
+ * Calibração 2026-07-20: era 0.5 — sem janela de tempo (compara contra a
+ * consulta INTEIRA), 0.5 descartava contribuições legítimas sobre temas
+ * correlatos só por compartilharem parte do vocabulário clínico. 0.62 exige
+ * mais sobreposição real antes de tratar como repetição.
+ */
+export const DEFAULT_SEMANTIC_DEDUP_THRESHOLD = 0.62;
 
 interface RoundEntry {
   readonly contribution: PersonaContribution;
@@ -117,7 +130,10 @@ export class FullBoardOrchestrator {
   private pending: Promise<void> = Promise.resolve();
   private readonly now: () => number;
   private readonly config: Required<Pick<FullBoardConfig, 'tickMs' | 'synthesisMinPersonas' | 'synthesisQuietMs'>>;
-  private readonly config2: Pick<FullBoardConfig, 'onDecision' | 'onContributionLatency'>;
+  private readonly config2: Pick<
+    FullBoardConfig,
+    'onDecision' | 'onContributionLatency' | 'onTriggerlessSegment'
+  >;
   private readonly configReview: Pick<FullBoardConfig, 'caseReviewMs' | 'onCaseReview' | 'pauseMs'>;
 
   constructor(
@@ -141,7 +157,11 @@ export class FullBoardOrchestrator {
       synthesisMinPersonas: config.synthesisMinPersonas ?? 2,
       synthesisQuietMs: config.synthesisQuietMs ?? 12_000,
     };
-    this.config2 = { onDecision: config.onDecision, onContributionLatency: config.onContributionLatency };
+    this.config2 = {
+      onDecision: config.onDecision,
+      onContributionLatency: config.onContributionLatency,
+      onTriggerlessSegment: config.onTriggerlessSegment,
+    };
     this.configReview = {
       caseReviewMs: config.caseReviewMs,
       onCaseReview: config.onCaseReview,
@@ -199,7 +219,9 @@ export class FullBoardOrchestrator {
     void this.caseState.maybeUpdate();
 
     // 3 personas monitoram o MESMO segmento — sem invocação (FR2)
-    for (const match of this.detector.detect(text, at)) {
+    const matches = this.detector.detect(text, at);
+    if (matches.length === 0) this.config2.onTriggerlessSegment?.();
+    for (const match of matches) {
       const candidate = toCandidate(match);
       const decision = this.gate.submit(candidate, at);
       this.config2.onDecision?.(decision.kind);
