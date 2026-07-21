@@ -668,6 +668,13 @@ export interface NutritionGoalValues {
    * metas antigas não têm o campo (decodifica undefined, sem quebrar).
    */
   readonly waterMl?: number;
+  /**
+   * Faixa-alvo de sono em HORAS (pedido do médico, 2026-07-20) — substitui a
+   * faixa padrão (6h–9h30) para ESTE paciente quando ambos os campos estão
+   * definidos. Um paciente sem os dois campos usa {@link DEFAULT_SLEEP_TARGET}.
+   */
+  readonly sleepMinHours?: number;
+  readonly sleepMaxHours?: number;
 }
 
 export interface NutritionGoal {
@@ -1086,6 +1093,26 @@ export async function sumWaterForDay(
   };
 }
 
+/**
+ * Histórico de água para os dias LOCAIS informados (ISO `YYYY-MM-DD`) — insumo
+ * do gráfico de evolução no dashboard do médico. Um `sumWaterForDay` por dia;
+ * a lista de dias é pequena (dashboard mostra ~14), sem necessidade de uma
+ * query agregada.
+ */
+export async function listWaterHistory(
+  db: SqlExecutor,
+  patientId: string,
+  daysISO: readonly string[],
+  tzOffsetMinutes: number,
+  key: Buffer,
+): Promise<WaterProgress[]> {
+  const out: WaterProgress[] = [];
+  for (const day of daysISO) {
+    out.push(await sumWaterForDay(db, patientId, day, tzOffsetMinutes, key));
+  }
+  return out;
+}
+
 /** Instante de deitar (`sleep_start`) ou acordar (`sleep_end`) informado pelo paciente. */
 export type SleepEventKind = 'sleep_start' | 'sleep_end';
 
@@ -1118,10 +1145,25 @@ export async function addSleepEvent(
 /** Rótulo de qualidade por duração — apoio visual, não diagnóstico. */
 export type SleepQuality = 'curta' | 'boa' | 'longa';
 
-/** Classifica a duração do sono (minutos) numa faixa simples — puro/testável. */
-export function classifySleepDuration(minutes: number): SleepQuality {
-  if (minutes < 360) return 'curta'; // < 6h
-  if (minutes > 570) return 'longa'; // > 9h30
+/** Faixa-alvo de sono, em MINUTOS (unidade interna — a UI trabalha em horas). */
+export interface SleepTargetRange {
+  readonly minMinutes: number;
+  readonly maxMinutes: number;
+}
+
+/** Faixa padrão (6h–9h30) — usada quando o paciente não tem `sleepMinHours`/`sleepMaxHours` na meta. */
+export const DEFAULT_SLEEP_TARGET: SleepTargetRange = { minMinutes: 360, maxMinutes: 570 };
+
+/** Deriva a faixa-alvo de sono da meta do paciente — ambos os campos ausentes ⇒ padrão. */
+export function sleepTargetFromGoal(values: Pick<NutritionGoalValues, 'sleepMinHours' | 'sleepMaxHours'> | undefined): SleepTargetRange {
+  if (values?.sleepMinHours === undefined || values?.sleepMaxHours === undefined) return DEFAULT_SLEEP_TARGET;
+  return { minMinutes: values.sleepMinHours * 60, maxMinutes: values.sleepMaxHours * 60 };
+}
+
+/** Classifica a duração do sono (minutos) numa faixa — puro/testável. Sem faixa informada, usa a padrão. */
+export function classifySleepDuration(minutes: number, target: SleepTargetRange = DEFAULT_SLEEP_TARGET): SleepQuality {
+  if (minutes < target.minMinutes) return 'curta';
+  if (minutes > target.maxMinutes) return 'longa';
   return 'boa';
 }
 
@@ -1149,6 +1191,7 @@ export async function findLastSleepSession(
   // events só cifram `{}` hoje, nada a decifrar — mantido para o dia em que
   // uma nota opcional entrar no evento.
   _key: Buffer,
+  target: SleepTargetRange = DEFAULT_SLEEP_TARGET,
 ): Promise<SleepSession | null> {
   const endRes = await db.query<SelfLogRow>(
     `SELECT id, patient_id, kind, logged_at, values_enc, created_at
@@ -1174,5 +1217,42 @@ export async function findLastSleepSession(
   const durationMinutes = (end.getTime() - start.getTime()) / 60_000;
   if (end.getTime() - start.getTime() > MAX_SLEEP_SESSION_MS || durationMinutes <= 0) return null;
 
-  return { start, end, durationMinutes, quality: classifySleepDuration(durationMinutes) };
+  return { start, end, durationMinutes, quality: classifySleepDuration(durationMinutes, target) };
+}
+
+/**
+ * Histórico de sessões de sono desde `since` — pareia TODOS os deitar/acordar
+ * do período (não só o último), na ordem em que aconteceram. Algoritmo
+ * guloso da esquerda pra direita: cada `sleep_start` vira o "aberto" mais
+ * recente; um `sleep_end` fecha o "aberto" se a janela for plausível (≤16h) e
+ * a duração for positiva — senão o evento solto é ignorado (fica salvo, só
+ * não vira sessão). Insumo do gráfico de evolução no dashboard do médico.
+ */
+export async function listSleepSessions(
+  db: SqlExecutor,
+  patientId: string,
+  since: Date,
+  target: SleepTargetRange = DEFAULT_SLEEP_TARGET,
+): Promise<SleepSession[]> {
+  const res = await db.query<Pick<SelfLogRow, 'kind' | 'logged_at'>>(
+    `SELECT kind, logged_at FROM patient_self_log
+     WHERE patient_id = $1 AND kind IN ('sleep_start', 'sleep_end') AND logged_at >= $2
+     ORDER BY logged_at ASC, id ASC`,
+    [patientId, since],
+  );
+  const sessions: SleepSession[] = [];
+  let openStart: Date | null = null;
+  for (const row of res.rows) {
+    const at = new Date(row.logged_at);
+    if (row.kind === 'sleep_start') {
+      openStart = at;
+    } else if (openStart) {
+      const durationMinutes = (at.getTime() - openStart.getTime()) / 60_000;
+      if (durationMinutes > 0 && at.getTime() - openStart.getTime() <= MAX_SLEEP_SESSION_MS) {
+        sessions.push({ start: openStart, end: at, durationMinutes, quality: classifySleepDuration(durationMinutes, target) });
+      }
+      openStart = null;
+    }
+  }
+  return sessions;
 }

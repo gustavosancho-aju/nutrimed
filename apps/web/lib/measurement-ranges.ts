@@ -36,6 +36,9 @@ export const RANGES: Readonly<Record<string, Range>> = {
   fat: { min: 0, max: 5_000, label: 'Gordura', unit: 'g' },
   // Meta de água (pedido do médico, 2026-07-20)
   waterMl: { min: 0, max: 10_000, label: 'Água', unit: 'ml' },
+  // Faixa-alvo de sono (pedido do médico, 2026-07-20)
+  sleepMinHours: { min: 3, max: 14, label: 'Sono mín', unit: 'h' },
+  sleepMaxHours: { min: 3, max: 16, label: 'Sono máx', unit: 'h' },
 };
 
 /** Número "bonito" para a mensagem (inteiro sem casas, senão 1 casa). */

@@ -41,4 +41,10 @@ describe('checkRanges (validação de faixa)', () => {
     const msg = checkRanges({ peso: 90, imc: 500 });
     expect(msg).toContain('IMC');
   });
+
+  it('metas de água e sono (pedido do médico, 2026-07-20): plausíveis passam, absurdas são barradas', () => {
+    expect(checkRanges({ waterMl: 2000, sleepMinHours: 7, sleepMaxHours: 9 })).toBeNull();
+    expect(checkRanges({ waterMl: 50_000 })).not.toBeNull();
+    expect(checkRanges({ sleepMinHours: 20 })).not.toBeNull();
+  });
 });

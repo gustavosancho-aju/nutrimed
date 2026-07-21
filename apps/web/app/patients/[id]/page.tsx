@@ -57,6 +57,10 @@ export default async function PatientPage({
     { name: 'fat', label: 'Gordura (g)', value: goal?.values.fat },
     { name: 'waterMl', label: 'Água (ml)', value: goal?.values.waterMl },
   ];
+  const sleepFields = [
+    { name: 'sleepMinHours', label: 'Sono mín. (h)', value: goal?.values.sleepMinHours },
+    { name: 'sleepMaxHours', label: 'Sono máx. (h)', value: goal?.values.sleepMaxHours },
+  ];
 
   return (
     <main className="mx-auto min-h-screen max-w-5xl p-8">
@@ -163,6 +167,9 @@ export default async function PatientPage({
               {Math.round(goal.values.protein)} g · C {Math.round(goal.values.carbs)} g · G{' '}
               {Math.round(goal.values.fat)} g
               {goal.values.waterMl !== undefined ? ` · Água ${Math.round(goal.values.waterMl)} ml` : ''}
+              {goal.values.sleepMinHours !== undefined && goal.values.sleepMaxHours !== undefined
+                ? ` · Sono ${goal.values.sleepMinHours}–${goal.values.sleepMaxHours} h`
+                : ''}
             </p>
           ) : (
             <p className="mt-1 text-xs text-ink-muted">Nenhuma meta definida ainda.</p>
@@ -177,6 +184,21 @@ export default async function PatientPage({
                     name={f.name}
                     type="number"
                     step="0.1"
+                    min="0"
+                    defaultValue={f.value ?? ''}
+                    className="mt-1 w-full rounded-[8px] border border-ink/15 bg-surface px-2.5 py-1.5 text-sm text-ink"
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:max-w-xs">
+              {sleepFields.map((f) => (
+                <label key={f.name} className="text-xs text-ink-muted">
+                  {f.label}
+                  <input
+                    name={f.name}
+                    type="number"
+                    step="0.5"
                     min="0"
                     defaultValue={f.value ?? ''}
                     className="mt-1 w-full rounded-[8px] border border-ink/15 bg-surface px-2.5 py-1.5 text-sm text-ink"

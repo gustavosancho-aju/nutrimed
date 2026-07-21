@@ -9,6 +9,7 @@ import {
   sumWaterForDay,
   addSleepEvent,
   findLastSleepSession,
+  sleepTargetFromGoal,
   type DailyProgress,
   type WaterProgress,
   type SleepSession,
@@ -414,7 +415,8 @@ export async function handleToday(deps: BotDeps, chatId: string): Promise<BotRep
   const dayISO = localDayISO(now, tz(deps));
   const progress = await sumFoodLogForDay(deps.db, patientId, dayISO, tz(deps), deps.key);
   const water = await sumWaterForDay(deps.db, patientId, dayISO, tz(deps), deps.key);
-  const sleep = await findLastSleepSession(deps.db, patientId, deps.key);
+  const goal = await loadCurrentNutritionGoal(deps.db, patientId, deps.key, dayISO);
+  const sleep = await findLastSleepSession(deps.db, patientId, deps.key, sleepTargetFromGoal(goal?.values));
   const orientation = await buildOrientation(deps.llm, progress);
   return {
     text: compose([
@@ -503,7 +505,8 @@ export async function handleSleepEnd(deps: BotDeps, chatId: string, arg?: string
   const at = resolveEventTime(clock(deps), hhmm, tz(deps));
   await addSleepEvent(deps.db, patientId, 'sleep_end', at, deps.key, { action: 'telegram-bot' });
 
-  const session = await findLastSleepSession(deps.db, patientId, deps.key);
+  const goal = await loadCurrentNutritionGoal(deps.db, patientId, deps.key, localDayISO(at, tz(deps)));
+  const session = await findLastSleepSession(deps.db, patientId, deps.key, sleepTargetFromGoal(goal?.values));
   if (!session) {
     return {
       text: '☀️ Bom dia! Registrei que você acordou — não encontrei um "/dormi" correspondente para calcular a duração.',

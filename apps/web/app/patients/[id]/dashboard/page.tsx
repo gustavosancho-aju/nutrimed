@@ -9,6 +9,10 @@ import {
   listLabExam,
   loadCustomExamDefs,
   loadCurrentBodyGoal,
+  loadCurrentNutritionGoal,
+  listWaterHistory,
+  listSleepSessions,
+  sleepTargetFromGoal,
   computeAge,
 } from '@nutrimed/patients';
 import {
@@ -18,6 +22,7 @@ import {
   idealWeightTarget,
   HEALTHY_IMC,
   TARGET_IMC,
+  lastNDaysISO,
 } from '@/lib/dashboard';
 import { MetricCard } from '@/components/dashboard/metric-card';
 import { ExamCard } from '@/components/dashboard/exam-card';
@@ -26,12 +31,18 @@ import { MeasurementHistory } from '@/components/dashboard/measurement-history';
 import { CustomExamSettings } from '@/components/dashboard/custom-exam-settings';
 import { BodyGoalSettings } from '@/components/dashboard/body-goal-settings';
 
-type Aba = 'geral' | 'bioimpedancia' | 'exames';
+type Aba = 'geral' | 'bioimpedancia' | 'exames' | 'bem-estar';
 const ABAS: { key: Aba; label: string }[] = [
   { key: 'geral', label: 'Geral' },
   { key: 'bioimpedancia', label: 'Bioimpedância' },
   { key: 'exames', label: 'Exames' },
+  { key: 'bem-estar', label: 'Bem-estar' },
 ];
+
+/** Fuso padrão do piloto (BR, UTC-3) — mesmo default do bot de Telegram. */
+const BR_TZ_OFFSET_MINUTES = -180;
+/** Janela do gráfico de água/sono no dashboard. */
+const WELLNESS_HISTORY_DAYS = 14;
 
 /**
  * Dashboard de evolução do paciente (E11 Fase 3) — 3 abas (Geral · Bioimpedância
@@ -49,7 +60,8 @@ export default async function DashboardPage({
 
   const { id } = await params;
   const { aba: abaRaw, erro, editar } = await searchParams;
-  const aba: Aba = abaRaw === 'bioimpedancia' || abaRaw === 'exames' ? abaRaw : 'geral';
+  const aba: Aba =
+    abaRaw === 'bioimpedancia' || abaRaw === 'exames' || abaRaw === 'bem-estar' ? abaRaw : 'geral';
 
   const db = await getDb();
   const key = getEncryptionKey();
@@ -61,7 +73,26 @@ export default async function DashboardPage({
   const customDefs = await loadCustomExamDefs(db, id, key);
   const bodyGoal = await loadCurrentBodyGoal(db, id, key);
   const today = new Date().toISOString().slice(0, 10);
-  const age = computeAge(patient.birthDate, new Date());
+  const now = new Date();
+  const age = computeAge(patient.birthDate, now);
+
+  // Bem-estar (água/sono via Telegram): só busca quando a aba está ativa —
+  // listWaterHistory faz uma query por dia (14), custo desnecessário nas
+  // outras abas.
+  const nutritionGoal = aba === 'bem-estar' ? await loadCurrentNutritionGoal(db, id, key) : null;
+  const sleepTarget = sleepTargetFromGoal(nutritionGoal?.values);
+  const wellnessDays = lastNDaysISO(now, WELLNESS_HISTORY_DAYS, BR_TZ_OFFSET_MINUTES);
+  const waterHistory =
+    aba === 'bem-estar' ? await listWaterHistory(db, id, wellnessDays, BR_TZ_OFFSET_MINUTES, key) : [];
+  const sleepSessions =
+    aba === 'bem-estar'
+      ? await listSleepSessions(
+          db,
+          id,
+          new Date(now.getTime() - WELLNESS_HISTORY_DAYS * 24 * 60 * 60 * 1000),
+          sleepTarget,
+        )
+      : [];
 
   // Campos das abas (form + histórico compartilham a mesma definição)
   const bodyFields = [
@@ -377,6 +408,51 @@ export default async function DashboardPage({
               measurements={labs}
             />
             <CustomExamSettings patientId={id} defs={customDefs} />
+          </div>
+        )}
+
+        {aba === 'bem-estar' && (
+          <div className="space-y-6">
+            <div className="flex items-start justify-between gap-4 rounded-[12px] border border-secondary/25 bg-secondary/[0.06] p-5">
+              <p className="text-sm text-ink-muted">
+                Água e sono que o paciente registrou pelo Telegram (<code className="font-mono-data">/agua</code>,{' '}
+                <code className="font-mono-data">/dormi</code>, <code className="font-mono-data">/acordei</code>) —
+                últimos {WELLNESS_HISTORY_DAYS} dias.
+              </p>
+              <Link
+                href={`/patients/${id}`}
+                className="shrink-0 rounded-[10px] border border-ink/15 bg-white px-3.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-surface-muted"
+              >
+                ⚙️ Editar metas
+              </Link>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <MetricCard
+                label="Água"
+                unit="ml"
+                points={waterHistory.map((p) => ({ measuredAt: new Date(`${p.day}T12:00:00Z`), value: p.consumedMl }))}
+                target={nutritionGoal?.values.waterMl}
+                targetLabel={nutritionGoal?.values.waterMl !== undefined ? doctorLabel : undefined}
+              />
+              <MetricCard
+                label="Sono"
+                unit="h"
+                points={sleepSessions.map((s) => ({ measuredAt: s.end, value: s.durationMinutes / 60 }))}
+                band={{ min: sleepTarget.minMinutes / 60, max: sleepTarget.maxMinutes / 60 }}
+                targetLabel={
+                  nutritionGoal?.values.sleepMinHours !== undefined && nutritionGoal?.values.sleepMaxHours !== undefined
+                    ? `${doctorLabel} · ${nutritionGoal.values.sleepMinHours}–${nutritionGoal.values.sleepMaxHours} h`
+                    : 'Faixa de referência · 6–9h30 (padrão)'
+                }
+              />
+            </div>
+            {waterHistory.every((p) => p.consumedMl === 0) && sleepSessions.length === 0 && (
+              <p className="text-sm text-ink-muted">
+                Ainda não há registros de água ou sono. O paciente precisa vincular o Telegram (ficha do
+                paciente) e usar os comandos <code className="font-mono-data">/agua</code>,{' '}
+                <code className="font-mono-data">/dormi</code> e <code className="font-mono-data">/acordei</code>.
+              </p>
+            )}
           </div>
         )}
       </section>

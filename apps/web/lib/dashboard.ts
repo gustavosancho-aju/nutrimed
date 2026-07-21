@@ -155,6 +155,22 @@ export function computeGoalGap(current: number, goal: number): GoalGap | null {
   return { pct, label };
 }
 
+// ── Bem-estar (água/sono via Telegram, 2026-07-20) — janela de dias p/ o gráfico ──
+
+/**
+ * Últimos `days` dias LOCAIS (mais antigo primeiro, ISO `YYYY-MM-DD`), dado o
+ * offset do fuso em minutos — mesma aritmética do bot de Telegram (BR = -180).
+ * `now` explícito (sem relógio implícito), mesmo princípio de {@link computeAge}.
+ */
+export function lastNDaysISO(now: Date, days: number, tzOffsetMinutes: number): string[] {
+  const localNowMs = now.getTime() + tzOffsetMinutes * 60_000;
+  const out: string[] = [];
+  for (let i = days - 1; i >= 0; i -= 1) {
+    out.push(new Date(localNowMs - i * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));
+  }
+  return out;
+}
+
 // ── Classificação de IMC (OMS) — apoio visual de apresentação, NÃO diagnóstico ──
 
 export type ImcTone = 'low' | 'ok' | 'warn' | 'high' | 'severe';

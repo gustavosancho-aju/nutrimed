@@ -13,6 +13,7 @@ import {
   imcFromWeight,
   classifyImc,
   IMC_CATEGORIES,
+  lastNDaysISO,
 } from './dashboard';
 
 describe('computeTrend (E11/11.6)', () => {
@@ -204,5 +205,22 @@ describe('parseDecimal — entrada manual tolerante', () => {
     expect(parseDecimal('  ')).toBeUndefined();
     expect(parseDecimal('abc')).toBeUndefined();
     expect(parseDecimal(null)).toBeUndefined();
+  });
+});
+
+describe('lastNDaysISO — janela de dias p/ o gráfico de bem-estar (2026-07-20)', () => {
+  it('devolve N dias, do mais antigo ao mais recente (hoje incluso)', () => {
+    const dias = lastNDaysISO(new Date('2026-07-15T12:00:00Z'), 5, -180); // BR, meio-dia UTC = 09:00 local
+    expect(dias).toEqual(['2026-07-11', '2026-07-12', '2026-07-13', '2026-07-14', '2026-07-15']);
+  });
+
+  it('respeita o fuso: madrugada UTC ainda é o dia anterior no BR', () => {
+    // 02:00Z = 23:00 do dia anterior no BR (UTC-3)
+    const dias = lastNDaysISO(new Date('2026-07-15T02:00:00Z'), 1, -180);
+    expect(dias).toEqual(['2026-07-14']);
+  });
+
+  it('days=1 devolve só o dia de hoje', () => {
+    expect(lastNDaysISO(new Date('2026-07-15T12:00:00Z'), 1, -180)).toEqual(['2026-07-15']);
   });
 });

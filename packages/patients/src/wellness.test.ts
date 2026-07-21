@@ -9,9 +9,13 @@ import {
   addWaterLog,
   listWaterLogByDay,
   sumWaterForDay,
+  listWaterHistory,
   addSleepEvent,
   findLastSleepSession,
+  listSleepSessions,
   classifySleepDuration,
+  sleepTargetFromGoal,
+  DEFAULT_SLEEP_TARGET,
 } from './patients';
 
 const KEY = randomBytes(32);
@@ -104,10 +108,20 @@ describe('Água + sono via Telegram (pedido do médico, 2026-07-20)', () => {
       const p2 = await sumWaterForDay(exec, semNenhumaMeta, '2026-07-01', BR, KEY);
       expect(p2).toEqual({ day: '2026-07-01', consumedMl: 0, goalMl: null, remainingMl: null });
     });
+
+    it('listWaterHistory devolve um WaterProgress por dia informado, na ordem dada', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Água Histórico' }, KEY);
+      await addWaterLog(exec, patientId, 500, new Date('2026-07-01T13:00:00Z'), KEY);
+      await addWaterLog(exec, patientId, 700, new Date('2026-07-02T13:00:00Z'), KEY);
+
+      const historico = await listWaterHistory(exec, patientId, ['2026-06-30', '2026-07-01', '2026-07-02'], BR, KEY);
+      expect(historico.map((p) => p.consumedMl)).toEqual([0, 500, 700]);
+      expect(historico.map((p) => p.day)).toEqual(['2026-06-30', '2026-07-01', '2026-07-02']);
+    });
   });
 
   describe('classifySleepDuration — faixas puras', () => {
-    it('classifica curta/boa/longa pelas fronteiras de minutos', () => {
+    it('classifica curta/boa/longa pelas fronteiras de minutos (faixa padrão)', () => {
       expect(classifySleepDuration(300)).toBe('curta'); // 5h
       expect(classifySleepDuration(359)).toBe('curta');
       expect(classifySleepDuration(360)).toBe('boa'); // 6h
@@ -115,6 +129,28 @@ describe('Água + sono via Telegram (pedido do médico, 2026-07-20)', () => {
       expect(classifySleepDuration(570)).toBe('boa'); // 9h30 — limite inclusivo
       expect(classifySleepDuration(571)).toBe('longa');
       expect(classifySleepDuration(700)).toBe('longa');
+    });
+
+    it('aceita uma faixa-alvo customizada (pedido do médico, 2026-07-20)', () => {
+      const atleta = { minMinutes: 480, maxMinutes: 600 }; // 8h–10h
+      expect(classifySleepDuration(420, atleta)).toBe('curta'); // 7h — boa na faixa padrão, curta pra este paciente
+      expect(classifySleepDuration(540, atleta)).toBe('boa'); // 9h
+      expect(classifySleepDuration(650, atleta)).toBe('longa');
+    });
+  });
+
+  describe('sleepTargetFromGoal — deriva a faixa-alvo da meta do paciente', () => {
+    it('sem os dois campos (meta ausente ou incompleta) ⇒ faixa padrão', () => {
+      expect(sleepTargetFromGoal(undefined)).toEqual(DEFAULT_SLEEP_TARGET);
+      expect(sleepTargetFromGoal({})).toEqual(DEFAULT_SLEEP_TARGET);
+      expect(sleepTargetFromGoal({ sleepMinHours: 7 })).toEqual(DEFAULT_SLEEP_TARGET); // só um campo
+    });
+
+    it('com os dois campos: converte horas para minutos', () => {
+      expect(sleepTargetFromGoal({ sleepMinHours: 8, sleepMaxHours: 10 })).toEqual({
+        minMinutes: 480,
+        maxMinutes: 600,
+      });
     });
   });
 
@@ -162,6 +198,57 @@ describe('Água + sono via Telegram (pedido do médico, 2026-07-20)', () => {
       const session = await findLastSleepSession(exec, patientId, KEY);
       expect(session!.durationMinutes).toBeCloseTo(300, 5); // 5h — a noite mais recente
       expect(session!.quality).toBe('curta');
+    });
+
+    it('aceita uma faixa-alvo customizada — reclassifica a mesma duração', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Sono Faixa Custom' }, KEY);
+      await addSleepEvent(exec, patientId, 'sleep_start', new Date('2026-07-01T02:30:00Z'), KEY);
+      await addSleepEvent(exec, patientId, 'sleep_end', new Date('2026-07-01T10:00:00Z'), KEY); // 7h30
+
+      const padrao = await findLastSleepSession(exec, patientId, KEY);
+      expect(padrao!.quality).toBe('boa'); // 7h30 está na faixa padrão (6h–9h30)
+
+      const atleta = await findLastSleepSession(exec, patientId, KEY, { minMinutes: 480, maxMinutes: 600 });
+      expect(atleta!.quality).toBe('curta'); // 7h30 < 8h mínimo deste paciente
+    });
+  });
+
+  describe('listSleepSessions — histórico completo (não só a última noite)', () => {
+    it('pareia TODAS as noites do período, na ordem cronológica', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Sono Histórico' }, KEY);
+      await addSleepEvent(exec, patientId, 'sleep_start', new Date('2026-06-30T02:00:00Z'), KEY);
+      await addSleepEvent(exec, patientId, 'sleep_end', new Date('2026-06-30T09:00:00Z'), KEY); // noite 1: 7h
+      await addSleepEvent(exec, patientId, 'sleep_start', new Date('2026-07-01T03:00:00Z'), KEY);
+      await addSleepEvent(exec, patientId, 'sleep_end', new Date('2026-07-01T08:00:00Z'), KEY); // noite 2: 5h
+
+      const sessions = await listSleepSessions(exec, patientId, new Date('2026-06-01T00:00:00Z'));
+      expect(sessions.map((s) => Math.round(s.durationMinutes / 60))).toEqual([7, 5]);
+      expect(sessions[0]!.quality).toBe('boa');
+      expect(sessions[1]!.quality).toBe('curta');
+    });
+
+    it('ignora sleep_end sem sleep_start aberto; respeita o teto de 16h; aceita faixa-alvo', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Sono Histórico Solto' }, KEY);
+      await addSleepEvent(exec, patientId, 'sleep_end', new Date('2026-06-29T09:00:00Z'), KEY); // solto, sem start
+      await addSleepEvent(exec, patientId, 'sleep_start', new Date('2026-06-30T02:00:00Z'), KEY);
+      await addSleepEvent(exec, patientId, 'sleep_end', new Date('2026-07-02T09:00:00Z'), KEY); // > 16h depois — implausível
+
+      const sessions = await listSleepSessions(exec, patientId, new Date('2026-06-01T00:00:00Z'), {
+        minMinutes: 480,
+        maxMinutes: 600,
+      });
+      expect(sessions).toEqual([]); // nenhum par válido
+    });
+
+    it('since filtra o período (sessões antigas ficam de fora)', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Sono Since' }, KEY);
+      await addSleepEvent(exec, patientId, 'sleep_start', new Date('2026-06-01T02:00:00Z'), KEY);
+      await addSleepEvent(exec, patientId, 'sleep_end', new Date('2026-06-01T09:00:00Z'), KEY); // fora do since
+      await addSleepEvent(exec, patientId, 'sleep_start', new Date('2026-07-01T02:00:00Z'), KEY);
+      await addSleepEvent(exec, patientId, 'sleep_end', new Date('2026-07-01T09:00:00Z'), KEY); // dentro
+
+      const sessions = await listSleepSessions(exec, patientId, new Date('2026-06-15T00:00:00Z'));
+      expect(sessions).toHaveLength(1);
     });
   });
 });

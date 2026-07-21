@@ -50,16 +50,25 @@ export async function setGoalAction(formData: FormData): Promise<void> {
   const { user, db } = await assertOwner(patientId);
 
   const waterMl = parseDecimal(formData.get('waterMl'));
+  const sleepMinHours = parseDecimal(formData.get('sleepMinHours'));
+  const sleepMaxHours = parseDecimal(formData.get('sleepMaxHours'));
   const values: NutritionGoalValues = {
     kcal: parseDecimal(formData.get('kcal')) ?? 0,
     protein: parseDecimal(formData.get('protein')) ?? 0,
     carbs: parseDecimal(formData.get('carbs')) ?? 0,
     fat: parseDecimal(formData.get('fat')) ?? 0,
     ...(waterMl !== undefined ? { waterMl } : {}),
+    ...(sleepMinHours !== undefined ? { sleepMinHours } : {}),
+    ...(sleepMaxHours !== undefined ? { sleepMaxHours } : {}),
   };
   const rangeError = checkRanges({ ...values });
   if (rangeError) {
     redirect(`/patients/${patientId}?erro=${encodeURIComponent(rangeError)}`);
+  }
+  if (sleepMinHours !== undefined && sleepMaxHours !== undefined && sleepMinHours >= sleepMaxHours) {
+    redirect(
+      `/patients/${patientId}?erro=${encodeURIComponent('Sono mín. deve ser menor que o máx. — nada foi salvo.')}`,
+    );
   }
   const dateRaw = String(formData.get('effectiveFrom') ?? '').trim();
   const effectiveFrom = dateRaw || new Date().toISOString().slice(0, 10);

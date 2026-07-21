@@ -365,5 +365,26 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
       const hoje = await handleUpdate(deps, { chatId: 'chat-sono-hoje', text: '/hoje' });
       expect(hoje?.text).toMatch(/[úu]ltima noite: 7h30/i);
     });
+
+    it('respeita a faixa-alvo de sono definida pelo médico (pedido 2026-07-20)', async () => {
+      const patientId = await pairNewChat('chat-sono-meta');
+      // Sem meta de sono: 7h30 é "boa" (faixa padrão 6h–9h30).
+      await handleUpdate(deps, { chatId: 'chat-sono-meta', text: '/dormi 23:30' });
+      const semMeta = await handleUpdate(deps, { chatId: 'chat-sono-meta', text: '/acordei 07:00' });
+      expect(semMeta?.text).toMatch(/boa/);
+
+      // Médico define um paciente que precisa de 8h–10h — as mesmas 7h30 viram "curta".
+      await setNutritionGoal(
+        exec,
+        patientId,
+        userId,
+        '2026-07-01',
+        { kcal: 2000, protein: 150, carbs: 200, fat: 60, sleepMinHours: 8, sleepMaxHours: 10 },
+        KEY,
+      );
+      await handleUpdate(deps, { chatId: 'chat-sono-meta', text: '/dormi 23:30' });
+      const comMeta = await handleUpdate(deps, { chatId: 'chat-sono-meta', text: '/acordei 07:00' });
+      expect(comMeta?.text).toMatch(/curta/);
+    });
   });
 });
