@@ -12,8 +12,11 @@ import {
   loadCurrentNutritionGoal,
   listWaterHistory,
   listSleepSessions,
+  listNutritionDiary,
   sleepTargetFromGoal,
   computeAge,
+  type DailyNutritionDiary,
+  type SleepSession,
 } from '@nutrimed/patients';
 import {
   seriesOf,
@@ -23,6 +26,8 @@ import {
   HEALTHY_IMC,
   TARGET_IMC,
   lastNDaysISO,
+  toLocalDayISO,
+  classifyDailyStatus,
 } from '@/lib/dashboard';
 import { MetricCard } from '@/components/dashboard/metric-card';
 import { ExamCard } from '@/components/dashboard/exam-card';
@@ -30,6 +35,7 @@ import { MeasurementForm } from '@/components/dashboard/measurement-form';
 import { MeasurementHistory } from '@/components/dashboard/measurement-history';
 import { CustomExamSettings } from '@/components/dashboard/custom-exam-settings';
 import { BodyGoalSettings } from '@/components/dashboard/body-goal-settings';
+import { GoalHitBadge } from '@/components/dashboard/goal-hit-badge';
 
 type Aba = 'geral' | 'bioimpedancia' | 'exames' | 'bem-estar';
 const ABAS: { key: Aba; label: string }[] = [
@@ -93,6 +99,23 @@ export default async function DashboardPage({
           sleepTarget,
         )
       : [];
+  const nutritionDiary: DailyNutritionDiary[] =
+    aba === 'bem-estar' ? await listNutritionDiary(db, id, wellnessDays, BR_TZ_OFFSET_MINUTES, key) : [];
+
+  // Relatório diário (pedido do médico): uma linha por dia, mais recente
+  // primeiro, cruzando alimentação + água + sono num único "bateu a meta?".
+  const sleepByDay = new Map<string, SleepSession>();
+  for (const s of sleepSessions) sleepByDay.set(toLocalDayISO(s.end, BR_TZ_OFFSET_MINUTES), s);
+  const dailyReport = [...wellnessDays].reverse().map((day, idx) => {
+    const i = wellnessDays.length - 1 - idx;
+    const diary = nutritionDiary[i];
+    const water = waterHistory[i];
+    return { day, diary, water, sleep: sleepByDay.get(day) ?? null };
+  });
+  const hasAnyWellnessData =
+    nutritionDiary.some((d) => d.entries.length > 0) ||
+    waterHistory.some((p) => p.consumedMl > 0) ||
+    sleepSessions.length > 0;
 
   // Campos das abas (form + histórico compartilham a mesma definição)
   const bodyFields = [
@@ -415,9 +438,9 @@ export default async function DashboardPage({
           <div className="space-y-6">
             <div className="flex items-start justify-between gap-4 rounded-[12px] border border-secondary/25 bg-secondary/[0.06] p-5">
               <p className="text-sm text-ink-muted">
-                Água e sono que o paciente registrou pelo Telegram (<code className="font-mono-data">/agua</code>,{' '}
-                <code className="font-mono-data">/dormi</code>, <code className="font-mono-data">/acordei</code>) —
-                últimos {WELLNESS_HISTORY_DAYS} dias.
+                Alimentação, água e sono que o paciente registrou pelo Telegram (fotos do prato,{' '}
+                <code className="font-mono-data">/agua</code>, <code className="font-mono-data">/dormi</code>,{' '}
+                <code className="font-mono-data">/acordei</code>) — últimos {WELLNESS_HISTORY_DAYS} dias.
               </p>
               <Link
                 href={`/patients/${id}`}
@@ -426,7 +449,35 @@ export default async function DashboardPage({
                 ⚙️ Editar metas
               </Link>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+              <MetricCard
+                label="Kcal"
+                points={nutritionDiary.map((d) => ({ measuredAt: new Date(`${d.day}T12:00:00Z`), value: d.progress.consumed.kcal }))}
+                target={nutritionGoal?.values.kcal}
+                targetLabel={nutritionGoal?.values.kcal !== undefined ? doctorLabel : undefined}
+              />
+              <MetricCard
+                label="Proteína"
+                unit="g"
+                points={nutritionDiary.map((d) => ({ measuredAt: new Date(`${d.day}T12:00:00Z`), value: d.progress.consumed.protein }))}
+                target={nutritionGoal?.values.protein}
+                targetLabel={nutritionGoal?.values.protein !== undefined ? doctorLabel : undefined}
+              />
+              <MetricCard
+                label="Carbo"
+                unit="g"
+                points={nutritionDiary.map((d) => ({ measuredAt: new Date(`${d.day}T12:00:00Z`), value: d.progress.consumed.carbs }))}
+                target={nutritionGoal?.values.carbs}
+                targetLabel={nutritionGoal?.values.carbs !== undefined ? doctorLabel : undefined}
+              />
+              <MetricCard
+                label="Gordura"
+                unit="g"
+                points={nutritionDiary.map((d) => ({ measuredAt: new Date(`${d.day}T12:00:00Z`), value: d.progress.consumed.fat }))}
+                target={nutritionGoal?.values.fat}
+                targetLabel={nutritionGoal?.values.fat !== undefined ? doctorLabel : undefined}
+              />
               <MetricCard
                 label="Água"
                 unit="ml"
@@ -446,12 +497,107 @@ export default async function DashboardPage({
                 }
               />
             </div>
-            {waterHistory.every((p) => p.consumedMl === 0) && sleepSessions.length === 0 && (
+
+            {!hasAnyWellnessData ? (
               <p className="text-sm text-ink-muted">
-                Ainda não há registros de água ou sono. O paciente precisa vincular o Telegram (ficha do
-                paciente) e usar os comandos <code className="font-mono-data">/agua</code>,{' '}
-                <code className="font-mono-data">/dormi</code> e <code className="font-mono-data">/acordei</code>.
+                Ainda não há registros de alimentação, água ou sono. O paciente precisa vincular o
+                Telegram (ficha do paciente) e enviar fotos do prato ou usar os comandos{' '}
+                <code className="font-mono-data">/agua</code>, <code className="font-mono-data">/dormi</code> e{' '}
+                <code className="font-mono-data">/acordei</code>.
               </p>
+            ) : (
+              <div>
+                <h3 className="text-sm font-semibold text-ink">
+                  Relatório diário <span className="font-normal text-ink-muted">· bateu a meta?</span>
+                </h3>
+                <p className="mt-1 text-xs text-ink-muted">
+                  ✓ dentro de ~10% da meta · ✗ fora dessa faixa · — sem meta definida ou sem registro
+                  nesse dia. Apoio visual, a interpretação é do médico.
+                </p>
+                <div className="mt-3 overflow-x-auto rounded-[10px] border border-ink/10">
+                  <table className="w-full min-w-[720px] text-left text-xs">
+                    <thead className="bg-surface text-ink-muted">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">Dia</th>
+                        <th className="px-3 py-2 font-medium">Kcal</th>
+                        <th className="px-3 py-2 font-medium">Proteína</th>
+                        <th className="px-3 py-2 font-medium">Carbo</th>
+                        <th className="px-3 py-2 font-medium">Gordura</th>
+                        <th className="px-3 py-2 font-medium">Água</th>
+                        <th className="px-3 py-2 font-medium">Sono</th>
+                        <th className="px-3 py-2 font-medium">Refeições</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dailyReport.map((row) => {
+                        const hasFood = (row.diary?.entries.length ?? 0) > 0;
+                        const c = row.diary?.progress.consumed;
+                        const g = row.diary?.progress.goal;
+                        const hasWater = (row.water?.consumedMl ?? 0) > 0;
+                        return (
+                          <tr key={row.day} className="border-t border-ink/10 text-ink">
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              {new Date(`${row.day}T12:00:00Z`).toLocaleDateString('pt-BR', {
+                                day: '2-digit',
+                                month: '2-digit',
+                              })}
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              {hasFood ? Math.round(c!.kcal) : '—'}{' '}
+                              <GoalHitBadge status={classifyDailyStatus(hasFood, c?.kcal ?? 0, g?.kcal)} />
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              {hasFood ? `${Math.round(c!.protein)}g` : '—'}{' '}
+                              <GoalHitBadge status={classifyDailyStatus(hasFood, c?.protein ?? 0, g?.protein)} />
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              {hasFood ? `${Math.round(c!.carbs)}g` : '—'}{' '}
+                              <GoalHitBadge status={classifyDailyStatus(hasFood, c?.carbs ?? 0, g?.carbs)} />
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              {hasFood ? `${Math.round(c!.fat)}g` : '—'}{' '}
+                              <GoalHitBadge status={classifyDailyStatus(hasFood, c?.fat ?? 0, g?.fat)} />
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              {hasWater ? `${row.water!.consumedMl}ml` : '—'}{' '}
+                              <GoalHitBadge status={classifyDailyStatus(hasWater, row.water?.consumedMl ?? 0, row.water?.goalMl)} />
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              {row.sleep ? (
+                                <>
+                                  {(row.sleep.durationMinutes / 60).toFixed(1)}h{' '}
+                                  <GoalHitBadge status={row.sleep.quality === 'boa' ? 'bateu' : 'nao-bateu'} />
+                                </>
+                              ) : (
+                                <GoalHitBadge status="sem-registro" />
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              {row.diary && row.diary.entries.length > 0 ? (
+                                <details>
+                                  <summary className="cursor-pointer text-brand">
+                                    {row.diary.entries.length} refeição(ões)
+                                  </summary>
+                                  <ul className="mt-1 space-y-1 text-ink-muted">
+                                    {row.diary.entries.map((entry) => (
+                                      <li key={entry.id}>
+                                        {entry.eatenAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} ·{' '}
+                                        {entry.values.itemsLabel ?? 'sem descrição'} · ~{Math.round(entry.values.kcal)} kcal
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </details>
+                              ) : (
+                                <span className="text-ink-muted">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             )}
           </div>
         )}

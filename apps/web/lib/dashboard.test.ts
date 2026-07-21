@@ -14,6 +14,9 @@ import {
   classifyImc,
   IMC_CATEGORIES,
   lastNDaysISO,
+  toLocalDayISO,
+  classifyGoalHit,
+  classifyDailyStatus,
 } from './dashboard';
 
 describe('computeTrend (E11/11.6)', () => {
@@ -222,5 +225,48 @@ describe('lastNDaysISO — janela de dias p/ o gráfico de bem-estar (2026-07-20
 
   it('days=1 devolve só o dia de hoje', () => {
     expect(lastNDaysISO(new Date('2026-07-15T12:00:00Z'), 1, -180)).toEqual(['2026-07-15']);
+  });
+
+  it('toLocalDayISO é a mesma aritmética usada internamente (consistência)', () => {
+    expect(toLocalDayISO(new Date('2026-07-15T02:00:00Z'), -180)).toBe('2026-07-14');
+    expect(toLocalDayISO(new Date('2026-07-15T12:00:00Z'), -180)).toBe('2026-07-15');
+  });
+});
+
+describe('classifyGoalHit — relatório diário "bateu/não bateu a meta" (2026-07-20)', () => {
+  it('sem meta (null/undefined/zero/negativa) ⇒ sem-meta', () => {
+    expect(classifyGoalHit(500, null)).toBe('sem-meta');
+    expect(classifyGoalHit(500, undefined)).toBe('sem-meta');
+    expect(classifyGoalHit(500, 0)).toBe('sem-meta');
+    expect(classifyGoalHit(500, -100)).toBe('sem-meta');
+  });
+
+  it('dentro da tolerância padrão (10%) ⇒ bateu, incl. limite exato', () => {
+    expect(classifyGoalHit(2000, 2000)).toBe('bateu'); // exato
+    expect(classifyGoalHit(2100, 2000)).toBe('bateu'); // +5%
+    expect(classifyGoalHit(1900, 2000)).toBe('bateu'); // -5%
+    expect(classifyGoalHit(2200, 2000)).toBe('bateu'); // +10% — limite inclusivo
+  });
+
+  it('fora da tolerância (acima ou abaixo) ⇒ nao-bateu', () => {
+    expect(classifyGoalHit(2201, 2000)).toBe('nao-bateu');
+    expect(classifyGoalHit(1799, 2000)).toBe('nao-bateu');
+  });
+
+  it('aceita uma tolerância customizada', () => {
+    expect(classifyGoalHit(2050, 2000, 5)).toBe('bateu'); // 2.5% ≤ 5%
+    expect(classifyGoalHit(2200, 2000, 5)).toBe('nao-bateu'); // 10% > 5%
+  });
+});
+
+describe('classifyDailyStatus — distingue "sem registro" de "registrou e não bateu" (2026-07-20)', () => {
+  it('sem dado (hasData=false) ⇒ sem-registro, mesmo com meta definida', () => {
+    expect(classifyDailyStatus(false, 0, 2000)).toBe('sem-registro');
+  });
+
+  it('com dado, delega para classifyGoalHit (bateu/não-bateu/sem-meta)', () => {
+    expect(classifyDailyStatus(true, 2000, 2000)).toBe('bateu');
+    expect(classifyDailyStatus(true, 3000, 2000)).toBe('nao-bateu');
+    expect(classifyDailyStatus(true, 2000, null)).toBe('sem-meta');
   });
 });

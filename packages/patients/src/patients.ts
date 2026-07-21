@@ -960,15 +960,9 @@ export async function listFoodLogByDay(
  * a meta vigente naquele dia. Sem meta ⇒ `goal`/`remaining` = null (não inventa
  * alvo — ADR-015).
  */
-export async function sumFoodLogForDay(
-  db: SqlExecutor,
-  patientId: string,
-  dayISO: string,
-  tzOffsetMinutes: number,
-  key: Buffer,
-): Promise<DailyProgress> {
-  const entries = await listFoodLogByDay(db, patientId, dayISO, tzOffsetMinutes, key);
-  const consumed: NutritionGoalValues = entries.reduce(
+/** Soma kcal/macros de um conjunto de entradas do diário — puro, sem I/O. */
+function sumNutrition(entries: readonly FoodLogEntry[]): Pick<NutritionGoalValues, 'kcal' | 'protein' | 'carbs' | 'fat'> {
+  return entries.reduce(
     (acc, e) => ({
       kcal: acc.kcal + (Number(e.values.kcal) || 0),
       protein: acc.protein + (Number(e.values.protein) || 0),
@@ -977,10 +971,14 @@ export async function sumFoodLogForDay(
     }),
     { kcal: 0, protein: 0, carbs: 0, fat: 0 },
   );
+}
 
-  const goal = await loadCurrentNutritionGoal(db, patientId, key, dayISO);
-  const goalValues = goal?.values ?? null;
-  const remaining: NutritionGoalValues | null = goalValues
+/** Meta menos consumo por macro — null se não há meta vigente (não inventa alvo — ADR-015). */
+function remainingOf(
+  consumed: Pick<NutritionGoalValues, 'kcal' | 'protein' | 'carbs' | 'fat'>,
+  goalValues: NutritionGoalValues | null,
+): NutritionGoalValues | null {
+  return goalValues
     ? {
         kcal: goalValues.kcal - consumed.kcal,
         protein: goalValues.protein - consumed.protein,
@@ -988,8 +986,54 @@ export async function sumFoodLogForDay(
         fat: goalValues.fat - consumed.fat,
       }
     : null;
+}
 
-  return { day: dayISO, consumed, goal: goalValues, remaining };
+export async function sumFoodLogForDay(
+  db: SqlExecutor,
+  patientId: string,
+  dayISO: string,
+  tzOffsetMinutes: number,
+  key: Buffer,
+): Promise<DailyProgress> {
+  const entries = await listFoodLogByDay(db, patientId, dayISO, tzOffsetMinutes, key);
+  const consumed = sumNutrition(entries);
+  const goal = await loadCurrentNutritionGoal(db, patientId, key, dayISO);
+  const goalValues = goal?.values ?? null;
+  return { day: dayISO, consumed, goal: goalValues, remaining: remainingOf(consumed, goalValues) };
+}
+
+/**
+ * Diário de alimentação por dia (pedido do médico, 2026-07-20): para cada dia
+ * informado, as entradas registradas (o "histórico" — hora, itens, kcal/macros)
+ * MAIS o progresso agregado (mesma forma de {@link DailyProgress}) — insumo do
+ * relatório diário "bateu/não bateu a meta" no dashboard.
+ */
+export interface DailyNutritionDiary {
+  readonly day: string;
+  readonly entries: readonly FoodLogEntry[];
+  readonly progress: DailyProgress;
+}
+
+export async function listNutritionDiary(
+  db: SqlExecutor,
+  patientId: string,
+  daysISO: readonly string[],
+  tzOffsetMinutes: number,
+  key: Buffer,
+): Promise<DailyNutritionDiary[]> {
+  const out: DailyNutritionDiary[] = [];
+  for (const day of daysISO) {
+    const entries = await listFoodLogByDay(db, patientId, day, tzOffsetMinutes, key);
+    const consumed = sumNutrition(entries);
+    const goal = await loadCurrentNutritionGoal(db, patientId, key, day);
+    const goalValues = goal?.values ?? null;
+    out.push({
+      day,
+      entries,
+      progress: { day, consumed, goal: goalValues, remaining: remainingOf(consumed, goalValues) },
+    });
+  }
+  return out;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

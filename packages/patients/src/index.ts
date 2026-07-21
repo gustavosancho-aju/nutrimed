@@ -28,6 +28,7 @@ export {
   updateFoodLogEntryValues,
   listFoodLogByDay,
   sumFoodLogForDay,
+  listNutritionDiary,
   // Água + sono via Telegram (2026-07-20)
   addWaterLog,
   listWaterLogByDay,
@@ -56,6 +57,7 @@ export {
   type FoodLogEntry,
   type FoodLogInput,
   type DailyProgress,
+  type DailyNutritionDiary,
   type WaterLogEntry,
   type WaterProgress,
   type SleepEventKind,

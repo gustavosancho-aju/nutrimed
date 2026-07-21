@@ -155,20 +155,63 @@ export function computeGoalGap(current: number, goal: number): GoalGap | null {
   return { pct, label };
 }
 
-// ── Bem-estar (água/sono via Telegram, 2026-07-20) — janela de dias p/ o gráfico ──
+// ── Bem-estar (água/sono/alimentação via Telegram, 2026-07-20) — dias e metas ──
 
 /**
- * Últimos `days` dias LOCAIS (mais antigo primeiro, ISO `YYYY-MM-DD`), dado o
- * offset do fuso em minutos — mesma aritmética do bot de Telegram (BR = -180).
- * `now` explícito (sem relógio implícito), mesmo princípio de {@link computeAge}.
+ * Dia LOCAL (ISO `YYYY-MM-DD`) de um instante, dado o offset do fuso em
+ * minutos — mesma aritmética do bot de Telegram (BR = -180).
+ */
+export function toLocalDayISO(date: Date, tzOffsetMinutes: number): string {
+  return new Date(date.getTime() + tzOffsetMinutes * 60_000).toISOString().slice(0, 10);
+}
+
+/**
+ * Últimos `days` dias LOCAIS (mais antigo primeiro). `now` explícito (sem
+ * relógio implícito), mesmo princípio de {@link computeAge}.
  */
 export function lastNDaysISO(now: Date, days: number, tzOffsetMinutes: number): string[] {
-  const localNowMs = now.getTime() + tzOffsetMinutes * 60_000;
   const out: string[] = [];
   for (let i = days - 1; i >= 0; i -= 1) {
-    out.push(new Date(localNowMs - i * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));
+    out.push(toLocalDayISO(new Date(now.getTime() - i * 24 * 60 * 60 * 1000), tzOffsetMinutes));
   }
   return out;
+}
+
+/**
+ * "Bateu a meta" (relatório diário — pedido do médico, 2026-07-20): apoio
+ * visual por TOLERÂNCIA simétrica em torno do alvo, não julgamento clínico de
+ * direção (kcal/proteína/carbo/gordura/água têm metas de naturezas distintas —
+ * a favor de "acertar perto" em vez de exigir exatidão). Sem meta definida ⇒
+ * 'sem-meta' (nunca inventa alvo — mesmo princípio de {@link computeGoalGap}).
+ */
+export type GoalHitStatus = 'bateu' | 'nao-bateu' | 'sem-meta' | 'sem-registro';
+
+/** Tolerância padrão (%) — dentro disso do alvo conta como "bateu". */
+export const GOAL_HIT_TOLERANCE_PCT = 10;
+
+export function classifyGoalHit(
+  consumed: number,
+  goal: number | null | undefined,
+  tolerancePct: number = GOAL_HIT_TOLERANCE_PCT,
+): GoalHitStatus {
+  if (goal === null || goal === undefined || goal <= 0) return 'sem-meta';
+  const gapPct = (Math.abs(consumed - goal) / goal) * 100;
+  return gapPct <= tolerancePct ? 'bateu' : 'nao-bateu';
+}
+
+/**
+ * Status de um dia no relatório: "sem registro" (o paciente não logou nada
+ * naquele dia — 0 é AUSÊNCIA, não um valor real escolhido) é diferente de
+ * "registrou e não bateu". Sem isso, um dia sem uso do bot aparece como ✗,
+ * o que é enganoso — o paciente pode ter comido normalmente, só não registrou.
+ */
+export function classifyDailyStatus(
+  hasData: boolean,
+  consumed: number,
+  goal: number | null | undefined,
+  tolerancePct: number = GOAL_HIT_TOLERANCE_PCT,
+): GoalHitStatus {
+  return hasData ? classifyGoalHit(consumed, goal, tolerancePct) : 'sem-registro';
 }
 
 // ── Classificação de IMC (OMS) — apoio visual de apresentação, NÃO diagnóstico ──

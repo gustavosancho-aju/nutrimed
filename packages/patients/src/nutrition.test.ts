@@ -13,6 +13,7 @@ import {
   updateFoodLogEntryValues,
   listFoodLogByDay,
   sumFoodLogForDay,
+  listNutritionDiary,
 } from './patients';
 
 
@@ -215,6 +216,39 @@ describe('Nutrition Goals & Food Log (E12 — 12.2)', () => {
       const patientId = await createPatient(exec, userId, { name: 'Dia Vazio' }, KEY);
       const p = await sumFoodLogForDay(exec, patientId, '2026-07-01', BR, KEY);
       expect(p.consumed).toEqual({ kcal: 0, protein: 0, carbs: 0, fat: 0 });
+    });
+  });
+
+  describe('listNutritionDiary — histórico diário (pedido do médico, 2026-07-20)', () => {
+    it('um dia por entrada informada, com as entradas do dia E o progresso agregado', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Diário' }, KEY);
+      await setNutritionGoal(exec, patientId, userId, '2026-07-01', { kcal: 2000, protein: 150, carbs: 200, fat: 60 }, KEY);
+      await addFoodLogEntry(
+        exec,
+        patientId,
+        { eatenAt: new Date('2026-07-01T13:00:00Z'), values: { kcal: 600, protein: 40, carbs: 60, fat: 18, itemsLabel: 'arroz e frango' } },
+        KEY,
+      );
+      await addFoodLogEntry(
+        exec,
+        patientId,
+        { eatenAt: new Date('2026-07-01T20:00:00Z'), values: { kcal: 700, protein: 50, carbs: 70, fat: 22, itemsLabel: 'peixe assado' } },
+        KEY,
+      );
+
+      const diario = await listNutritionDiary(exec, patientId, ['2026-06-30', '2026-07-01'], BR, KEY);
+      expect(diario.map((d) => d.day)).toEqual(['2026-06-30', '2026-07-01']);
+
+      const vazio = diario[0]!;
+      expect(vazio.entries).toHaveLength(0);
+      expect(vazio.progress.consumed).toEqual({ kcal: 0, protein: 0, carbs: 0, fat: 0 });
+
+      const comEntradas = diario[1]!;
+      expect(comEntradas.entries).toHaveLength(2);
+      expect(comEntradas.entries.map((e) => e.values.itemsLabel)).toEqual(['arroz e frango', 'peixe assado']);
+      expect(comEntradas.progress.consumed).toEqual({ kcal: 1300, protein: 90, carbs: 130, fat: 40 });
+      expect(comEntradas.progress.goal).toEqual({ kcal: 2000, protein: 150, carbs: 200, fat: 60 });
+      expect(comEntradas.progress.remaining).toEqual({ kcal: 700, protein: 60, carbs: 70, fat: 20 });
     });
   });
 });
