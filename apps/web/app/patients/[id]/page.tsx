@@ -63,13 +63,13 @@ export default async function PatientPage({
   ];
 
   return (
-    <main className="mx-auto min-h-screen max-w-5xl p-8">
+    <main className="mx-auto min-h-screen max-w-[1880px] p-8">
       <header className="flex items-center justify-between border-b border-ink/10 pb-5">
         <div className="min-w-0">
           <Link href="/" className="text-sm text-ink-muted transition-colors hover:text-ink">
             ← Pacientes
           </Link>
-          <h1 className="mt-1 truncate font-display text-2xl font-semibold tracking-tight text-ink">
+          <h1 className="mt-1 truncate font-display text-2xl font-semibold tracking-tight text-ink xl:text-4xl">
             {patient.name}
           </h1>
         </div>
@@ -111,46 +111,78 @@ export default async function PatientPage({
         </p>
       )}
 
+      {/* Em monitor (xl): duas colunas — dados+histórico | Telegram+metas — para
+          aproveitar a largura com conteúdo, não só espaço em branco. */}
+      <div className="mt-8 grid items-start gap-8 xl:grid-cols-2">
+      <div className="space-y-8">
       {/* Dados do paciente */}
-      <section className="card-premium gold-hairline mt-8 p-7">
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm sm:grid-cols-4">
+      <section className="card-premium gold-hairline p-7 xl:p-9">
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm sm:grid-cols-4 xl:gap-y-6">
           <div>
-            <dt className="text-xs uppercase tracking-wide text-ink-muted">Idade</dt>
-            <dd className="mt-0.5 text-ink">{age !== null ? `${age} anos` : '—'}</dd>
+            <dt className="text-xs uppercase tracking-wide text-ink-muted xl:text-sm">Idade</dt>
+            <dd className="mt-0.5 text-ink xl:text-2xl xl:font-medium">{age !== null ? `${age} anos` : '—'}</dd>
           </div>
           <div>
-            <dt className="text-xs uppercase tracking-wide text-ink-muted">Nascimento</dt>
-            <dd className="mt-0.5 text-ink">{patient.birthDate ? formatDate(patient.birthDate) : '—'}</dd>
+            <dt className="text-xs uppercase tracking-wide text-ink-muted xl:text-sm">Nascimento</dt>
+            <dd className="mt-0.5 text-ink xl:text-2xl xl:font-medium">{patient.birthDate ? formatDate(patient.birthDate) : '—'}</dd>
           </div>
           <div>
-            <dt className="text-xs uppercase tracking-wide text-ink-muted">Telefone</dt>
-            <dd className="mt-0.5 text-ink">{patient.phone ?? '—'}</dd>
+            <dt className="text-xs uppercase tracking-wide text-ink-muted xl:text-sm">Telefone</dt>
+            <dd className="mt-0.5 text-ink xl:text-2xl xl:font-medium">{patient.phone ?? '—'}</dd>
           </div>
           <div>
-            <dt className="text-xs uppercase tracking-wide text-ink-muted">Profissão</dt>
-            <dd className="mt-0.5 text-ink">{patient.profession ?? '—'}</dd>
+            <dt className="text-xs uppercase tracking-wide text-ink-muted xl:text-sm">Profissão</dt>
+            <dd className="mt-0.5 text-ink xl:text-2xl xl:font-medium">{patient.profession ?? '—'}</dd>
           </div>
         </dl>
         {patient.goal && (
-          <div className="mt-5 rounded-[10px] border border-brand/20 bg-brand/5 p-4">
-            <p className="text-xs uppercase tracking-wide text-brand">Principal objetivo</p>
-            <p className="mt-1 font-medium text-ink">{patient.goal}</p>
+          <div className="mt-5 rounded-[10px] border border-brand/20 bg-brand/5 p-4 xl:p-5">
+            <p className="text-xs uppercase tracking-wide text-brand xl:text-sm">Principal objetivo</p>
+            <p className="mt-1 font-medium text-ink xl:text-2xl">{patient.goal}</p>
           </div>
         )}
         <div className="mt-5">
           <Link
             href={`/patients/${patient.id}/dashboard`}
-            className="inline-flex items-center gap-2 rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+            className="inline-flex items-center gap-2 rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 xl:px-5 xl:py-2.5 xl:text-base"
           >
             📊 Dashboard de evolução
           </Link>
         </div>
       </section>
 
+      {/* Histórico de consultas */}
+      <section>
+        <h2 className="font-display text-base font-semibold text-ink xl:text-xl">Histórico de consultas</h2>
+        {consultations.length === 0 ? (
+          <p className="mt-3 text-sm text-ink-muted xl:text-base">Nenhuma consulta registrada ainda.</p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {consultations.map((c) => (
+              <li key={c.id}>
+                <Link
+                  href={`/consultations/${c.id}`}
+                  className="card-premium flex items-center justify-between gap-4 p-4 transition-colors hover:bg-surface-muted xl:p-5"
+                >
+                  <span className="text-sm font-medium text-ink xl:text-lg">{formatDate(c.createdAt)}</span>
+                  <span className="flex items-center gap-3">
+                    <span className="rounded-full border border-ink/10 px-2.5 py-0.5 text-[11px] text-ink-muted xl:text-sm">
+                      {STATUS_LABEL[c.status] ?? c.status}
+                    </span>
+                    <span aria-hidden className="text-ink-muted">→</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      </div>
+
       {/* Assistente no Telegram + metas nutricionais (E12/12.4) */}
-      <section className="card-premium gold-hairline mt-8 p-7">
-        <h2 className="font-display text-base font-semibold text-ink">Assistente no Telegram</h2>
-        <p className="mt-1 text-sm text-ink-muted">
+      <section className="card-premium gold-hairline p-7 xl:p-9">
+        <h2 className="font-display text-base font-semibold text-ink xl:text-xl">Assistente no Telegram</h2>
+        <p className="mt-1 text-sm text-ink-muted xl:text-base">
           Vincule o Telegram do paciente e defina as metas. Ele envia a foto do prato (/agua para
           água, /dormi e /acordei para o sono) e recebe o progresso frente às metas. O código de
           vínculo é o consentimento do paciente (revogável a qualquer momento).
@@ -160,9 +192,9 @@ export default async function PatientPage({
         </div>
 
         <div className="mt-6 border-t border-ink/10 pt-6">
-          <h3 className="text-sm font-semibold text-ink">Metas nutricionais</h3>
+          <h3 className="text-sm font-semibold text-ink xl:text-lg">Metas nutricionais</h3>
           {goal ? (
-            <p className="mt-1 text-xs text-ink-muted">
+            <p className="mt-1 text-xs text-ink-muted xl:text-base">
               Atuais (desde {formatDate(goal.effectiveFrom)}): ~{Math.round(goal.values.kcal)} kcal · P{' '}
               {Math.round(goal.values.protein)} g · C {Math.round(goal.values.carbs)} g · G{' '}
               {Math.round(goal.values.fat)} g
@@ -226,33 +258,7 @@ export default async function PatientPage({
           </form>
         </div>
       </section>
-
-      {/* Histórico de consultas */}
-      <section className="mt-8">
-        <h2 className="font-display text-base font-semibold text-ink">Histórico de consultas</h2>
-        {consultations.length === 0 ? (
-          <p className="mt-3 text-sm text-ink-muted">Nenhuma consulta registrada ainda.</p>
-        ) : (
-          <ul className="mt-3 space-y-2">
-            {consultations.map((c) => (
-              <li key={c.id}>
-                <Link
-                  href={`/consultations/${c.id}`}
-                  className="card-premium flex items-center justify-between gap-4 p-4 transition-colors hover:bg-surface-muted"
-                >
-                  <span className="text-sm font-medium text-ink">{formatDate(c.createdAt)}</span>
-                  <span className="flex items-center gap-3">
-                    <span className="rounded-full border border-ink/10 px-2.5 py-0.5 text-[11px] text-ink-muted">
-                      {STATUS_LABEL[c.status] ?? c.status}
-                    </span>
-                    <span aria-hidden className="text-ink-muted">→</span>
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      </div>
     </main>
   );
 }
