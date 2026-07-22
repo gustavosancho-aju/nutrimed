@@ -40,16 +40,36 @@ export class LabExtractorError extends Error {
 const DEFAULT_ENDPOINT = 'https://api.anthropic.com/v1/messages';
 const DEFAULT_MODEL = 'claude-haiku-4-5';
 
+/**
+ * Sinônimos/rótulos comuns em laudos de bioimpedância (InBody, Tanita etc.) que
+ * raramente usam o nome literal do campo — sem isso o modelo tende a "não ter
+ * certeza" e descartar o valor (efeito observado: laudo com dados, rascunho vazio).
+ */
+const FIELD_HINTS: Record<string, string> = {
+  peso: 'Peso / Weight',
+  massaMuscular: 'Massa Muscular Esquelética / Massa Magra / Skeletal Muscle Mass / SMM / FFM',
+  massaGordura: 'Massa de Gordura / Body Fat Mass / BFM',
+  cintura: 'Circunferência da Cintura / Perímetro Abdominal / Waist Circumference',
+  imc: 'IMC / BMI',
+  pgc: '% Gordura Corporal / Percentual de Gordura / PBF / Body Fat Percentage',
+  aguaCorporal: 'Água Corporal Total / Total Body Water / TBW (em litros)',
+  gorduraVisceral: 'Nível/Área de Gordura Visceral / Visceral Fat Level/Area (VFL/VFA)',
+  tmb: 'Taxa Metabólica Basal / Basal Metabolic Rate / BMR (kcal)',
+};
+
 function systemPrompt(kind: LaudoKind): string {
-  const fields = KNOWN_FIELDS[kind].join(', ');
+  const fields = KNOWN_FIELDS[kind]
+    .map((f) => (FIELD_HINTS[f] ? `${f} (${FIELD_HINTS[f]})` : f))
+    .join(', ');
   const tipo = kind === 'lab' ? 'exames laboratoriais' : 'composição corporal (bioimpedância)';
   return (
     `Você extrai dados de um laudo de ${tipo} para revisão por um médico. ` +
     `Leia o PDF e retorne APENAS um objeto JSON válido (sem cercas de código) no formato ` +
     `{"measuredAt":"YYYY-MM-DD"|null,"values":{${KNOWN_FIELDS[kind].map((f) => `"${f}":number|null`).join(',')}},"notes":"..."}. ` +
-    `Use SOMENTE estes campos: ${fields}. Inclua apenas os que estiver SEGURO de ter lido; ` +
-    `use null para os ausentes/ilegíveis. NÃO invente valores. Em "notes", aponte o que ficou ilegível. ` +
-    `Números no padrão internacional (ponto decimal).`
+    `Use SOMENTE estes campos (com seus sinônimos/rótulos usuais em laudos, entre parênteses): ${fields}. ` +
+    `O laudo pode usar qualquer um dos sinônimos/idioma listado para o mesmo campo — reconheça-os. ` +
+    `Inclua apenas os que estiver SEGURO de ter lido; use null para os ausentes/ilegíveis. NÃO invente valores. ` +
+    `Em "notes", aponte o que ficou ilegível. Números no padrão internacional (ponto decimal).`
   );
 }
 

@@ -11,6 +11,9 @@ const FIELDS: { name: keyof BodyGoal['values']; label: string; unit?: string }[]
   { name: 'massaGordura', label: 'Massa de Gordura', unit: 'kg' },
   { name: 'cintura', label: 'Cintura', unit: 'cm' },
   { name: 'pgc', label: 'PGC', unit: '%' },
+  { name: 'aguaCorporal', label: 'Água Corporal', unit: 'L' },
+  { name: 'gorduraVisceral', label: 'Gordura Visceral' },
+  { name: 'tmb', label: 'TMB', unit: 'kcal' },
 ];
 
 /** dd/mm/aaaa (pt-BR) — a data ISO vem do banco (effective_from). */

@@ -12,7 +12,17 @@ export type LaudoKind = 'body' | 'lab';
 
 /** Campos numéricos aceitos por tipo de laudo (whitelist — nada além disto entra). */
 export const KNOWN_FIELDS: Record<LaudoKind, readonly string[]> = {
-  body: ['peso', 'massaMuscular', 'massaGordura', 'cintura', 'imc', 'pgc'],
+  body: [
+    'peso',
+    'massaMuscular',
+    'massaGordura',
+    'cintura',
+    'imc',
+    'pgc',
+    'aguaCorporal',
+    'gorduraVisceral',
+    'tmb',
+  ],
   lab: ['ldl', 'hba1c', 'insulina'],
 };
 

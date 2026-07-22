@@ -88,6 +88,9 @@ export async function addMeasurementAction(formData: FormData): Promise<void> {
       cintura: parseDecimal(formData.get('cintura')),
       imc: parseDecimal(formData.get('imc')),
       pgc: parseDecimal(formData.get('pgc')),
+      aguaCorporal: parseDecimal(formData.get('aguaCorporal')),
+      gorduraVisceral: parseDecimal(formData.get('gorduraVisceral')),
+      tmb: parseDecimal(formData.get('tmb')),
     });
     rejectOutOfRange({ ...values });
     if (Object.keys(values).length > 0) {
@@ -153,6 +156,9 @@ export async function updateMeasurementAction(formData: FormData): Promise<void>
       cintura: parseDecimal(formData.get('cintura')),
       imc: parseDecimal(formData.get('imc')),
       pgc: parseDecimal(formData.get('pgc')),
+      aguaCorporal: parseDecimal(formData.get('aguaCorporal')),
+      gorduraVisceral: parseDecimal(formData.get('gorduraVisceral')),
+      tmb: parseDecimal(formData.get('tmb')),
     });
     rejectOutOfRange({ ...values });
     if (Object.keys(values).length === 0) {

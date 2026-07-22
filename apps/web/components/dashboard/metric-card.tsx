@@ -33,18 +33,28 @@ export function MetricCard({
   const trend = computeTrend(points);
 
   return (
-    <div className="card-premium p-5">
-      <p className="text-xs uppercase tracking-wide text-ink-muted">{label}</p>
+    <div className="card-premium p-5 xl:p-6">
+      <p className="text-xs uppercase tracking-wide text-ink-muted xl:text-sm">{label}</p>
       {trend === null ? (
-        <p className="mt-2 text-sm text-ink-muted">Sem medições.</p>
+        <p className="mt-2 text-sm text-ink-muted xl:text-base">Sem medições.</p>
       ) : (
         <>
-          <p className="mt-1 font-display text-3xl font-bold text-ink">
-            {fmt(trend.current)}
-            {unit && <span className="ml-1 text-base font-normal text-ink-muted">{unit}</span>}
+          <p className="mt-1 flex flex-wrap items-baseline gap-x-2">
+            <span className="font-display text-3xl font-bold text-ink xl:text-5xl">
+              {fmt(trend.current)}
+              {unit && (
+                <span className="ml-1 text-base font-normal text-ink-muted xl:text-xl">{unit}</span>
+              )}
+            </span>
+            {trend.previous !== null && (
+              <span className="text-sm text-ink-muted xl:text-lg">
+                <span aria-hidden>·</span> antes {fmt(trend.previous)}
+                {unit}
+              </span>
+            )}
           </p>
           {trend.delta !== null && (
-            <p className="mt-0.5 text-sm text-ink-muted">
+            <p className="mt-0.5 text-sm text-ink-muted xl:text-base">
               <span aria-hidden>{trend.delta > 0 ? '▲' : trend.delta < 0 ? '▼' : '–'}</span>{' '}
               {fmt(Math.abs(trend.delta))}
               {unit} vs. anterior
@@ -52,7 +62,7 @@ export function MetricCard({
             </p>
           )}
           {targetLabel && (
-            <p className="mt-1 flex items-center gap-1.5 text-[11px] text-ink-muted">
+            <p className="mt-1 flex items-center gap-1.5 text-[11px] text-ink-muted xl:text-sm">
               <span aria-hidden className="inline-block h-1.5 w-3 rounded-full bg-emerald-500/70" />
               {targetLabel}
             </p>
@@ -63,7 +73,7 @@ export function MetricCard({
               // (a direção desejada varia por métrica; o médico interpreta).
               const gap = computeGoalGap(trend.current, target);
               return gap ? (
-                <p className="mt-1 flex items-center gap-1.5 text-[11px] text-ink-muted">
+                <p className="mt-1 flex items-center gap-1.5 text-[11px] text-ink-muted xl:text-sm">
                   <span aria-hidden className="inline-block h-0 w-3 border-t-2 border-dashed border-emerald-600/80" />
                   Meta {fmt(target)}
                   {unit ?? ''} · {gap.label}
@@ -72,11 +82,17 @@ export function MetricCard({
             })()}
           {points.length >= 1 && (
             <div className="mt-3">
-              <TrendChart points={points} unit={unit} band={band} target={target} />
+              <TrendChart
+                points={points}
+                unit={unit}
+                band={band}
+                target={target}
+                heightClass="h-16 xl:h-28"
+              />
             </div>
           )}
           {points.length === 1 && (
-            <p className="mt-2 text-[11px] text-ink-muted">
+            <p className="mt-2 text-[11px] text-ink-muted xl:text-xs">
               Ponto atual marcado. A linha de evolução se forma a partir da 2ª medição.
             </p>
           )}

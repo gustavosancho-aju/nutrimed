@@ -93,7 +93,7 @@ export default async function ConsultationPage({
   return (
     <main className="min-h-screen">
       <header className="surface-deep-gradient sticky top-0 z-10 border-b border-white/10">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+        <div className="mx-auto flex max-w-[1880px] items-center justify-between px-6 py-4">
           <div className="flex items-baseline gap-4">
             <h1 className="font-display text-2xl font-semibold tracking-tight text-white">
               NutriMed
@@ -147,7 +147,7 @@ export default async function ConsultationPage({
         <div className="gold-hairline absolute inset-x-0 bottom-0" />
       </header>
 
-      <div className="mx-auto max-w-7xl p-6">
+      <div className="mx-auto max-w-[1880px] p-6">
 
       {!authorized ? (
         <section className="card-premium gold-hairline mx-auto mt-14 max-w-md p-7">

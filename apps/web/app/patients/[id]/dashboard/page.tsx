@@ -125,6 +125,9 @@ export default async function DashboardPage({
     { name: 'cintura', label: 'Cintura', unit: 'cm' },
     { name: 'imc', label: 'IMC' },
     { name: 'pgc', label: 'PGC', unit: '%' },
+    { name: 'aguaCorporal', label: 'Água Corporal', unit: 'L' },
+    { name: 'gorduraVisceral', label: 'Gordura Visceral' },
+    { name: 'tmb', label: 'TMB', unit: 'kcal' },
   ] as const;
   const labFields = [
     { name: 'ldl', label: 'LDL', unit: 'mg/dL' },
@@ -166,7 +169,7 @@ export default async function DashboardPage({
       : `Saudável ${HEALTHY_IMC.min}–${HEALTHY_IMC.max} · meta ~${TARGET_IMC}`;
 
   return (
-    <main className="mx-auto min-h-screen max-w-7xl p-8">
+    <main className="mx-auto min-h-screen max-w-[1880px] p-8 xl:text-lg">
       <header className="flex items-start justify-between gap-4 border-b border-ink/10 pb-5">
         <div>
           <Link href={`/patients/${id}`} className="text-sm text-ink-muted transition-colors hover:text-ink">
@@ -373,6 +376,26 @@ export default async function DashboardPage({
                 unit="%"
                 target={goal?.pgc}
                 targetLabel={goal?.pgc !== undefined ? doctorLabel : undefined}
+              />
+              <MetricCard
+                label="Água Corporal"
+                points={seriesOf(body, 'aguaCorporal')}
+                unit="L"
+                target={goal?.aguaCorporal}
+                targetLabel={goal?.aguaCorporal !== undefined ? doctorLabel : undefined}
+              />
+              <MetricCard
+                label="Gordura Visceral"
+                points={seriesOf(body, 'gorduraVisceral')}
+                target={goal?.gorduraVisceral}
+                targetLabel={goal?.gorduraVisceral !== undefined ? doctorLabel : undefined}
+              />
+              <MetricCard
+                label="TMB"
+                points={seriesOf(body, 'tmb')}
+                unit="kcal"
+                target={goal?.tmb}
+                targetLabel={goal?.tmb !== undefined ? doctorLabel : undefined}
               />
             </div>
             <MeasurementForm

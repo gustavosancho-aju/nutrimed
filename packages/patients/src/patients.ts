@@ -53,6 +53,12 @@ export interface BodyCompositionValues {
   readonly cintura?: number;
   readonly imc?: number;
   readonly pgc?: number;
+  /** Água corporal total (litros). */
+  readonly aguaCorporal?: number;
+  /** Nível/área de gordura visceral (escala do aparelho). */
+  readonly gorduraVisceral?: number;
+  /** Taxa metabólica basal (kcal). */
+  readonly tmb?: number;
 }
 
 export interface LabExamValues {
@@ -565,6 +571,9 @@ export interface BodyGoalValues {
   readonly massaGordura?: number;
   readonly cintura?: number;
   readonly pgc?: number;
+  readonly aguaCorporal?: number;
+  readonly gorduraVisceral?: number;
+  readonly tmb?: number;
 }
 
 export interface BodyGoal {

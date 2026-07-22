@@ -11,6 +11,9 @@ const BODY_FIELDS: MeasurementField[] = [
   { name: 'cintura', label: 'Cintura', unit: 'cm' },
   { name: 'imc', label: 'IMC' },
   { name: 'pgc', label: 'PGC', unit: '%' },
+  { name: 'aguaCorporal', label: 'Água Corporal', unit: 'L' },
+  { name: 'gorduraVisceral', label: 'Gordura Visceral' },
+  { name: 'tmb', label: 'TMB', unit: 'kcal' },
 ];
 const LAB_FIELDS: MeasurementField[] = [
   { name: 'ldl', label: 'LDL', unit: 'mg/dL' },

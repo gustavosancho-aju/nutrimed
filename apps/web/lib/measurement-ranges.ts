@@ -21,6 +21,9 @@ export const RANGES: Readonly<Record<string, Range>> = {
   cintura: { min: 30, max: 300, label: 'Cintura', unit: 'cm' },
   imc: { min: 8, max: 100, label: 'IMC' },
   pgc: { min: 1, max: 80, label: '% Gordura', unit: '%' },
+  aguaCorporal: { min: 1, max: 100, label: 'Água Corporal', unit: 'L' },
+  gorduraVisceral: { min: 1, max: 300, label: 'Gordura Visceral' },
+  tmb: { min: 300, max: 6000, label: 'TMB', unit: 'kcal' },
   // Exames laboratoriais fixos
   ldl: { min: 5, max: 1000, label: 'LDL', unit: 'mg/dL' },
   hba1c: { min: 2, max: 25, label: 'HbA1C', unit: '%' },
