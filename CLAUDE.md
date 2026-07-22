@@ -66,7 +66,7 @@ sinalizados, delta vs meta do paciente (E11) quando vinculado — rascunho edit�
 com fontes TACO em kbSources → painel 🩺 Diagnóstico → telemetria (custo/gate/
 latência/ruído/autonomia).
 
-## Monorepo (26 pacotes)
+## Monorepo (27 pacotes)
 
 ```
 apps/web                 Tela de consulta + ficha/dashboard + gateway WS + webhook do bot Telegram
@@ -81,6 +81,7 @@ packages/providers       4 interfaces NFR8 + fakes
 packages/stt-deepgram    Adapter Deepgram (WS nativo, keywords)
 packages/stt-openai      Adapter OpenAI Realtime (candidato B)
 packages/llm-anthropic   Adapter Claude (Haiku default, longForm, onUsage)
+packages/llm-kimi        Adapter Kimi/Moonshot (kimi-k3, 1M ctx, reasoning_effort low) — nota+relatório quando KIMI_API_KEY presente
 packages/session         ConsultationSession (retry/backoff, gate 1.4)
 packages/engines         E4: triggers + score/gate + rate-limit + dedup + pausa
 packages/kb              E5: namespaces isolados + ingestão versionada + Reasoner

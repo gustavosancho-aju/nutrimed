@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { generateNoteDraft, saveNote } from '@nutrimed/clinical-notes';
 import { AnthropicLlmProvider } from '@nutrimed/llm-anthropic';
+import { KimiLlmProvider } from '@nutrimed/llm-kimi';
 import { FakeLlmProvider, FakeTextCompleter, type ILlmProvider } from '@nutrimed/providers';
 import { getCurrentUser } from './auth';
 import { getDb } from './db';
@@ -17,6 +18,16 @@ import { toActionResult, type ActionResult } from './action-result';
  */
 
 function buildNoteLlm(): ILlmProvider {
+  // Kimi K3 assume os DOCUMENTOS LONGOS (decisão 2026-07-21): contexto de 1M
+  // tokens e provedor independente da Anthropic (resiliência ao apagão de
+  // créditos). Board ao vivo e visão seguem no Claude.
+  if (process.env.KIMI_API_KEY) {
+    return new KimiLlmProvider({
+      apiKey: process.env.KIMI_API_KEY,
+      personaId: 'aurelio',
+      longForm: true,
+    });
+  }
   if (process.env.ANTHROPIC_API_KEY) {
     return new AnthropicLlmProvider({
       apiKey: process.env.ANTHROPIC_API_KEY,

@@ -15,6 +15,7 @@ export type ActionErrorCode =
   | 'no-recall'
   | 'invalid-input'
   | 'not-found'
+  | 'ai-unavailable'
   | 'internal';
 
 export type ActionResult = { ok: true } | { ok: false; code: ActionErrorCode; detail?: string };
@@ -30,6 +31,8 @@ export const ACTION_ERROR_MESSAGES: Record<ActionErrorCode, string> = {
     'A transcrição não menciona alimentos consumidos — pergunte ao paciente o que ele comeu e gere novamente.',
   'invalid-input': 'Dados da requisição incompletos — recarregue a página e tente de novo.',
   'not-found': 'Consulta não encontrada.',
+  'ai-unavailable':
+    'O serviço de IA está indisponível no momento (limite de uso ou instabilidade do provedor) — os seus dados estão preservados; tente novamente em alguns minutos e, se persistir, contate o suporte.',
   internal: 'Falha inesperada ao iniciar a consulta ao vivo — tente novamente; se persistir, abra o Diagnóstico.',
 };
 
@@ -45,6 +48,15 @@ export function toActionResult(err: unknown): ActionResult {
       return { ok: false, code: 'stt-missing' };
     }
     if (/DEEPGRAM_API_KEY/.test(err.message)) return { ok: false, code: 'stt-missing' };
+    // Falha do provedor de IA (crédito esgotado, 429/529, instabilidade): o
+    // médico precisa saber que é o serviço de IA — não um bug do sistema.
+    if (
+      err.name === 'AnthropicLlmError' ||
+      err.name === 'KimiLlmError' ||
+      /credit balance|overloaded|rate.?limit/i.test(err.message)
+    ) {
+      return { ok: false, code: 'ai-unavailable', detail: err.message };
+    }
     return { ok: false, code: 'internal', detail: err.message };
   }
   return { ok: false, code: 'internal' };

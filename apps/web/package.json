@@ -23,6 +23,7 @@
     "@nutrimed/kb": "workspace:^",
     "@nutrimed/lab-import": "workspace:*",
     "@nutrimed/llm-anthropic": "workspace:^",
+    "@nutrimed/llm-kimi": "workspace:^",
     "@nutrimed/nutrition-report": "workspace:*",
     "@nutrimed/taco": "workspace:*",
     "@nutrimed/food-vision": "workspace:*",
