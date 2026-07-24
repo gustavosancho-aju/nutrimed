@@ -23,7 +23,7 @@
     "@nutrimed/telegram-link": "workspace:*"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.0",
+    "@electric-sql/pglite": "^0.5.4",
     "@types/node": "^22.0.0",
     "typescript": "^5.6.0"
   }
