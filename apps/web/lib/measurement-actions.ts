@@ -10,6 +10,7 @@ import {
   updateLabExam,
   softDeleteBodyComposition,
   softDeleteLabExam,
+  softDeleteFoodLogEntry,
   type BodyCompositionValues,
   type LabExamValues,
 } from '@nutrimed/patients';
@@ -194,4 +195,31 @@ export async function deleteMeasurementAction(formData: FormData): Promise<void>
 
   revalidatePath(`/patients/${patientId}/dashboard`);
   redirect(`/patients/${patientId}/dashboard?aba=${aba}`);
+}
+
+/**
+ * Exclusão (SOFT) de um registro alimentar do paciente pelo médico. NÃO é uma
+ * aprovação — o autorrelato já contava no dia; isto serve para remover o que
+ * está claramente errado (ex.: a visão leu peixe onde era frango e o paciente
+ * não corrigiu). A linha permanece para trilha/retenção (CJ-2).
+ */
+export async function deleteFoodLogAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect('/login');
+
+  const patientId = String(formData.get('patientId') ?? '');
+  const entryId = String(formData.get('entryId') ?? '');
+  if (!entryId) throw new Error('entryId ausente.');
+
+  const db = await getDb();
+  const key = getEncryptionKey();
+  const patient = await loadPatient(db, patientId, key);
+  if (!patient || patient.userId !== user.id) {
+    throw new Error('Paciente não encontrado para este médico.');
+  }
+
+  await softDeleteFoodLogEntry(db, patientId, entryId);
+
+  revalidatePath(`/patients/${patientId}/dashboard`);
+  redirect(`/patients/${patientId}/dashboard?aba=bem-estar`);
 }

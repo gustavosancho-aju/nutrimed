@@ -565,6 +565,9 @@ importers:
       '@nutrimed/food-vision':
         specifier: workspace:*
         version: link:../food-vision
+      '@nutrimed/nutrition-report':
+        specifier: workspace:*
+        version: link:../nutrition-report
       '@nutrimed/patients':
         specifier: workspace:*
         version: link:../patients

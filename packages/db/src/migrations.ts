@@ -487,4 +487,15 @@ CREATE INDEX IF NOT EXISTS patient_self_log_patient_kind_idx
   ON patient_self_log (patient_id, kind, logged_at);
 `,
   },
+  {
+    name: '0021_food_log_soft_delete',
+    sql: `
+-- O médico pode remover um registro alimentar claramente errado (ciclo de
+-- feedback 2026-07-24). SOFT-delete como na 0013: a linha PERMANECE para
+-- trilha/retenção (CJ-2 sem parecer), mas sai das somas, das listagens e do
+-- relatório nutricional. NÃO há fila de aprovação: o autorrelato do paciente
+-- conta no dia normalmente; o médico apenas corrige o que estiver errado.
+ALTER TABLE food_log_entry ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+`,
+  },
 ];

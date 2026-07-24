@@ -2,6 +2,7 @@ export {
   handleStart,
   handlePhoto,
   handleCorrection,
+  handleAte,
   handleToday,
   handleGoal,
   handleUpdate,

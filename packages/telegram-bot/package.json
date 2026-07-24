@@ -18,6 +18,7 @@
   "dependencies": {
     "@nutrimed/db": "workspace:*",
     "@nutrimed/food-vision": "workspace:*",
+    "@nutrimed/nutrition-report": "workspace:*",
     "@nutrimed/patients": "workspace:*",
     "@nutrimed/providers": "workspace:*",
     "@nutrimed/telegram-link": "workspace:*"

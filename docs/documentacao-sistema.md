@@ -167,6 +167,27 @@ Canal de acompanhamento opt-in: o paciente pareia por **código efêmero** (hash
 (Claude visão) estima nutrientes → compara com a meta vigente do dia → responde com disclaimer de
 estimativa (ADR-015). A foto não é persistida.
 
+**Registro por texto — `/comi` (2026-07-24):** além da foto, o paciente pode digitar o que comeu
+com as quantidades (`/comi 100g de arroz, 150g de frango grelhado`). O caminho é **determinístico
+de ponta a ponta**: `parseFoodText` interpreta o texto e a tabela **TACO** calcula os nutrientes
+(reusa `mapRecallToTaco`/`computeNutrition` do E13) — **sem visão e sem LLM nos números**. Com
+gramas informados sobra um único ponto de incerteza (o match na TACO), contra dois na foto
+(alimento **e** porção). Porção não informada é assumida e **sinalizada**; alimento sem match na
+TACO é sinalizado e **não entra na conta**. Registros gravam `source='telegram-texto'` e
+`model_version=taco-<versão>` para proveniência (NFR10).
+
+**Conferência do registro alimentar — decisão de produto (2026-07-24):** **não** existe fila de
+aprovação médica para o food log. O autorrelato alimentar é aproximado por natureza (como um
+diário de papel, que nenhum nutrólogo confere linha por linha), o volume tornaria o médico um
+digitador (~150 registros/paciente/mês) e confirmar item a item daria falsa precisão — o médico
+também não sabe os gramas reais. O gate de revisão médica **já existe na camada que importa**: a
+nota clínica e o Relatório Nutricional (E13) nascem como rascunho editável revisado pelo médico,
+então nada aproximado vira documento sem passar por ele. O que o dashboard faz é o que agrega
+valor clínico: sinaliza **origem** (📷 foto / ✍️ texto), **`~estimada`** quando a porção foi
+assumida, **itens fora da conta** e confiança baixa — e deixa o médico **remover** um registro
+claramente errado (soft-delete, migration 0021: sai das somas e do relatório, a linha permanece
+para trilha/retenção — CJ-2).
+
 **Uso em grupo (2026-07-11, em produção):** o canal pareado pode ser um **grupo** (paciente +
 nutrólogo + nutricionista) — os médicos acompanham as fotos e as respostas do bot em tempo real.
 Comandos aceitam a forma `/comando@RafaNutriBot`. Setup: privacy mode **OFF** no @BotFather,

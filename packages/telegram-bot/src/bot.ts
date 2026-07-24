@@ -19,6 +19,12 @@ import {
   resolvePatientByChat,
   redeemPairingCode,
 } from '@nutrimed/telegram-link';
+import {
+  parseFoodText,
+  mapRecallToTaco,
+  computeNutrition,
+  type MappedItem,
+} from '@nutrimed/nutrition-report';
 import type { IFoodEstimator, FoodImageInput, FoodEstimate, FoodConfidence } from '@nutrimed/food-vision';
 import type { ILlmProvider } from '@nutrimed/providers';
 
@@ -278,9 +284,10 @@ export async function handleStart(deps: BotDeps, chatId: string, arg?: string): 
     return {
       text:
         '✅ Canal ativado! Agora é só me enviar a foto do seu prato que eu estimo os nutrientes ' +
-        '(a legenda da foto me ajuda a identificar os alimentos). Use /agua para registrar água, ' +
-        '/dormi e /acordei para o sono, /hoje para ver seu progresso do dia, /meta para suas metas ' +
-        'e /corrigir se eu identificar algo errado.',
+        '(a legenda da foto me ajuda a identificar os alimentos). Se preferir digitar — ou se você ' +
+        'pesou a comida — use /comi 100g de arroz, 150g de frango: com as quantidades a conta fica ' +
+        'mais precisa. Também tenho /agua para água, /dormi e /acordei para o sono, /hoje para o ' +
+        'progresso do dia, /meta para suas metas e /corrigir se eu identificar algo errado.',
     };
   }
   const reason = { invalid: 'Código inválido.', expired: 'Código expirado.', consumed: 'Esse código já foi usado.' }[
@@ -448,6 +455,120 @@ export async function handleGoal(deps: BotDeps, chatId: string): Promise<BotRepl
   };
 }
 
+const TEXT_LOG_HELP =
+  'Diga o que você comeu e as quantidades. Ex.: /comi 100g de arroz, 150g de frango grelhado, 1 colher de azeite.';
+
+/** Uma linha por item registrado, com os gramas que entraram na conta. */
+function formatTextItems(mapped: readonly MappedItem[]): string {
+  return mapped
+    .filter((m) => m.nutrients !== null)
+    .map((m) => {
+      const grams = m.grams !== null ? `${m.grams} g` : '';
+      const estimated = m.gramsEstimated ? ' (~estimada)' : '';
+      const kcal = Math.round(m.nutrients?.kcal ?? 0);
+      return `• ${m.item.food} ${grams}${estimated} — ~${kcal} kcal`;
+    })
+    .join('\n');
+}
+
+/**
+ * `/comi <alimentos e quantidades>` — registro alimentar por TEXTO
+ * (2026-07-24). Caminho 100% determinístico: parser + tabela TACO, SEM visão e
+ * SEM LLM nos números. Conviver com a foto é de propósito — o paciente usa o
+ * que for mais prático, e quando ele informa os gramas o único ponto de
+ * incerteza que resta é o match na TACO (a foto chuta alimento E porção).
+ */
+export async function handleAte(deps: BotDeps, chatId: string, arg: string): Promise<BotReply> {
+  if (!(await isChannelAuthorized(deps.db, chatId))) return { text: NEEDS_PAIRING };
+  const patientId = await resolvePatientByChat(deps.db, chatId);
+  if (!patientId) return { text: NEEDS_PAIRING };
+
+  const text = arg.trim();
+  if (!text) return { text: TEXT_LOG_HELP };
+
+  const items = parseFoodText(text);
+  if (items.length === 0) {
+    return { text: `Não identifiquei alimentos nessa mensagem. ${TEXT_LOG_HELP}` };
+  }
+
+  const mapped = mapRecallToTaco(items);
+  const computation = computeNutrition(mapped);
+  if (computation.unmatched.length === items.length) {
+    return {
+      text:
+        'Não encontrei esses alimentos na tabela TACO, então não registrei nada. Tente nomes mais ' +
+        'simples (ex.: "arroz branco cozido", "frango grelhado") ou envie a foto do prato.',
+    };
+  }
+
+  const anyUncertain = mapped.some((m) => m.status === 'uncertain');
+  const confidence: FoodConfidence =
+    computation.unmatched.length > 0
+      ? 'low'
+      : computation.estimatedCount === 0 && !anyUncertain
+        ? 'high'
+        : 'medium';
+  const itemsLabel = mapped
+    .filter((m) => m.nutrients !== null)
+    .map((m) => (m.grams !== null ? `${m.item.food} ${m.grams} g` : m.item.food))
+    .join(', ')
+    .slice(0, 200);
+  const provenance = `taco-${computation.tacoVersion}`;
+
+  const now = clock(deps);
+  await addFoodLogEntry(
+    deps.db,
+    patientId,
+    {
+      eatenAt: now,
+      source: 'telegram-texto',
+      values: {
+        kcal: computation.totals.kcal ?? 0,
+        protein: computation.totals.protein ?? 0,
+        carbs: computation.totals.carbs ?? 0,
+        fat: computation.totals.fat ?? 0,
+        confidence,
+        itemsLabel,
+        ...(computation.estimatedCount > 0 ? { portionsEstimated: true } : {}),
+        ...(computation.unmatched.length > 0
+          ? { unmatchedItems: computation.unmatched.map((i) => i.food) }
+          : {}),
+      },
+      modelVersion: provenance,
+    },
+    deps.key,
+    { action: 'telegram-bot-texto', modelVersion: provenance },
+  );
+
+  const t = computation.totals;
+  const total =
+    `Total pela tabela TACO: ~${Math.round(t.kcal ?? 0)} kcal · ` +
+    `P ${Math.round(t.protein ?? 0)} g · C ${Math.round(t.carbs ?? 0)} g · G ${Math.round(t.fat ?? 0)} g`;
+  const estimatedWarning =
+    computation.estimatedCount > 0
+      ? `⚠️ Você não informou a quantidade de ${computation.estimatedCount} item(ns) — assumi uma porção ` +
+        'padrão e marquei como estimada. Informar os gramas deixa a conta bem mais precisa.'
+      : null;
+  const unmatchedWarning =
+    computation.unmatched.length > 0
+      ? `❓ Não encontrei na tabela TACO: ${computation.unmatched.map((i) => i.food).join(', ')} — ` +
+        'esses itens NÃO entraram na conta.'
+      : null;
+
+  const progress = await sumFoodLogForDay(deps.db, patientId, localDayISO(now, tz(deps)), tz(deps), deps.key);
+  const orientation = await buildOrientation(deps.llm, progress);
+  return {
+    text: compose([
+      `✍️ Registrei o que você digitou:\n${formatTextItems(mapped)}\n${total}`,
+      estimatedWarning,
+      unmatchedWarning,
+      formatProgress(progress),
+      orientation,
+      DISCLAIMER,
+    ]),
+  };
+}
+
 /**
  * `/agua <quantidade>` — registra água consumida (pedido do médico,
  * 2026-07-20). Sem estimativa por IA: o paciente informa o valor, o CÓDIGO
@@ -539,6 +660,8 @@ export async function handleUpdate(deps: BotDeps, update: BotUpdate): Promise<Bo
   if (matchCommand(text, 'meta') !== null) return handleGoal(deps, update.chatId);
   const corrigir = matchCommand(text, 'corrigir');
   if (corrigir !== null) return handleCorrection(deps, update.chatId, corrigir);
+  const comi = matchCommand(text, 'comi');
+  if (comi !== null) return handleAte(deps, update.chatId, comi);
   const agua = matchCommand(text, 'agua');
   if (agua !== null) return handleWater(deps, update.chatId, agua);
   const dormi = matchCommand(text, 'dormi');
@@ -547,7 +670,8 @@ export async function handleUpdate(deps: BotDeps, update: BotUpdate): Promise<Bo
   if (acordei !== null) return handleSleepEnd(deps, update.chatId, acordei || undefined);
   return {
     text:
-      'Não entendi. Envie a foto do seu prato, ou use /hoje, /meta, /corrigir (ajusta o último prato), ' +
-      '/agua, /dormi e /acordei. Se ainda não vinculou, use /start CÓDIGO.',
+      'Não entendi. Envie a foto do seu prato ou use /comi para digitar o que comeu com as ' +
+      'quantidades (ex.: /comi 100g de arroz). Também tenho /hoje, /meta, /corrigir (ajusta o ' +
+      'último prato), /agua, /dormi e /acordei. Se ainda não vinculou, use /start CÓDIGO.',
   };
 }

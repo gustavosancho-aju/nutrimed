@@ -2,7 +2,13 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomBytes } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 import { runMigrations, type SqlExecutor , pgliteExecutor } from '@nutrimed/db';
-import { setNutritionGoal, sumFoodLogForDay, sumWaterForDay } from '@nutrimed/patients';
+import {
+  setNutritionGoal,
+  sumFoodLogForDay,
+  sumWaterForDay,
+  listFoodLogByDay,
+  softDeleteFoodLogEntry,
+} from '@nutrimed/patients';
 import { createPairingCode, redeemPairingCode } from '@nutrimed/telegram-link';
 import { FakeFoodEstimator, type FoodImageInput } from '@nutrimed/food-vision';
 import { FakeLlmProvider, type ILlmProvider } from '@nutrimed/providers';
@@ -10,6 +16,7 @@ import {
   handleStart,
   handlePhoto,
   handleCorrection,
+  handleAte,
   handleToday,
   handleGoal,
   handleUpdate,
@@ -252,6 +259,109 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
       const r = await handlePhoto(depsErr, 'chat-ia-erro', IMAGE);
       expect(r.text).toMatch(/kcal/);
       expect(r.text).toContain('não substitui');
+    });
+  });
+
+  describe('/comi — registro alimentar por texto (2026-07-24)', () => {
+    it('gramas informados: calcula pela TACO, registra e soma no dia — SEM usar visão', async () => {
+      const patientId = await pairNewChat('chat-comi');
+      // estimator null prova que o caminho é determinístico (não passa pela visão)
+      const r = await handleAte({ ...deps, estimator: null }, 'chat-comi', '100g de arroz');
+
+      expect(r.text).toMatch(/registrei/i);
+      expect(r.text).toContain('tabela TACO');
+      expect(r.text).toContain('não substitui'); // disclaimer segue obrigatório (ADR-015)
+
+      const progress = await sumFoodLogForDay(exec, patientId, '2026-07-01', -180, KEY);
+      expect(progress.consumed.kcal).toBeGreaterThan(0);
+
+      const [entry] = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+      expect(entry?.source).toBe('telegram-texto');
+      expect(entry?.modelVersion).toMatch(/^taco-/); // proveniência: versão da TACO
+      expect(entry?.values.confidence).toBe('high'); // quantidade explícita ⇒ alta
+      expect(entry?.values.portionsEstimated).toBeUndefined();
+    });
+
+    it('vários itens numa mensagem', async () => {
+      const patientId = await pairNewChat('chat-comi-multi');
+      const r = await handleAte(deps, 'chat-comi-multi', '100g de arroz, 150g de frango grelhado');
+      expect(r.text).toContain('arroz');
+      expect(r.text).toContain('frango');
+
+      const [entry] = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+      expect(entry?.values.itemsLabel).toContain('arroz');
+    });
+
+    it('sem quantidade: assume porção, SINALIZA na resposta e no registro', async () => {
+      const patientId = await pairNewChat('chat-comi-sem-qtd');
+      const r = await handleAte(deps, 'chat-comi-sem-qtd', 'arroz');
+      expect(r.text).toMatch(/não informou a quantidade/i);
+      expect(r.text).toContain('~estimada');
+
+      const [entry] = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+      expect(entry?.values.portionsEstimated).toBe(true);
+      expect(entry?.values.confidence).not.toBe('high');
+    });
+
+    it('nada reconhecível na TACO: NÃO registra e orienta', async () => {
+      const patientId = await pairNewChat('chat-comi-nada');
+      const r = await handleAte(deps, 'chat-comi-nada', 'xyzabc qwerty');
+      expect(r.text).toMatch(/não encontrei|não registrei/i);
+
+      const entries = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+      expect(entries).toHaveLength(0);
+    });
+
+    it('sem argumento: explica o formato', async () => {
+      await pairNewChat('chat-comi-vazio');
+      const r = await handleAte(deps, 'chat-comi-vazio', '');
+      expect(r.text).toMatch(/quantidades/i);
+    });
+
+    it('canal não pareado: exige vínculo antes de registrar', async () => {
+      const r = await handleAte(deps, 'chat-comi-sem-par', '100g de arroz');
+      expect(r.text).toMatch(/não está ativo/i);
+    });
+
+    it('foto continua funcionando junto com o texto (os dois caminhos coexistem)', async () => {
+      const patientId = await pairNewChat('chat-comi-e-foto');
+      await handleAte(deps, 'chat-comi-e-foto', '100g de arroz');
+      await handlePhoto(deps, 'chat-comi-e-foto', IMAGE, 'tg-coexiste');
+
+      const entries = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+      expect(entries).toHaveLength(2);
+      expect(entries.map((e) => e.source).sort()).toEqual(['telegram', 'telegram-texto']);
+    });
+  });
+
+  describe('exclusão pelo médico (soft-delete, migration 0021)', () => {
+    it('registro excluído sai das somas e das listagens, mas a linha permanece', async () => {
+      const patientId = await pairNewChat('chat-del');
+      await handleAte(deps, 'chat-del', '100g de arroz');
+      const [entry] = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+      expect(entry).toBeDefined();
+
+      await softDeleteFoodLogEntry(exec, patientId, entry!.id);
+
+      expect(await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY)).toHaveLength(0);
+      const progress = await sumFoodLogForDay(exec, patientId, '2026-07-01', -180, KEY);
+      expect(progress.consumed.kcal).toBe(0);
+
+      // trilha/retenção (CJ-2): a linha continua no banco, marcada
+      const raw = await exec.query<{ deleted_at: Date | null }>(
+        'SELECT deleted_at FROM food_log_entry WHERE id = $1',
+        [entry!.id],
+      );
+      expect(raw.rows[0]?.deleted_at).not.toBeNull();
+    });
+
+    it('excluir registro de outro paciente falha (isolamento)', async () => {
+      const patientA = await pairNewChat('chat-del-a');
+      await handleAte(deps, 'chat-del-a', '100g de arroz');
+      const [entry] = await listFoodLogByDay(exec, patientA, '2026-07-01', -180, KEY);
+      const patientB = await insertPatient(exec, userId);
+
+      await expect(softDeleteFoodLogEntry(exec, patientB, entry!.id)).rejects.toThrow(/não encontrado/i);
     });
   });
 

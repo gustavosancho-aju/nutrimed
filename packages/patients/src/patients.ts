@@ -706,6 +706,14 @@ export interface FoodLogValues {
   readonly fat: number;
   readonly confidence?: FoodConfidence;
   readonly itemsLabel?: string;
+  /**
+   * true quando ALGUMA porção foi assumida por não ter sido informada (registro
+   * por texto sem quantidade). O dashboard sinaliza "~estimada" — é o que merece
+   * o olho do médico, não o item que casou certo.
+   */
+  readonly portionsEstimated?: boolean;
+  /** Alimentos que a TACO não casou — sinalizados, nunca silenciados (ADR-015). */
+  readonly unmatchedItems?: readonly string[];
 }
 
 export interface FoodLogEntry {
@@ -888,7 +896,7 @@ export async function findLatestFoodLogEntry(
 ): Promise<FoodLogEntry | null> {
   const res = await db.query<FoodLogRow>(
     `SELECT id, patient_id, eaten_at, source, photo_ref, values_enc, model_version, created_at
-     FROM food_log_entry WHERE patient_id = $1
+     FROM food_log_entry WHERE patient_id = $1 AND deleted_at IS NULL
      ORDER BY eaten_at DESC, created_at DESC
      LIMIT 1`,
     [patientId],
@@ -916,7 +924,7 @@ export async function updateFoodLogEntryValues(
   const res = await db.query<{ id: string }>(
     `UPDATE food_log_entry
      SET values_enc = $3, model_version = COALESCE($4, model_version)
-     WHERE id = $1 AND patient_id = $2 RETURNING id`,
+     WHERE id = $1 AND patient_id = $2 AND deleted_at IS NULL RETURNING id`,
     [entryId, patientId, encryptField(JSON.stringify(values), key), modelVersion ?? null],
   );
   if (res.rows.length === 0) return false;
@@ -926,6 +934,33 @@ export async function updateFoodLogEntryValues(
     modelVersion: origin.modelVersion ?? modelVersion ?? 'human-edit',
   });
   return true;
+}
+
+/**
+ * SOFT-delete de um registro alimentar pelo MÉDICO: some das somas, listagens e
+ * do relatório, mas a linha permanece para trilha/retenção (CJ-2 — igual às
+ * medições em {@link softDeleteBodyComposition}). Serve para o caso "a IA leu
+ * peixe onde era frango e o paciente não corrigiu" — não é uma aprovação: o
+ * registro já contava no dia, o médico só remove o que está errado.
+ * Lança se a entrada não existe para este paciente (ou já foi excluída).
+ */
+export async function softDeleteFoodLogEntry(
+  db: SqlExecutor,
+  patientId: string,
+  entryId: string,
+  origin: WriteOrigin = { action: 'food-log-delete' },
+): Promise<void> {
+  const res = await db.query<{ id: string }>(
+    `UPDATE food_log_entry SET deleted_at = now()
+     WHERE id = $1 AND patient_id = $2 AND deleted_at IS NULL RETURNING id`,
+    [entryId, patientId],
+  );
+  if (res.rows.length === 0) throw new Error('Registro alimentar não encontrado para este paciente.');
+  await writeAudit(db, patientId, {
+    triggeredBy: origin.action,
+    kbSources: [],
+    modelVersion: origin.modelVersion ?? 'human-edit',
+  });
 }
 
 /**
@@ -957,7 +992,7 @@ export async function listFoodLogByDay(
   const res = await db.query<FoodLogRow>(
     `SELECT id, patient_id, eaten_at, source, photo_ref, values_enc, model_version, created_at
      FROM food_log_entry
-     WHERE patient_id = $1 AND eaten_at >= $2 AND eaten_at < $3
+     WHERE patient_id = $1 AND eaten_at >= $2 AND eaten_at < $3 AND deleted_at IS NULL
      ORDER BY eaten_at ASC, id ASC`,
     [patientId, start, end],
   );

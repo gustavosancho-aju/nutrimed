@@ -10,7 +10,7 @@ deploy e roadmap — a referência única do estado atual).
 **📋 Registro histórico do MVP (E1–E10): [`docs/IMPLEMENTATION-RECORD.md`](docs/IMPLEMENTATION-RECORD.md)**
 (rastreabilidade FR/NFR/ADR e evidências ao vivo do snapshot de 2026-06-11).
 
-## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-07-11, main @ b8f533d)
+## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-07-24, main)
 
 **9 de 10 épicos com núcleo implementado e verificado ao vivo** (falta E8 — vídeos).
 **E11 (Pacientes & Dashboard) COMPLETO** (4 fases + extras: faixa ideal/meta nos gráficos e
@@ -21,6 +21,19 @@ b8f533d, deployado e testado em prod):** grupo paciente+nutrólogo+nutricionista
 canal do paciente; comandos aceitam `/comando@RafaNutriBot`; setup = privacy mode OFF no
 @BotFather + re-adicionar o bot ao grupo + `/start CÓDIGO` no grupo (RUNBOOK passo 18c);
 1 chat por paciente (grupo OU privado); dado clínico em chat coletivo reforça CJ-12.
+**Água e sono pelo bot (2026-07-20):** `/agua`, `/dormi`, `/acordei` (migration 0020
+`patient_self_log`) — o paciente informa o valor, o CÓDIGO soma; sem IA nos números.
+**Registro alimentar por TEXTO (2026-07-24):** `/comi 100g de arroz, 150g de frango` — parser
+determinístico (`parseFoodText`) + tabela TACO, reusando `mapRecallToTaco`/`computeNutrition` do
+E13: **sem visão e sem LLM nos números**, `source='telegram-texto'`, `model_version=taco-<versão>`.
+Coexiste com a foto (o paciente escolhe caso a caso); com gramas explícitos a confiança nasce
+`high` e o único ponto de incerteza que resta é o match na TACO (a foto chuta alimento E porção).
+Porção não informada ⇒ assumida e SINALIZADA (`portionsEstimated`); item fora da TACO
+(`unmatchedItems`) NÃO entra na conta. **Decisão de produto:** NÃO existe fila de conferência do
+médico para o food log — autorrelato é aproximado por natureza e o gate de revisão médica já
+existe onde importa (nota clínica e relatório E13 nascem como rascunho editável). O dashboard
+sinaliza origem (📷/✍️), `~estimada` e itens fora da conta, e o médico pode **remover** um
+registro errado (soft-delete, migration 0021 — a linha permanece para trilha/CJ-2).
 **Rodada Transcrição Confiável + Autonomia (PR #1, 2026-07-03):** erros de server action tipados
 com mensagens pt-BR (`ActionResult`) · mimeType do MediaRecorder (Safari avisado) · status do
 pipeline no WS + watchdog · **transcript persistido cifrado** (nota sobrevive a deploy; migration
@@ -36,8 +49,8 @@ transcript pelo médico no fim da consulta** (migration 0010 `transcript_review`
 relatório passam a nascer da versão corrigida); (3) POC 2.5 pronta (adapter escolhe `keyterm` no
 nova-3 vs `keywords` no nova-2 + métricas de recall clínico + harness) — falta só o áudio real.
 **Brief técnico jurídico** entregue (`docs/architecture/project-decisions/brief-tecnico-juridico.md`).
-Suíte: **424 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS (26 pacotes) ·
-CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) verde. Migrations 0001–0010.
+Suíte: **593 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
+CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) verde. Migrations 0001–0021.
 Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 · RUNBOOK Fase 5 = canal Telegram.
 
 | Épico | Status | Épico | Status |
@@ -48,7 +61,7 @@ Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 
 | E4 Motores (gate/dedup/pausa) | ✅ núcleo | E9 Documentação Clínica | ✅ |
 | E5 RAG namespaces + Reasoner | ✅ núcleo | E10 Observabilidade & Piloto | ✅ núcleo |
 | E9 Documentação Clínica | ✅ | E11 Pacientes & Dashboard | ✅ completo (4 fases) |
-| E12 Bot de Telegram (foto→nutrição vs metas) | ✅ completo (9 stories + modo grupo) | E13 Relatório Nutricional (TACO) | ✅ completo (em produção) |
+| E12 Bot de Telegram (foto→nutrição vs metas) | ✅ completo (9 stories + grupo + água/sono + texto) | E13 Relatório Nutricional (TACO) | ✅ completo (em produção) |
 | Transcrição Confiável (léxico + revisão do médico + POC) | ✅ completo (falta áudio real p/ POC) | — | — |
 
 **Fluxo vivo:** login (`demo@nutrimed.test`/`nutrimed123`) → consulta → consentimento (default NEGA)

@@ -26,6 +26,7 @@ export {
   addFoodLogEntry,
   findLatestFoodLogEntry,
   updateFoodLogEntryValues,
+  softDeleteFoodLogEntry,
   listFoodLogByDay,
   sumFoodLogForDay,
   listNutritionDiary,

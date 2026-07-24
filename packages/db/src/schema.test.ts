@@ -53,6 +53,7 @@ describe('Migrations 0001 — schema base (AC1, AC3)', () => {
       '0018_board_final_review',
       '0019_user_theme',
       '0020_patient_self_log',
+      '0021_food_log_soft_delete',
     ]);
   });
 

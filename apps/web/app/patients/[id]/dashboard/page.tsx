@@ -36,6 +36,7 @@ import { MeasurementHistory } from '@/components/dashboard/measurement-history';
 import { CustomExamSettings } from '@/components/dashboard/custom-exam-settings';
 import { BodyGoalSettings } from '@/components/dashboard/body-goal-settings';
 import { GoalHitBadge } from '@/components/dashboard/goal-hit-badge';
+import { deleteFoodLogAction } from '@/lib/measurement-actions';
 
 type Aba = 'geral' | 'bioimpedancia' | 'exames' | 'bem-estar';
 const ABAS: { key: Aba; label: string }[] = [
@@ -603,9 +604,46 @@ export default async function DashboardPage({
                                   </summary>
                                   <ul className="mt-1 space-y-1 text-ink-muted">
                                     {row.diary.entries.map((entry) => (
-                                      <li key={entry.id}>
-                                        {entry.eatenAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} ·{' '}
-                                        {entry.values.itemsLabel ?? 'sem descrição'} · ~{Math.round(entry.values.kcal)} kcal
+                                      <li key={entry.id} className="flex flex-wrap items-center gap-x-1.5">
+                                        <span>
+                                          {entry.eatenAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                        {/* Origem: o médico precisa saber se o número veio da visão
+                                            (chuta alimento E porção) ou do texto com quantidades. */}
+                                        <span title={entry.source === 'telegram-texto' ? 'Digitado pelo paciente (cálculo pela tabela TACO)' : 'Estimado a partir da foto'}>
+                                          {entry.source === 'telegram-texto' ? '✍️' : '📷'}
+                                        </span>
+                                        <span>· {entry.values.itemsLabel ?? 'sem descrição'}</span>
+                                        <span>· ~{Math.round(entry.values.kcal)} kcal</span>
+                                        {entry.values.portionsEstimated && (
+                                          <span className="text-amber-600" title="O paciente não informou a quantidade de algum item — porção assumida">
+                                            ~estimada
+                                          </span>
+                                        )}
+                                        {entry.values.unmatchedItems && entry.values.unmatchedItems.length > 0 && (
+                                          <span
+                                            className="text-amber-600"
+                                            title={`Não encontrado na tabela TACO (fora da conta): ${entry.values.unmatchedItems.join(', ')}`}
+                                          >
+                                            ❓ {entry.values.unmatchedItems.length} item(ns) fora da conta
+                                          </span>
+                                        )}
+                                        {entry.values.confidence === 'low' && (
+                                          <span className="text-amber-600" title="Confiança baixa nesta estimativa">
+                                            confiança baixa
+                                          </span>
+                                        )}
+                                        <form action={deleteFoodLogAction} className="inline">
+                                          <input type="hidden" name="patientId" value={id} />
+                                          <input type="hidden" name="entryId" value={entry.id} />
+                                          <button
+                                            type="submit"
+                                            className="text-ink-muted underline hover:text-red-600"
+                                            title="Remover este registro (sai das somas; a linha permanece na trilha de auditoria)"
+                                          >
+                                            remover
+                                          </button>
+                                        </form>
                                       </li>
                                     ))}
                                   </ul>
