@@ -26,7 +26,7 @@
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.0",
     "@nutrimed/consent": "workspace:*",
-    "@types/node": "^22.0.0",
+    "@types/node": "^26.1.1",
     "typescript": "^5.6.0"
   }
 }
