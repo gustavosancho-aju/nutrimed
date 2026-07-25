@@ -44,7 +44,13 @@ olhando). Correção em 3 camadas: (1) **teto de silêncio** `caseReviewIdleMs` 
 fala nova não há o que revisar, e quando a fala volta os reviews voltam; (2) **`idleStopMs`**
 (default 60 min) — o board se desliga sozinho e chama `onIdleStop`; (3) **`onNoClients`** no gateway
 + `NO_CLIENT_GRACE_MS` (60s) no runtime — o último cliente WS sair derruba o board, com graça para
-F5/troca de aba. **Antes de reabrir o piloto: pôr limite de gasto por chave no Console** e separar
+F5/troca de aba. Camada de "cenoura" (mesma rodada): **salvar a nota clínica encerra a sessão do board**
+(`saveNoteAction` → `stopLiveBoard`, best-effort — falha NUNCA impede salvar; o `status` da consulta
+NÃO muda, para não ligar o modo releitura antes do relatório E13) + **aviso `IdleConsultationBanner`**
+na sala, que aparece só com sessão ativa + 5 min de silêncio (sem banner permanente, que brigaria
+com a sala calma do E7). Decisão: NÃO bloquear o salvamento — travar registro clínico de consulta
+interrompida é pior que sessão aberta, e não impediria o médico que fecha o notebook.
+**Antes de reabrir o piloto: pôr limite de gasto por chave no Console** e separar
 chaves prod/dev (hoje `.env` e `apps/web/.env.local` têm a MESMA chave, o que tornou o gráfico
 ambíguo). Dívida relacionada fechada: `stopLiveBoardAction` sem parada por desconexão.
 **Rodada Transcrição Confiável + Autonomia (PR #1, 2026-07-03):** erros de server action tipados
@@ -62,7 +68,7 @@ transcript pelo médico no fim da consulta** (migration 0010 `transcript_review`
 relatório passam a nascer da versão corrigida); (3) POC 2.5 pronta (adapter escolhe `keyterm` no
 nova-3 vs `keywords` no nova-2 + métricas de recall clínico + harness) — falta só o áudio real.
 **Brief técnico jurídico** entregue (`docs/architecture/project-decisions/brief-tecnico-juridico.md`).
-Suíte: **587 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
+Suíte: **595 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
 CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) verde. Migrations 0001–0021.
 Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 · RUNBOOK Fase 5 = canal Telegram.
 

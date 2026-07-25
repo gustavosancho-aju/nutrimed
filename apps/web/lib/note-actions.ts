@@ -8,7 +8,7 @@ import { FakeLlmProvider, FakeTextCompleter, type ILlmProvider } from '@nutrimed
 import { getCurrentUser } from './auth';
 import { getDb } from './db';
 import { getEncryptionKey } from './crypto-key';
-import { getNoteInputs } from './board-runtime';
+import { getNoteInputs, stopLiveBoard } from './board-runtime';
 import { assertConsultationOwner, consultationBelongsTo } from './consultation-owner';
 import { toActionResult, type ActionResult } from './action-result';
 
@@ -94,12 +94,28 @@ export async function generateNoteAction(
   }
 }
 
-/** Salva a edição do médico (AC2) — auditada como human-edit. */
+/**
+ * Salva a edição do médico (AC2) — auditada como human-edit.
+ *
+ * SALVAR ENCERRA A SESSÃO DO BOARD (2026-07-24): se o médico está salvando a
+ * nota, a consulta acabou de fato — não há por que manter as 3 personas e o
+ * case review rodando (e custando). É o par "de cenoura" das travas de tempo do
+ * vazamento: elas protegem o caso do médico desaparecer, isto fecha o caso
+ * normal no momento natural. Deliberadamente NÃO mexemos no `status` da
+ * consulta: 'closed' liga o modo releitura e dispara o parecer final, e o médico
+ * ainda pode querer gerar o relatório nutricional (E13) depois de salvar a nota.
+ * Best-effort: falha aqui NUNCA impede salvar (o registro clínico vem primeiro).
+ */
 export async function saveNoteAction(formData: FormData): Promise<void> {
   const consultationId = await requireConsultation(formData);
   const content = String(formData.get('content') ?? '').trim();
   if (!content) throw new Error('Nota vazia.');
   const db = await getDb();
   await saveNote(db, consultationId, content, getEncryptionKey(), { action: 'edit' });
+  try {
+    await stopLiveBoard(consultationId);
+  } catch (error) {
+    console.error('[nota] stopLiveBoard ao salvar falhou (nota salva, seguindo):', error);
+  }
   revalidatePath(`/consultations/${consultationId}`);
 }
