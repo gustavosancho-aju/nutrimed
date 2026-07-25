@@ -42,6 +42,14 @@ export interface BoardGatewayOptions {
   readonly detached?: boolean;
   readonly heartbeatMs?: number;
   readonly now?: () => number;
+  /**
+   * O ÚLTIMO cliente do canal `/board` desta consulta desconectou. O runtime usa
+   * isto para derrubar o board depois de um período de graça (F5/troca de aba
+   * reconecta em segundos). Sem isso, fechar a aba deixava o orchestrator — e o
+   * case review periódico — rodando até o processo morrer (vazamento de custo,
+   * 2026-07-24). Use {@link BoardGateway.clientCount} para checar a reconexão.
+   */
+  readonly onNoClients?: (consultationId: string) => void;
 }
 
 export class BoardGateway {
@@ -54,12 +62,14 @@ export class BoardGateway {
   private readonly lastStatus = new Map<string, BoardServerMessage>();
   private readonly heartbeat: ReturnType<typeof setInterval>;
   private readonly now: () => number;
+  private readonly onNoClients?: (consultationId: string) => void;
 
   constructor(
     private readonly db: SqlExecutor,
     opts: BoardGatewayOptions = {},
   ) {
     this.now = opts.now ?? Date.now;
+    this.onNoClients = opts.onNoClients;
     this.wss = opts.detached
       ? new WebSocketServer({ noServer: true })
       : opts.server
@@ -226,6 +236,10 @@ export class BoardGateway {
     this.clients.set(consultationId, set);
     socket.on('close', () => {
       set.delete(socket);
+      if (set.size === 0) {
+        this.clients.delete(consultationId);
+        this.onNoClients?.(consultationId);
+      }
     });
     // replay do último status: quem conecta/reconecta tarde vê o estado atual
     const status = this.lastStatus.get(consultationId);

@@ -126,6 +126,8 @@ describe('FullBoardOrchestrator — board completo (E6)', () => {
       textScript?: readonly string[];
       caseReviewMs?: number;
       onCaseReview?: (outcome: 'skip' | 'contribution' | 'discarded') => void;
+      idleStopMs?: number;
+      onIdleStop?: () => void;
     } = {},
   ) {
     const stt = new PushSttProvider();
@@ -143,6 +145,8 @@ describe('FullBoardOrchestrator — board completo (E6)', () => {
       caseStateEveryNFinals: opts.caseStateEveryNFinals,
       caseReviewMs: opts.caseReviewMs,
       onCaseReview: opts.onCaseReview,
+      idleStopMs: opts.idleStopMs,
+      onIdleStop: opts.onIdleStop,
     });
     const events: FullBoardEvent[] = [];
     board.subscribe((e) => events.push(e));
@@ -467,6 +471,66 @@ describe('FullBoardOrchestrator — board completo (E6)', () => {
     expect(outcomes).toEqual(['skip']); // nenhum review novo
     expect(llm.calls).toHaveLength(0); // e nenhum LLM de contribuição rodou
     board.stop();
+    await session.stop();
+  });
+
+  it('VAZAMENTO 2026-07-24 — silêncio prolongado NÃO é pausa natural: review para de disparar', async () => {
+    let t = 1000;
+    const outcomes: string[] = [];
+    const { stt, session, board } = await setup({
+      now: () => t,
+      caseReviewMs: 90_000,
+      idleStopMs: 0, // isola o teto do review (sem o desligamento por abandono)
+      textScript: ['{"skip":true}', '{"skip":true}', '{"skip":true}'],
+      onCaseReview: (o) => outcomes.push(o),
+    });
+    stt.push('A circunferência abdominal segue aumentando aos poucos.');
+    await flush();
+    await board.flush();
+
+    // Pausa clínica plausível (5 min de silêncio): o review DEVE rodar.
+    t = 1000 + 5 * 60_000;
+    await board.tickNow();
+    expect(outcomes).toEqual(['skip']); // `onCaseReview` = 1 disparo por review
+
+    // Consulta ABANDONADA (aba esquecida): horas de silêncio. Antes da correção,
+    // cada tick daqui até o infinito disparava um review — ~960 chamadas/dia.
+    for (const hours of [1, 2, 3]) {
+      t = 1000 + hours * 60 * 60_000;
+      await board.tickNow();
+    }
+    expect(outcomes).toEqual(['skip']); // nenhum review novo além do da pausa real
+
+    board.stop();
+    await session.stop();
+  });
+
+  it('VAZAMENTO 2026-07-24 — abandono prolongado desliga o board sozinho (onIdleStop)', async () => {
+    let t = 1000;
+    let idleStops = 0;
+    const { stt, session, board } = await setup({
+      now: () => t,
+      caseReviewMs: 90_000,
+      idleStopMs: 60 * 60_000,
+      onIdleStop: () => { idleStops += 1; },
+    });
+    stt.push('Paciente relata cansaço.');
+    await flush();
+    await board.flush();
+
+    t = 1000 + 30 * 60_000; // 30 min: ainda não é abandono
+    await board.tickNow();
+    expect(idleStops).toBe(0);
+
+    t = 1000 + 61 * 60_000; // 61 min sem fala: abandonado
+    await board.tickNow();
+    expect(idleStops).toBe(1);
+
+    // ticker foi limpo: novos ticks não reativam nada
+    t = 1000 + 200 * 60_000;
+    await board.tickNow();
+    expect(idleStops).toBe(1);
+
     await session.stop();
   });
 

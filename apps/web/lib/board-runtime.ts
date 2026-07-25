@@ -77,11 +77,46 @@ export const BOARD_WS_PORT = Number(process.env.BOARD_WS_PORT ?? 3001);
  *  'port' (default) = listener próprio na 3001 (dev local com `next dev`). */
 const BOARD_WS_MODE = process.env.BOARD_WS_MODE === 'attached' ? 'attached' : 'port';
 
+/**
+ * Período de graça entre "último cliente saiu" e derrubar o board: F5, troca de
+ * aba e blip de rede reconectam em segundos, e matar o board nesses casos
+ * atrapalharia a consulta. 60s é folgado o suficiente e ainda fecha o
+ * vazamento em minutos (o teto de silêncio do case review já cortou o custo).
+ */
+const NO_CLIENT_GRACE_MS = 60_000;
+const teardownTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/**
+ * Agenda a derrubada do board da consulta após o período de graça, se nenhum
+ * cliente reconectar. Correção do vazamento de custo de 2026-07-24: sem isto,
+ * fechar a aba deixava o orchestrator (e o case review) rodando até o processo
+ * morrer. Idempotente: uma nova desconexão só reinicia o relógio.
+ */
+function scheduleIdleTeardown(consultationId: string): void {
+  clearTimeout(teardownTimers.get(consultationId));
+  const timer = setTimeout(() => {
+    teardownTimers.delete(consultationId);
+    void (async () => {
+      try {
+        const runtime = await getBoardRuntime();
+        if (runtime.gateway.clientCount(consultationId) > 0) return; // reconectou
+        if (!runtime.active.has(consultationId)) return; // já parado
+        console.log(`[board] sem clientes há ${NO_CLIENT_GRACE_MS / 1000}s — parando o board da consulta.`);
+        await stopLiveBoard(consultationId);
+      } catch (error) {
+        console.error('[board] teardown por desconexão falhou:', error);
+      }
+    })();
+  }, NO_CLIENT_GRACE_MS);
+  timer.unref?.();
+  teardownTimers.set(consultationId, timer);
+}
+
 async function init(): Promise<BoardRuntime> {
   const db = await getDb();
   let gateway: BoardGateway;
   if (BOARD_WS_MODE === 'attached') {
-    gateway = new BoardGateway(db, { detached: true });
+    gateway = new BoardGateway(db, { detached: true, onNoClients: scheduleIdleTeardown });
     const g = gateway;
     globalForBoard.__nutrimedBoardUpgrade = (request, socket, head) =>
       g.handleUpgrade(
@@ -100,7 +135,7 @@ async function init(): Promise<BoardRuntime> {
     legacy.on('error', (error) => console.error('[board] listener legado 3001:', error));
     legacy.listen(BOARD_WS_PORT, '0.0.0.0');
   } else {
-    gateway = new BoardGateway(db, { port: BOARD_WS_PORT });
+    gateway = new BoardGateway(db, { port: BOARD_WS_PORT, onNoClients: scheduleIdleTeardown });
   }
   // E5: ingere a SEED real por persona (R8 — trocar pela curadoria = re-ingestão)
   const kb = new NamespacedKnowledgeStore();
@@ -379,6 +414,8 @@ export async function startDemoBoard(consultationId: string): Promise<{ llmLabel
     onCaseStateUpdate: hooks.onCaseStateUpdate, // B5
     onCaseReview: hooks.onCaseReview,
     onTriggerlessSegment: hooks.onTriggerlessSegment,
+    // Abandono: o board se desligou sozinho ⇒ libera a sessão também.
+    onIdleStop: () => scheduleIdleTeardown(consultationId),
   });
   runtime.gateway.bind(consultationId, orchestrator);
   // transcrição ao vivo p/ o painel (texto via WS — áudio nunca passa aqui, §7).
@@ -601,6 +638,8 @@ export async function startLiveBoard(
       onCaseStateUpdate: hooks.onCaseStateUpdate,
       onCaseReview: hooks.onCaseReview,
       onTriggerlessSegment: hooks.onTriggerlessSegment,
+      // Abandono: o board se desligou sozinho ⇒ libera a sessão (STT) também.
+      onIdleStop: () => scheduleIdleTeardown(consultationId),
     });
     runtime.gateway.bind(consultationId, orchestrator);
     const wired = wireSessionBroadcast(runtime, consultationId, session, db, { persistTranscript: true });

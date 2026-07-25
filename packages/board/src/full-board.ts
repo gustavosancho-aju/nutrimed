@@ -75,6 +75,27 @@ export interface FullBoardConfig extends GatekeeperConfig {
   /** B4: telemetria — desfecho de cada review. */
   readonly onCaseReview?: (outcome: 'skip' | 'contribution' | 'discarded') => void;
   /**
+   * TETO DE SILÊNCIO DO CASE REVIEW (ms) — correção do vazamento de custo de
+   * 2026-07-24. O review só exige "estar em pausa natural"; numa consulta
+   * ABANDONADA (aba esquecida aberta, sessão nunca parada) o silêncio eterno
+   * era lido como pausa permanente e o review disparava a cada `caseReviewMs`
+   * PARA SEMPRE — ~960 chamadas de LLM por dia, por sessão órfã, sem ninguém
+   * olhando. Sem fala nova por esse tempo não existe nada novo a revisar.
+   * Quando a fala volta, os reviews voltam sozinhos. Default: 10 min.
+   * `0` ⇒ desligado (comportamento antigo, NÃO recomendado).
+   */
+  readonly caseReviewIdleMs?: number;
+  /**
+   * Teto de abandono (ms): sem NENHUMA fala nova por esse tempo, o board se
+   * desliga sozinho (para o ticker e libera a sessão). Rede de segurança acima
+   * do {@link caseReviewIdleMs}: aos 10 min o custo já parou, aqui os recursos
+   * são liberados. Bem mais longo que uma pausa clínica plausível para não
+   * derrubar consulta em andamento. Default: 60 min. `0` ⇒ desligado.
+   */
+  readonly idleStopMs?: number;
+  /** Telemetria: o board se desligou por abandono (ver {@link idleStopMs}). */
+  readonly onIdleStop?: () => void;
+  /**
    * B2: limiar de similaridade (Jaccard) do dedup semântico — ÚNICO ponto de
    * verdade para o corte pré-LLM E pós-LLM (default 0.5). Calibrar com a
    * telemetria "autonomia" do piloto.
@@ -90,6 +111,11 @@ export interface FullBoardConfig extends GatekeeperConfig {
  * mais sobreposição real antes de tratar como repetição.
  */
 export const DEFAULT_SEMANTIC_DEDUP_THRESHOLD = 0.62;
+
+/** Sem fala nova por 10 min ⇒ nenhum case review (ver `caseReviewIdleMs`). */
+export const DEFAULT_CASE_REVIEW_IDLE_MS = 10 * 60_000;
+/** Sem fala nova por 60 min ⇒ o board se desliga sozinho (ver `idleStopMs`). */
+export const DEFAULT_IDLE_STOP_MS = 60 * 60_000;
 
 interface RoundEntry {
   readonly contribution: PersonaContribution;
@@ -125,6 +151,12 @@ export class FullBoardOrchestrator {
   private lastSpeechAt = 0;
   private lastCaseReviewAt = 0;
   private caseReviewInFlight = false;
+  /** Instante do `start()` — referência de abandono antes da 1ª fala. */
+  private startedAt = 0;
+  private stoppedByIdle = false;
+  private readonly caseReviewIdleMs: number;
+  private readonly idleStopMs: number;
+  private readonly onIdleStop?: () => void;
   private caseReviewRun: Promise<void> = Promise.resolve();
   private synthesized = false;
   private pending: Promise<void> = Promise.resolve();
@@ -167,11 +199,16 @@ export class FullBoardOrchestrator {
       onCaseReview: config.onCaseReview,
       pauseMs: config.pauseMs,
     };
+    this.caseReviewIdleMs = config.caseReviewIdleMs ?? DEFAULT_CASE_REVIEW_IDLE_MS;
+    this.idleStopMs = config.idleStopMs ?? DEFAULT_IDLE_STOP_MS;
+    this.onIdleStop = config.onIdleStop;
   }
 
   /** Liga as 3 personas sobre o stream (FR2) + tick de release/síntese. */
   start(): void {
     if (this.unsubscribe) return;
+    this.startedAt = this.now();
+    this.stoppedByIdle = false;
     this.unsubscribe = this.session.subscribe((event) => {
       if (event.type !== 'segment' || !event.segment.isFinal) return;
       const text = event.segment.text;
@@ -229,9 +266,26 @@ export class FullBoardOrchestrator {
     }
   }
 
+  /**
+   * Consulta abandonada (sem fala nova há `idleStopMs`) ⇒ desliga o board. Antes
+   * da 1ª fala a referência é o `start()`. Retorna true se desligou.
+   */
+  private maybeIdleStop(now: number): boolean {
+    if (this.stoppedByIdle) return true; // idempotente: avisa o abandono UMA vez
+    if (this.idleStopMs <= 0) return false;
+    const reference = this.lastSpeechAt > 0 ? this.lastSpeechAt : this.startedAt;
+    if (reference === 0 || now - reference <= this.idleStopMs) return false;
+    this.stoppedByIdle = true;
+    this.stop();
+    this.onIdleStop?.();
+    return true;
+  }
+
   private async tick(): Promise<void> {
     await this.caseState.maybeUpdate(); // B3: no-op se <N finais ou update em voo
     const now = this.now();
+    // Abandono: reusa o MESMO `now` (relógios de teste avançam por chamada).
+    if (this.maybeIdleStop(now)) return;
     for (const candidate of this.gate.release(now)) {
       this.config2.onDecision?.('deliver'); // liberado da pausa/fila (E10)
       await this.produce(candidate);
@@ -270,6 +324,9 @@ export class FullBoardOrchestrator {
     if (!intervalMs || typeof this.llm.completeText !== 'function' || this.caseReviewInFlight) return;
     if (this.recentFinals.length === 0) return; // consulta ainda sem fala
     if (now - this.lastSpeechAt < (this.configReview.pauseMs ?? 2500)) return; // fora de pausa
+    // TETO DE SILÊNCIO (2026-07-24): "pausa natural" tem limite. Sem este corte,
+    // consulta abandonada = pausa eterna = review a cada 90s para sempre.
+    if (this.caseReviewIdleMs > 0 && now - this.lastSpeechAt > this.caseReviewIdleMs) return;
     if (now - this.lastCaseReviewAt < intervalMs) return;
     this.caseReviewInFlight = true;
     this.lastCaseReviewAt = now;

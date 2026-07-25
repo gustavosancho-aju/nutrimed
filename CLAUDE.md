@@ -36,6 +36,17 @@ médico para o food log — autorrelato é aproximado por natureza e o gate de r
 existe onde importa (nota clínica e relatório E13 nascem como rascunho editável). O dashboard
 sinaliza origem (📷/✍️), `~estimada` e itens fora da conta, e o médico pode **remover** um
 registro errado (soft-delete, migration 0021 — a linha permanece para trilha/CJ-2).
+**🔥 VAZAMENTO DE CUSTO CORRIGIDO (2026-07-24)** — picos de 1,3M→5M→4,8M tokens/dia (Haiku) nos
+dias 22–24. Causa: o **case review** só exigia "estar em pausa natural"; numa consulta ABANDONADA
+(aba esquecida aberta / sessão nunca parada) o silêncio eterno era lido como pausa permanente e o
+review disparava a cada `caseReviewMs` PARA SEMPRE (~960 chamadas/dia por sessão órfã, sem ninguém
+olhando). Correção em 3 camadas: (1) **teto de silêncio** `caseReviewIdleMs` (default 10 min) — sem
+fala nova não há o que revisar, e quando a fala volta os reviews voltam; (2) **`idleStopMs`**
+(default 60 min) — o board se desliga sozinho e chama `onIdleStop`; (3) **`onNoClients`** no gateway
++ `NO_CLIENT_GRACE_MS` (60s) no runtime — o último cliente WS sair derruba o board, com graça para
+F5/troca de aba. **Antes de reabrir o piloto: pôr limite de gasto por chave no Console** e separar
+chaves prod/dev (hoje `.env` e `apps/web/.env.local` têm a MESMA chave, o que tornou o gráfico
+ambíguo). Dívida relacionada fechada: `stopLiveBoardAction` sem parada por desconexão.
 **Rodada Transcrição Confiável + Autonomia (PR #1, 2026-07-03):** erros de server action tipados
 com mensagens pt-BR (`ActionResult`) · mimeType do MediaRecorder (Safari avisado) · status do
 pipeline no WS + watchdog · **transcript persistido cifrado** (nota sobrevive a deploy; migration
@@ -51,7 +62,7 @@ transcript pelo médico no fim da consulta** (migration 0010 `transcript_review`
 relatório passam a nascer da versão corrigida); (3) POC 2.5 pronta (adapter escolhe `keyterm` no
 nova-3 vs `keywords` no nova-2 + métricas de recall clínico + harness) — falta só o áudio real.
 **Brief técnico jurídico** entregue (`docs/architecture/project-decisions/brief-tecnico-juridico.md`).
-Suíte: **585 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
+Suíte: **587 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
 CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) verde. Migrations 0001–0021.
 Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 · RUNBOOK Fase 5 = canal Telegram.
 
