@@ -21,8 +21,10 @@ b8f533d, deployado e testado em prod):** grupo paciente+nutrólogo+nutricionista
 canal do paciente; comandos aceitam `/comando@RafaNutriBot`; setup = privacy mode OFF no
 @BotFather + re-adicionar o bot ao grupo + `/start CÓDIGO` no grupo (RUNBOOK passo 18c);
 1 chat por paciente (grupo OU privado); dado clínico em chat coletivo reforça CJ-12.
-**Água e sono pelo bot (2026-07-20):** `/agua`, `/dormi`, `/acordei` (migration 0020
-`patient_self_log`) — o paciente informa o valor, o CÓDIGO soma; sem IA nos números.
+**Água e sono pelo bot: REMOVIDOS (2026-07-24)** — decisão do Gustavo de manter o bot SIMPLES e
+restrito à alimentação. A migration 0020 (`patient_self_log`), os serviços em `@nutrimed/patients`
+(`addWaterLog`/`addSleepEvent`/…), as metas de água/sono na ficha e as colunas do dashboard
+FICARAM (dado já coletado permanece visível; religar é só re-adicionar os handlers).
 **Registro alimentar por TEXTO (2026-07-24):** `/comi 100g de arroz, 150g de frango` — parser
 determinístico (`parseFoodText`) + tabela TACO, reusando `mapRecallToTaco`/`computeNutrition` do
 E13: **sem visão e sem LLM nos números**, `source='telegram-texto'`, `model_version=taco-<versão>`.
@@ -49,7 +51,7 @@ transcript pelo médico no fim da consulta** (migration 0010 `transcript_review`
 relatório passam a nascer da versão corrigida); (3) POC 2.5 pronta (adapter escolhe `keyterm` no
 nova-3 vs `keywords` no nova-2 + métricas de recall clínico + harness) — falta só o áudio real.
 **Brief técnico jurídico** entregue (`docs/architecture/project-decisions/brief-tecnico-juridico.md`).
-Suíte: **593 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
+Suíte: **585 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
 CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) verde. Migrations 0001–0021.
 Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 · RUNBOOK Fase 5 = canal Telegram.
 
@@ -61,7 +63,7 @@ Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 
 | E4 Motores (gate/dedup/pausa) | ✅ núcleo | E9 Documentação Clínica | ✅ |
 | E5 RAG namespaces + Reasoner | ✅ núcleo | E10 Observabilidade & Piloto | ✅ núcleo |
 | E9 Documentação Clínica | ✅ | E11 Pacientes & Dashboard | ✅ completo (4 fases) |
-| E12 Bot de Telegram (foto→nutrição vs metas) | ✅ completo (9 stories + grupo + água/sono + texto) | E13 Relatório Nutricional (TACO) | ✅ completo (em produção) |
+| E12 Bot de Telegram (foto→nutrição vs metas) | ✅ completo (9 stories + grupo + texto; só alimentação) | E13 Relatório Nutricional (TACO) | ✅ completo (em produção) |
 | Transcrição Confiável (léxico + revisão do médico + POC) | ✅ completo (falta áudio real p/ POC) | — | — |
 
 **Fluxo vivo:** login (`demo@nutrimed.test`/`nutrimed123`) → consulta → consentimento (default NEGA)

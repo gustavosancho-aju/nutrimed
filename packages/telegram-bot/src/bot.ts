@@ -5,14 +5,7 @@ import {
   updateFoodLogEntryValues,
   sumFoodLogForDay,
   loadCurrentNutritionGoal,
-  addWaterLog,
-  sumWaterForDay,
-  addSleepEvent,
-  findLastSleepSession,
-  sleepTargetFromGoal,
   type DailyProgress,
-  type WaterProgress,
-  type SleepSession,
 } from '@nutrimed/patients';
 import {
   isChannelAuthorized,
@@ -120,94 +113,6 @@ function formatEstimate(e: FoodEstimate): string {
   );
 }
 
-/**
- * Interpreta a quantidade de água informada (pedido do médico, 2026-07-20):
- * "500ml", "500 ml", "1.5l", "1 litro", "2 copos" (250ml/copo) ou só um
- * número (assume ml). Fora de uma faixa plausível (0–10000ml por registro)
- * ⇒ null — mesmo teto de `RANGES.waterMl` na UI do médico.
- */
-function parseWaterMl(text: string): number | null {
-  const t = text.trim().toLowerCase().replace(',', '.');
-  if (!t) return null;
-  let ml: number | null = null;
-  let m = /^(\d+(?:\.\d+)?)\s*(l|litro|litros)\b/.exec(t);
-  if (m) ml = Number(m[1]) * 1000;
-  if (ml === null) {
-    m = /^(\d+(?:\.\d+)?)\s*copos?\b/.exec(t);
-    if (m) ml = Number(m[1]) * 250;
-  }
-  if (ml === null) {
-    m = /^(\d+(?:\.\d+)?)\s*ml\b/.exec(t);
-    if (m) ml = Number(m[1]);
-  }
-  if (ml === null) {
-    m = /^(\d+(?:\.\d+)?)$/.exec(t);
-    if (m) ml = Number(m[1]);
-  }
-  if (ml === null || !Number.isFinite(ml) || ml <= 0 || ml > 10_000) return null;
-  return Math.round(ml);
-}
-
-/** Horário local HH:MM informado pelo paciente (`/dormi 23:30`) — null se ausente/inválido. */
-function parseTimeArg(arg: string | undefined): string | null {
-  const t = arg?.trim();
-  if (!t) return null;
-  const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(t);
-  return m ? `${m[1]!.padStart(2, '0')}:${m[2]}` : null;
-}
-
-/**
- * Resolve o instante do evento (deitar/acordar) a partir de um HH:MM local —
- * SEM depender do fuso do servidor (mesma aritmética de `localDayISO`). Se o
- * horário informado ainda não chegou hoje por mais de 2h, assume que é
- * referência à NOITE PASSADA (o paciente avisa de manhã que dormiu às 23:30
- * ontem). Sem HH:MM ⇒ usa `now` (o instante em que a mensagem chegou).
- */
-function resolveEventTime(now: Date, hhmm: string | null, tzOffsetMinutes: number): Date {
-  if (!hhmm) return now;
-  const [hh, mm] = hhmm.split(':').map(Number);
-  const localNowMs = now.getTime() + tzOffsetMinutes * 60_000;
-  const localNow = new Date(localNowMs);
-  let localCandidateMs = Date.UTC(localNow.getUTCFullYear(), localNow.getUTCMonth(), localNow.getUTCDate(), hh, mm);
-  if (localCandidateMs - localNowMs > 2 * 60 * 60 * 1000) {
-    localCandidateMs -= 24 * 60 * 60 * 1000;
-  }
-  return new Date(localCandidateMs - tzOffsetMinutes * 60_000);
-}
-
-const SLEEP_QUALITY_LABEL: Record<SleepSession['quality'], string> = {
-  curta: 'curta ⚠️',
-  boa: 'boa ✅',
-  longa: 'longa',
-};
-
-/** Rótulo simples (sem emoji) — usado no resumo compacto de `/hoje`. */
-const SLEEP_QUALITY_PLAIN: Record<SleepSession['quality'], string> = {
-  curta: 'curta',
-  boa: 'boa',
-  longa: 'longa',
-};
-
-function formatSleepDuration(session: SleepSession): string {
-  const hours = Math.floor(session.durationMinutes / 60);
-  const mins = Math.round(session.durationMinutes % 60);
-  return `${hours}h${String(mins).padStart(2, '0')}`;
-}
-
-/** Resumo de água p/ `/hoje` — omitido se não há nem consumo nem meta (evita ruído). */
-function formatWaterSummary(p: WaterProgress): string | null {
-  if (p.consumedMl === 0 && p.goalMl === null) return null;
-  if (p.goalMl === null) return `💧 Água hoje: ${p.consumedMl} ml.`;
-  const faltam = Math.max(0, Math.round(p.remainingMl ?? 0));
-  return `💧 Água hoje: ${p.consumedMl}/${p.goalMl} ml (faltam ${faltam}).`;
-}
-
-/** Resumo de sono p/ `/hoje` — omitido sem uma sessão pareada (deitar+acordar). */
-function formatSleepSummary(session: SleepSession | null): string | null {
-  if (!session) return null;
-  return `😴 Última noite: ${formatSleepDuration(session)} (${SLEEP_QUALITY_PLAIN[session.quality]}).`;
-}
-
 function formatProgress(p: DailyProgress): string {
   const c = p.consumed;
   if (!p.goal || !p.remaining) {
@@ -286,8 +191,8 @@ export async function handleStart(deps: BotDeps, chatId: string, arg?: string): 
         '✅ Canal ativado! Agora é só me enviar a foto do seu prato que eu estimo os nutrientes ' +
         '(a legenda da foto me ajuda a identificar os alimentos). Se preferir digitar — ou se você ' +
         'pesou a comida — use /comi 100g de arroz, 150g de frango: com as quantidades a conta fica ' +
-        'mais precisa. Também tenho /agua para água, /dormi e /acordei para o sono, /hoje para o ' +
-        'progresso do dia, /meta para suas metas e /corrigir se eu identificar algo errado.',
+        'mais precisa. Use /hoje para ver seu progresso do dia, /meta para suas metas e /corrigir ' +
+        'se eu identificar algo errado.',
     };
   }
   const reason = { invalid: 'Código inválido.', expired: 'Código expirado.', consumed: 'Esse código já foi usado.' }[
@@ -421,19 +326,8 @@ export async function handleToday(deps: BotDeps, chatId: string): Promise<BotRep
   const now = clock(deps);
   const dayISO = localDayISO(now, tz(deps));
   const progress = await sumFoodLogForDay(deps.db, patientId, dayISO, tz(deps), deps.key);
-  const water = await sumWaterForDay(deps.db, patientId, dayISO, tz(deps), deps.key);
-  const goal = await loadCurrentNutritionGoal(deps.db, patientId, deps.key, dayISO);
-  const sleep = await findLastSleepSession(deps.db, patientId, deps.key, sleepTargetFromGoal(goal?.values));
   const orientation = await buildOrientation(deps.llm, progress);
-  return {
-    text: compose([
-      formatProgress(progress),
-      formatWaterSummary(water),
-      formatSleepSummary(sleep),
-      orientation,
-      DISCLAIMER,
-    ]),
-  };
+  return { text: compose([formatProgress(progress), orientation, DISCLAIMER]) };
 }
 
 /** `/meta` — metas vigentes (definidas pelo nutricionista). Sem meta ⇒ informa. */
@@ -570,75 +464,6 @@ export async function handleAte(deps: BotDeps, chatId: string, arg: string): Pro
 }
 
 /**
- * `/agua <quantidade>` — registra água consumida (pedido do médico,
- * 2026-07-20). Sem estimativa por IA: o paciente informa o valor, o CÓDIGO
- * soma e compara com a meta do nutricionista (quando houver).
- */
-export async function handleWater(deps: BotDeps, chatId: string, arg: string): Promise<BotReply> {
-  if (!(await isChannelAuthorized(deps.db, chatId))) return { text: NEEDS_PAIRING };
-  const patientId = await resolvePatientByChat(deps.db, chatId);
-  if (!patientId) return { text: NEEDS_PAIRING };
-
-  const ml = parseWaterMl(arg);
-  if (ml === null) {
-    return {
-      text: 'Não entendi a quantidade. Use /agua 500ml, /agua 2 copos ou /agua 1 litro.',
-    };
-  }
-
-  const now = clock(deps);
-  await addWaterLog(deps.db, patientId, ml, now, deps.key, { action: 'telegram-bot' });
-  const progress = await sumWaterForDay(deps.db, patientId, localDayISO(now, tz(deps)), tz(deps), deps.key);
-  const goalLine =
-    progress.goalMl === null
-      ? `Hoje: ${progress.consumedMl} ml. Seu nutricionista ainda não definiu uma meta de água.`
-      : `Hoje: ${progress.consumedMl}/${progress.goalMl} ml (faltam ${Math.max(0, Math.round(progress.remainingMl ?? 0))}).`;
-  return { text: compose([`💧 +${ml} ml registrados.`, goalLine]) };
-}
-
-/** `/dormi [HH:MM]` — registra a hora de deitar (sem argumento ⇒ agora). */
-export async function handleSleepStart(deps: BotDeps, chatId: string, arg?: string): Promise<BotReply> {
-  if (!(await isChannelAuthorized(deps.db, chatId))) return { text: NEEDS_PAIRING };
-  const patientId = await resolvePatientByChat(deps.db, chatId);
-  if (!patientId) return { text: NEEDS_PAIRING };
-
-  const raw = arg?.trim();
-  const hhmm = parseTimeArg(raw);
-  if (raw && !hhmm) {
-    return { text: 'Não entendi o horário. Use /dormi HH:MM (ex.: /dormi 23:30) ou só /dormi para registrar agora.' };
-  }
-  const at = resolveEventTime(clock(deps), hhmm, tz(deps));
-  await addSleepEvent(deps.db, patientId, 'sleep_start', at, deps.key, { action: 'telegram-bot' });
-  return { text: `😴 Hora de dormir registrada${hhmm ? ` (${hhmm})` : ''}. Bom descanso! Use /acordei ao levantar.` };
-}
-
-/** `/acordei [HH:MM]` — registra a hora de acordar e calcula a duração da noite. */
-export async function handleSleepEnd(deps: BotDeps, chatId: string, arg?: string): Promise<BotReply> {
-  if (!(await isChannelAuthorized(deps.db, chatId))) return { text: NEEDS_PAIRING };
-  const patientId = await resolvePatientByChat(deps.db, chatId);
-  if (!patientId) return { text: NEEDS_PAIRING };
-
-  const raw = arg?.trim();
-  const hhmm = parseTimeArg(raw);
-  if (raw && !hhmm) {
-    return { text: 'Não entendi o horário. Use /acordei HH:MM (ex.: /acordei 07:00) ou só /acordei para registrar agora.' };
-  }
-  const at = resolveEventTime(clock(deps), hhmm, tz(deps));
-  await addSleepEvent(deps.db, patientId, 'sleep_end', at, deps.key, { action: 'telegram-bot' });
-
-  const goal = await loadCurrentNutritionGoal(deps.db, patientId, deps.key, localDayISO(at, tz(deps)));
-  const session = await findLastSleepSession(deps.db, patientId, deps.key, sleepTargetFromGoal(goal?.values));
-  if (!session) {
-    return {
-      text: '☀️ Bom dia! Registrei que você acordou — não encontrei um "/dormi" correspondente para calcular a duração.',
-    };
-  }
-  return {
-    text: `☀️ Bom dia! Você dormiu ${formatSleepDuration(session)} — duração ${SLEEP_QUALITY_LABEL[session.quality]}.`,
-  };
-}
-
-/**
  * `/comando` ou `/comando@NomeDoBot` (forma usada em grupos). Retorna o resto do
  * texto (argumento) se casar, `null` se não. O sufixo `@bot` é aceito com
  * qualquer nome — o Telegram só entrega ao bot os comandos endereçados a ele.
@@ -648,7 +473,7 @@ function matchCommand(text: string, command: string): string | null {
   return m ? text.slice(m[0].length).trim() : null;
 }
 
-/** Dispatcher: foto → estimativa; `/start`/`/hoje`/`/meta`/`/corrigir`/`/agua`/`/dormi`/`/acordei`; senão ajuda. */
+/** Dispatcher: foto → estimativa; `/start`/`/comi`/`/corrigir`/`/hoje`/`/meta`; senão ajuda. */
 export async function handleUpdate(deps: BotDeps, update: BotUpdate): Promise<BotReply | null> {
   if (update.photo) return handlePhoto(deps, update.chatId, update.photo, update.photoRef, update.caption);
 
@@ -662,16 +487,10 @@ export async function handleUpdate(deps: BotDeps, update: BotUpdate): Promise<Bo
   if (corrigir !== null) return handleCorrection(deps, update.chatId, corrigir);
   const comi = matchCommand(text, 'comi');
   if (comi !== null) return handleAte(deps, update.chatId, comi);
-  const agua = matchCommand(text, 'agua');
-  if (agua !== null) return handleWater(deps, update.chatId, agua);
-  const dormi = matchCommand(text, 'dormi');
-  if (dormi !== null) return handleSleepStart(deps, update.chatId, dormi || undefined);
-  const acordei = matchCommand(text, 'acordei');
-  if (acordei !== null) return handleSleepEnd(deps, update.chatId, acordei || undefined);
   return {
     text:
       'Não entendi. Envie a foto do seu prato ou use /comi para digitar o que comeu com as ' +
-      'quantidades (ex.: /comi 100g de arroz). Também tenho /hoje, /meta, /corrigir (ajusta o ' +
-      'último prato), /agua, /dormi e /acordei. Se ainda não vinculou, use /start CÓDIGO.',
+      'quantidades (ex.: /comi 100g de arroz). Também tenho /hoje (progresso), /meta e ' +
+      '/corrigir (ajusta o último prato). Se ainda não vinculou, use /start CÓDIGO.',
   };
 }

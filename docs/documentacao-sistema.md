@@ -167,6 +167,13 @@ Canal de acompanhamento opt-in: o paciente pareia por **código efêmero** (hash
 (Claude visão) estima nutrientes → compara com a meta vigente do dia → responde com disclaimer de
 estimativa (ADR-015). A foto não é persistida.
 
+**Escopo do bot — só alimentação (2026-07-24):** o canal do paciente trata **exclusivamente** de
+alimentação. Comandos: foto do prato, `/comi` (texto), `/corrigir`, `/hoje`, `/meta`,
+`/start CÓDIGO`. Os comandos `/agua`, `/dormi` e `/acordei` (adicionados em 2026-07-20) foram
+**removidos** para manter o bot simples. O que ficou: a migration 0020 (`patient_self_log`), os
+serviços em `@nutrimed/patients`, as metas de água/sono na ficha e as colunas do dashboard — o
+dado já coletado continua visível e religar exige apenas re-adicionar os handlers.
+
 **Registro por texto — `/comi` (2026-07-24):** além da foto, o paciente pode digitar o que comeu
 com as quantidades (`/comi 100g de arroz, 150g de frango grelhado`). O caminho é **determinístico
 de ponta a ponta**: `parseFoodText` interpreta o texto e a tabela **TACO** calcula os nutrientes

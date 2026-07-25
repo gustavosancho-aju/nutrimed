@@ -215,10 +215,12 @@ a aceitar conexões depois que alguém abre uma consulta. Isso afeta:
     **RECUSADO** se o token já tem webhook ativo (`getWebhookInfo`) e **IGNORADO** com
     `NODE_ENV=production` — ainda assim, use SEMPRE um **bot de teste** do @BotFather no
     `apps/web/.env.local`.
-18d. **Comandos do bot (referência):** foto do prato (visão) · `/comi 100g de arroz, 150g de
-    frango` (registro por texto — determinístico pela TACO, **sem custo de visão**) · `/corrigir`
-    (ajusta o último prato) · `/agua`, `/dormi`, `/acordei` · `/hoje`, `/meta` · `/start CÓDIGO`.
-    Todos aceitam a forma `/comando@NomeDoBot` usada em grupos.
+18d. **Comandos do bot (referência — escopo deliberadamente ENXUTO, só alimentação):** foto do
+    prato (visão) · `/comi 100g de arroz, 150g de frango` (registro por texto — determinístico
+    pela TACO, **sem custo de visão**) · `/corrigir` (ajusta o último prato) · `/hoje` (progresso
+    do dia) · `/meta` · `/start CÓDIGO`. Todos aceitam a forma `/comando@NomeDoBot` usada em
+    grupos. `/agua`, `/dormi` e `/acordei` foram REMOVIDOS em 2026-07-24 (bot mais simples); o
+    schema e o dashboard de água/sono continuam no lugar, então religar é re-adicionar handlers.
 18c. **Uso em GRUPO (opcional, em produção desde 2026-07-11):** o canal do paciente pode ser um
     grupo (paciente + nutrólogo + nutricionista acompanhando). Setup: (a) `@BotFather` →
     `/setprivacy` → **Disable** no bot (sem isso as fotos do grupo NÃO chegam ao bot); (b)

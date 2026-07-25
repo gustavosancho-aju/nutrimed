@@ -5,7 +5,6 @@ import { runMigrations, type SqlExecutor , pgliteExecutor } from '@nutrimed/db';
 import {
   setNutritionGoal,
   sumFoodLogForDay,
-  sumWaterForDay,
   listFoodLogByDay,
   softDeleteFoodLogEntry,
 } from '@nutrimed/patients';
@@ -401,100 +400,6 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
       // /start@Bot sem código = boas-vindas (não confunde a menção com um código)
       const welcome = await handleUpdate(deps, { chatId: 'chat-group-2', text: '/start@RafaNutriBot' });
       expect(welcome?.text).toMatch(/c[óo]digo de\s*v[íi]nculo/i);
-    });
-  });
-
-  describe('/agua — registro de água (pedido do médico, 2026-07-20)', () => {
-    it('interpreta ml, litros e copos; sem meta ⇒ só informa o total do dia', async () => {
-      const patientId = await pairNewChat('chat-agua');
-      const r1 = await handleUpdate(deps, { chatId: 'chat-agua', text: '/agua 500ml' });
-      expect(r1?.text).toMatch(/\+500 ml/);
-      expect(r1?.text).toMatch(/ainda n[ãa]o definiu uma meta de [áa]gua/i);
-
-      const r2 = await handleUpdate(deps, { chatId: 'chat-agua', text: '/agua 2 copos' });
-      expect(r2?.text).toMatch(/\+500 ml/); // 2 copos = 500ml
-
-      const r3 = await handleUpdate(deps, { chatId: 'chat-agua', text: '/agua 1 litro' });
-      expect(r3?.text).toMatch(/\+1000 ml/);
-
-      const progress = await sumWaterForDay(exec, patientId, '2026-07-01', -180, KEY);
-      expect(progress.consumedMl).toBe(2000); // 500 + 500 + 1000
-    });
-
-    it('com meta de água definida: mostra progresso vs. meta', async () => {
-      const patientId = await pairNewChat('chat-agua-meta');
-      await setNutritionGoal(
-        exec,
-        patientId,
-        userId,
-        '2026-07-01',
-        { kcal: 2000, protein: 150, carbs: 200, fat: 60, waterMl: 2000 },
-        KEY,
-      );
-      const r = await handleUpdate(deps, { chatId: 'chat-agua-meta', text: '/agua 500ml' });
-      expect(r?.text).toMatch(/500\/2000 ml/);
-      expect(r?.text).toMatch(/faltam 1500/);
-    });
-
-    it('quantidade não reconhecida ⇒ orienta o formato, nada registrado', async () => {
-      const patientId = await pairNewChat('chat-agua-bad');
-      const r = await handleUpdate(deps, { chatId: 'chat-agua-bad', text: '/agua bastante' });
-      expect(r?.text).toMatch(/n[ãa]o entendi a quantidade/i);
-      const progress = await sumWaterForDay(exec, patientId, '2026-07-01', -180, KEY);
-      expect(progress.consumedMl).toBe(0);
-    });
-  });
-
-  describe('/dormi e /acordei — sono (pedido do médico, 2026-07-20)', () => {
-    it('registra deitar e acordar (HH:MM) e calcula a duração/qualidade', async () => {
-      await pairNewChat('chat-sono');
-      const dormi = await handleUpdate(deps, { chatId: 'chat-sono', text: '/dormi 23:30' });
-      expect(dormi?.text).toMatch(/dormir registrada \(23:30\)/i);
-
-      const acordei = await handleUpdate(deps, { chatId: 'chat-sono', text: '/acordei 07:00' });
-      expect(acordei?.text).toMatch(/dormiu 7h30/);
-      expect(acordei?.text).toMatch(/boa/);
-    });
-
-    it('/acordei sem /dormi correspondente: registra mas avisa que não achou o par', async () => {
-      await pairNewChat('chat-sono-solo');
-      const r = await handleUpdate(deps, { chatId: 'chat-sono-solo', text: '/acordei 07:00' });
-      expect(r?.text).toMatch(/n[ãa]o encontrei/i);
-    });
-
-    it('horário inválido ⇒ orienta o formato, nada registrado', async () => {
-      await pairNewChat('chat-sono-bad');
-      const r = await handleUpdate(deps, { chatId: 'chat-sono-bad', text: '/dormi 25:99' });
-      expect(r?.text).toMatch(/n[ãa]o entendi o hor[áa]rio/i);
-    });
-
-    it('/hoje mostra o resumo da última noite após /dormi + /acordei', async () => {
-      await pairNewChat('chat-sono-hoje');
-      await handleUpdate(deps, { chatId: 'chat-sono-hoje', text: '/dormi 23:30' });
-      await handleUpdate(deps, { chatId: 'chat-sono-hoje', text: '/acordei 07:00' });
-      const hoje = await handleUpdate(deps, { chatId: 'chat-sono-hoje', text: '/hoje' });
-      expect(hoje?.text).toMatch(/[úu]ltima noite: 7h30/i);
-    });
-
-    it('respeita a faixa-alvo de sono definida pelo médico (pedido 2026-07-20)', async () => {
-      const patientId = await pairNewChat('chat-sono-meta');
-      // Sem meta de sono: 7h30 é "boa" (faixa padrão 6h–9h30).
-      await handleUpdate(deps, { chatId: 'chat-sono-meta', text: '/dormi 23:30' });
-      const semMeta = await handleUpdate(deps, { chatId: 'chat-sono-meta', text: '/acordei 07:00' });
-      expect(semMeta?.text).toMatch(/boa/);
-
-      // Médico define um paciente que precisa de 8h–10h — as mesmas 7h30 viram "curta".
-      await setNutritionGoal(
-        exec,
-        patientId,
-        userId,
-        '2026-07-01',
-        { kcal: 2000, protein: 150, carbs: 200, fat: 60, sleepMinHours: 8, sleepMaxHours: 10 },
-        KEY,
-      );
-      await handleUpdate(deps, { chatId: 'chat-sono-meta', text: '/dormi 23:30' });
-      const comMeta = await handleUpdate(deps, { chatId: 'chat-sono-meta', text: '/acordei 07:00' });
-      expect(comMeta?.text).toMatch(/curta/);
     });
   });
 });
