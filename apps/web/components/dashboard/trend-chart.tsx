@@ -15,6 +15,32 @@ const W = 300;
 const H = 72;
 const PAD = 8;
 
+/** Nº máximo de pontos com rótulo visível — acima disso só o 1º e o último. */
+const MAX_LABELS = 6;
+
+/** dd/mm/aa em UTC (determinístico servidor/cliente — evita mismatch de hidratação). */
+const DATE_FMT = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'UTC',
+  day: '2-digit',
+  month: '2-digit',
+  year: '2-digit',
+});
+
+/** Valor sem casas quando inteiro, senão 1 casa (mesma regra do MetricCard). */
+function fmtValue(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
+/**
+ * Deslocamento horizontal do rótulo: centralizado no ponto, mas puxado p/
+ * dentro nas extremidades — senão o primeiro/último vazariam do card.
+ */
+function anchorShift(i: number, total: number): string {
+  if (i === 0) return '-15%';
+  if (i === total - 1) return '-85%';
+  return '-50%';
+}
+
 export function TrendChart({
   points,
   className = 'text-brand',
@@ -22,6 +48,7 @@ export function TrendChart({
   band,
   target,
   heightClass = 'h-16',
+  pointLabels = 'auto',
 }: {
   points: readonly TrendPoint[];
   className?: string;
@@ -32,6 +59,12 @@ export function TrendChart({
   target?: number;
   /** Altura do SVG (Tailwind), ex.: 'h-24' no modo apresentação. */
   heightClass?: string;
+  /**
+   * Rótulos (valor + data) sobre cada ponto. 'auto' mostra todos até
+   * {@link MAX_LABELS} pontos e, acima disso, só o primeiro e o último
+   * (senão os rótulos se sobrepõem e viram ruído). 'none' desliga.
+   */
+  pointLabels?: 'auto' | 'none';
 }) {
   if (points.length === 0) {
     return <p className="text-sm text-ink-muted">Sem medições para exibir.</p>;
@@ -61,8 +94,22 @@ export function TrendChart({
     .filter(Boolean)
     .join('; ');
 
+  // Quais pontos ganham rótulo (valor + data). Ver {@link MAX_LABELS}.
+  const labelled = new Set<number>();
+  if (pointLabels === 'auto') {
+    if (sorted.length <= MAX_LABELS) {
+      sorted.forEach((_, i) => labelled.add(i));
+    } else {
+      labelled.add(0);
+      labelled.add(sorted.length - 1);
+    }
+  }
+
   return (
-    <figure className={className}>
+    // O padding do topo reserva espaço p/ os valores, que ficam FORA da área do
+    // gráfico; o wrapper relative é o sistema de coordenadas deles.
+    <figure className={`${className} ${labelled.size > 0 ? 'pt-4' : ''}`}>
+    <div className="relative">
       <svg
         viewBox={`0 0 ${W} ${H}`}
         preserveAspectRatio="none"
@@ -113,6 +160,56 @@ export function TrendChart({
         {/* último ponto em destaque (onde o paciente está agora) */}
         <circle cx={x(sorted.length - 1)} cy={y(last.value)} r="5.5" fill="currentColor" />
       </svg>
+        {/*
+          Valores em HTML (não <text>): o preserveAspectRatio="none" do SVG
+          distorceria a fonte. Posicionados em % sobre o mesmo domínio do
+          gráfico — acima do ponto, ou abaixo quando o ponto está no topo.
+        */}
+        {labelled.size > 0 && (
+          <div aria-hidden className="pointer-events-none absolute inset-0">
+            {sorted.map((p, i) => {
+              if (!labelled.has(i)) return null;
+              const topPct = (y(p.value) / H) * 100;
+              const below = topPct < 34;
+              return (
+                <span
+                  key={i}
+                  className={`absolute whitespace-nowrap text-[10px] leading-tight xl:text-xs ${
+                    i === sorted.length - 1 ? 'font-semibold text-ink' : 'text-ink-muted'
+                  }`}
+                  style={{
+                    left: `${(x(i) / W) * 100}%`,
+                    top: `${topPct}%`,
+                    transform: `translate(${anchorShift(i, sorted.length)}, ${below ? '0.5rem' : 'calc(-100% - 0.35rem)'})`,
+                  }}
+                >
+                  {fmtValue(p.value)}
+                  {unit ?? ''}
+                </span>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      {/* Régua de datas: uma coluna por medição, alinhada aos pontos. */}
+      {labelled.size > 0 && (
+        <figcaption className="relative mt-1 h-3.5 xl:h-4">
+          {sorted.map((p, i) =>
+            labelled.has(i) ? (
+              <span
+                key={i}
+                className="absolute whitespace-nowrap text-[9px] leading-none text-ink-muted xl:text-[11px]"
+                style={{
+                  left: `${(x(i) / W) * 100}%`,
+                  transform: `translateX(${anchorShift(i, sorted.length)})`,
+                }}
+              >
+                {DATE_FMT.format(p.measuredAt)}
+              </span>
+            ) : null,
+          )}
+        </figcaption>
+      )}
     </figure>
   );
 }
