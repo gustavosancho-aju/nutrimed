@@ -15,15 +15,26 @@ const W = 300;
 const H = 72;
 const PAD = 8;
 
-/** Nº máximo de pontos com rótulo visível — acima disso só o 1º e o último. */
-const MAX_LABELS = 6;
+/**
+ * Nº máximo de rótulos simultâneos. Acima disso os rótulos são RAREADOS
+ * (1 a cada k medições, sempre incluindo a última) — nunca reduzidos só aos
+ * extremos, que esconderiam o meio da evolução. Calibrado p/ o card mais
+ * estreito da dashboard: ~8 slots de ~55px comportam a data curta.
+ */
+const MAX_LABELS = 8;
 
-/** dd/mm/aa em UTC (determinístico servidor/cliente — evita mismatch de hidratação). */
-const DATE_FMT = new Intl.DateTimeFormat('pt-BR', {
+/** Datas em UTC (determinístico servidor/cliente — evita mismatch de hidratação). */
+const DATE_FMT_FULL = new Intl.DateTimeFormat('pt-BR', {
   timeZone: 'UTC',
   day: '2-digit',
   month: '2-digit',
   year: '2-digit',
+});
+/** Série inteira no mesmo ano ⇒ o ano vira ruído repetido; fica só dd/mm. */
+const DATE_FMT_SHORT = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'UTC',
+  day: '2-digit',
+  month: '2-digit',
 });
 
 /** Valor sem casas quando inteiro, senão 1 casa (mesma regra do MetricCard). */
@@ -94,21 +105,28 @@ export function TrendChart({
     .filter(Boolean)
     .join('; ');
 
-  // Quais pontos ganham rótulo (valor + data). Ver {@link MAX_LABELS}.
+  // Quais pontos ganham rótulo. Cabendo, TODOS; senão 1 a cada k, de trás p/
+  // frente (a última medição é a que mais importa e nunca pode faltar).
   const labelled = new Set<number>();
   if (pointLabels === 'auto') {
-    if (sorted.length <= MAX_LABELS) {
-      sorted.forEach((_, i) => labelled.add(i));
-    } else {
-      labelled.add(0);
-      labelled.add(sorted.length - 1);
-    }
+    const step = Math.ceil(sorted.length / MAX_LABELS);
+    for (let i = sorted.length - 1; i >= 0; i -= step) labelled.add(i);
   }
+
+  const labelledIdx = [...labelled].sort((a, b) => a - b);
+  /** A partir de 5 rótulos os valores passam a alternar em duas fileiras. */
+  const staggered = labelled.size > 4;
+
+  // Datas: sem o ano quando a série inteira é do mesmo ano (ruído repetido).
+  const sameYear = sorted.every(
+    (p) => p.measuredAt.getUTCFullYear() === last.measuredAt.getUTCFullYear(),
+  );
+  const dateFmt = sameYear ? DATE_FMT_SHORT : DATE_FMT_FULL;
 
   return (
     // O padding do topo reserva espaço p/ os valores, que ficam FORA da área do
     // gráfico; o wrapper relative é o sistema de coordenadas deles.
-    <figure className={`${className} ${labelled.size > 0 ? 'pt-4' : ''}`}>
+    <figure className={`${className} ${labelled.size > 0 ? (staggered ? 'pt-8' : 'pt-4') : ''}`}>
     <div className="relative">
       <svg
         viewBox={`0 0 ${W} ${H}`}
@@ -171,6 +189,11 @@ export function TrendChart({
               if (!labelled.has(i)) return null;
               const topPct = (y(p.value) / H) * 100;
               const below = topPct < 34;
+              // Série densa: os rótulos vizinhos encostariam num card estreito
+              // ('104.2kg' ao lado de '83.4kg'). Alternando em duas fileiras,
+              // cada um ganha o dobro de espaço horizontal.
+              const row2 = staggered && i % 2 === 1;
+              const shift = `${row2 ? 1 : 0} * 0.95rem`;
               return (
                 <span
                   key={i}
@@ -180,7 +203,11 @@ export function TrendChart({
                   style={{
                     left: `${(x(i) / W) * 100}%`,
                     top: `${topPct}%`,
-                    transform: `translate(${anchorShift(i, sorted.length)}, ${below ? '0.5rem' : 'calc(-100% - 0.35rem)'})`,
+                    transform: `translate(${anchorShift(i, sorted.length)}, ${
+                      below
+                        ? `calc(0.5rem + ${shift})`
+                        : `calc(-100% - 0.35rem - ${shift})`
+                    })`,
                   }}
                 >
                   {fmtValue(p.value)}
@@ -191,11 +218,19 @@ export function TrendChart({
           </div>
         )}
       </div>
-      {/* Régua de datas: uma coluna por medição, alinhada aos pontos. */}
+      {/*
+        Régua de datas: uma coluna por medição rotulada, alinhada aos pontos.
+        Medições do MESMO dia (reavaliação, correção) repetiriam a data lado a
+        lado — a repetida fica sem rótulo, o valor acima já as distingue.
+      */}
       {labelled.size > 0 && (
         <figcaption className="relative mt-1 h-3.5 xl:h-4">
-          {sorted.map((p, i) =>
-            labelled.has(i) ? (
+          {labelledIdx.map((i, n) => {
+            const text = dateFmt.format(sorted[i]!.measuredAt);
+            // Compara com a data ANTERIOR EXIBIDA (não a do ponto anterior,
+            // que pode não estar rotulado quando a série é rareada).
+            if (n > 0 && text === dateFmt.format(sorted[labelledIdx[n - 1]!]!.measuredAt)) return null;
+            return (
               <span
                 key={i}
                 className="absolute whitespace-nowrap text-[9px] leading-none text-ink-muted xl:text-[11px]"
@@ -204,10 +239,10 @@ export function TrendChart({
                   transform: `translateX(${anchorShift(i, sorted.length)})`,
                 }}
               >
-                {DATE_FMT.format(p.measuredAt)}
+                {text}
               </span>
-            ) : null,
-          )}
+            );
+          })}
         </figcaption>
       )}
     </figure>
