@@ -8,6 +8,8 @@ import {
   listBodyComposition,
   listLabExam,
   loadCustomExamDefs,
+  loadLabDisplayPrefs,
+  MAX_PRESENTED_ANALYTES,
   loadCurrentBodyGoal,
   loadCurrentNutritionGoal,
   listWaterHistory,
@@ -29,8 +31,11 @@ import {
   toLocalDayISO,
   classifyDailyStatus,
 } from '@/lib/dashboard';
+import { buildAnalyteSeries, groupByCategory } from '@/lib/lab-panel';
+import { LAB_CATEGORY_LABEL } from '@nutrimed/lab-catalog';
 import { MetricCard } from '@/components/dashboard/metric-card';
-import { ExamCard } from '@/components/dashboard/exam-card';
+import { AnalyteCard } from '@/components/dashboard/analyte-card';
+import { LabDisplaySettings } from '@/components/dashboard/lab-display-settings';
 import { MeasurementForm } from '@/components/dashboard/measurement-form';
 import { MeasurementHistory } from '@/components/dashboard/measurement-history';
 import { CustomExamSettings } from '@/components/dashboard/custom-exam-settings';
@@ -78,6 +83,10 @@ export default async function DashboardPage({
   const body = await listBodyComposition(db, id, key);
   const labs = await listLabExam(db, id, key);
   const customDefs = await loadCustomExamDefs(db, id, key);
+  // Painel laboratorial unificado (E14): campos fixos do E11 + slots
+  // personalizados + analitos importados de laudo, tudo em séries por slug.
+  const analyteSeries = buildAnalyteSeries(labs, customDefs);
+  const labPrefs = await loadLabDisplayPrefs(db, id, key);
   const bodyGoal = await loadCurrentBodyGoal(db, id, key);
   const today = new Date().toISOString().slice(0, 10);
   const now = new Date();
@@ -421,30 +430,77 @@ export default async function DashboardPage({
 
         {aba === 'exames' && (
           <div>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <ExamCard label="LDL" marker="ldl" unit="mg/dL" reference="< 100 ok · 100–159 atenção · ≥ 160 alerta" points={seriesOf(labs, 'ldl')} />
-              <ExamCard label="HbA1C" marker="hba1c" unit="%" reference="< 5.7 ok · 5.7–6.4 atenção · ≥ 6.5 alerta" points={seriesOf(labs, 'hba1c')} />
-              <ExamCard label="Insulina" marker="insulina" unit="µU/mL" reference="≤ 12 ok · 12–25 atenção · > 25 alerta" points={seriesOf(labs, 'insulina')} />
-              {customDefs.map((d) => (
-                <ExamCard
-                  key={d.slot}
-                  label={d.name}
-                  unit={d.unit}
-                  points={seriesOf(labs, `custom${d.slot}` as 'custom1' | 'custom2' | 'custom3')}
-                />
-              ))}
-            </div>
-            <p className="mt-3 text-xs text-ink-muted">
-              As faixas são referência simplificada de apoio visual — não constituem diagnóstico. A
-              interpretação é do médico responsável.
+            {analyteSeries.length === 0 ? (
+              <div className="card-premium gold-hairline p-8 text-center">
+                <h2 className="font-display text-base font-semibold text-ink">
+                  Nenhum exame lançado
+                </h2>
+                <p className="mx-auto mt-1 max-w-md text-sm text-ink-muted">
+                  Importe um laudo em PDF para trazer o painel completo de uma vez, ou lance os
+                  valores manualmente no formulário abaixo.
+                </p>
+                <Link
+                  href={`/patients/${id}/import`}
+                  className="mt-4 inline-block rounded-[10px] bg-brand px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+                >
+                  Importar laudo
+                </Link>
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-baseline justify-between gap-3">
+                  <p className="text-sm text-ink-muted">
+                    {analyteSeries.length}{' '}
+                    {analyteSeries.length === 1 ? 'exame acompanhado' : 'exames acompanhados'}
+                  </p>
+                  <Link
+                    href={`/patients/${id}/import`}
+                    className="text-sm text-brand transition-opacity hover:opacity-80"
+                  >
+                    + Importar laudo
+                  </Link>
+                </div>
+                {groupByCategory(analyteSeries).map((grupo) => (
+                  <section key={grupo.category} className="mt-5">
+                    <h2 className="text-[11px] uppercase tracking-wide text-ink-muted">
+                      {LAB_CATEGORY_LABEL[grupo.category]}
+                    </h2>
+                    <div className="mt-2 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                      {grupo.series.map((s) => (
+                        <AnalyteCard key={s.slug} series={s} />
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </>
+            )}
+            <p className="mt-4 text-xs text-ink-muted">
+              As faixas exibidas são as que o próprio laboratório imprimiu no laudo — apoio visual,
+              não diagnóstico. A interpretação é do médico responsável.
             </p>
+
+            {analyteSeries.length > 0 && (
+              <LabDisplaySettings
+                patientId={id}
+                max={MAX_PRESENTED_ANALYTES}
+                selecionadosIniciais={labPrefs.presented}
+                opcoes={analyteSeries.map((s) => ({
+                  slug: s.slug,
+                  label: s.label,
+                  category: s.category,
+                  pontos: s.points.length,
+                }))}
+              />
+            )}
             <MeasurementForm
               patientId={id}
               kind="lab"
               defaultDate={editingLab ? editingLab.measuredAt.toISOString().slice(0, 10) : today}
               fields={labFields}
               measurementId={editingLab?.id}
-              defaults={editingLab ? { ...editingLab.values } : undefined}
+              // `panel` (E14) não é campo do formulário — é preservado no
+              // servidor pela própria action de edição.
+              defaults={editingLab ? { ...editingLab.values, panel: undefined } : undefined}
               title={editingLab ? 'Editar medição' : 'Nova medição'}
             />
             <MeasurementHistory

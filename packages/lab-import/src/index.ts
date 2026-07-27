@@ -7,8 +7,12 @@ export {
   type LaudoInput,
   type LaudoKind,
   type ExtractedLaudo,
+  type ExtractedPanel,
+  type ExtractedAnalyte,
+  type ExtractedHistoryPoint,
   KNOWN_FIELDS,
   sanitizeExtraction,
+  sanitizePanel,
 } from './extractor';
 export { ClaudeLabExtractor, LabExtractorError, type ClaudeExtractorConfig } from './claude-extractor';
 export { FakeLabExtractor } from './fake-extractor';

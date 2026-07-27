@@ -8,6 +8,7 @@ import {
   addLabExam,
   updateBodyComposition,
   updateLabExam,
+  listLabExam,
   softDeleteBodyComposition,
   softDeleteLabExam,
   softDeleteFoodLogEntry,
@@ -145,10 +146,21 @@ export async function updateMeasurementAction(formData: FormData): Promise<void>
       custom3: parseDecimal(formData.get('custom3')),
     });
     rejectOutOfRange({ ...values });
-    if (Object.keys(values).length === 0) {
+    // O painel importado de laudo (E14) NÃO passa por este formulário de campos
+    // fixos — mas `updateLabExam` reescreve o blob inteiro, então sem carregá-lo
+    // adiante uma edição de LDL apagaria os outros 40 exames da mesma coleta.
+    const existente = (await listLabExam(db, patientId, key)).find((m) => m.id === measurementId);
+    const panel = existente?.values.panel;
+    if (Object.keys(values).length === 0 && !panel) {
       redirect(`/patients/${patientId}/dashboard?aba=${aba}&erro=${encodeURIComponent('Informe ao menos um valor.')}`);
     }
-    await updateLabExam(db, patientId, measurementId, { measuredAt, values }, key);
+    await updateLabExam(
+      db,
+      patientId,
+      measurementId,
+      { measuredAt, values: { ...values, ...(panel ? { panel } : {}) } },
+      key,
+    );
   } else {
     const values: BodyCompositionValues = compact({
       peso: parseDecimal(formData.get('peso')),

@@ -68,8 +68,38 @@ transcript pelo médico no fim da consulta** (migration 0010 `transcript_review`
 relatório passam a nascer da versão corrigida); (3) POC 2.5 pronta (adapter escolhe `keyterm` no
 nova-3 vs `keywords` no nova-2 + métricas de recall clínico + harness) — falta só o áudio real.
 **Brief técnico jurídico** entregue (`docs/architecture/project-decisions/brief-tecnico-juridico.md`).
-Suíte: **595 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
-CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) verde. Migrations 0001–0021.
+**E14 (Painel Laboratorial dinâmico) — IMPLEMENTADO, local (2026-07-27).** O laudo laboratorial
+deixou de caber em 3 marcadores fixos + 3 slots: agora o PDF inteiro entra. Novo pacote
+`@nutrimed/lab-catalog` (catálogo curado de ~80 exames com sinônimos — "TGP"/"ALT"/"transaminase
+pirúvica" caem no MESMO slug, senão a série histórica se parte em duas linhas); exame fora do
+catálogo entra como **analito livre** (`livre:<nome>`) — nada é descartado. **As faixas de
+referência vêm do PRÓPRIO laudo** (`parseReferenceRange`), guardadas POR MEDIÇÃO: o NutriMed não
+mantém faixa clínica própria (é do lab que assinou, já ajustada por sexo/idade, e muda com o tempo);
+o parser remove qualificadores de IDADE antes de ler ("Maior que 20 anos: Superior a 40" ⇒ piso 40,
+não 20). Intervalo fechado vira BANDA verde no gráfico; limite aberto vira LINHA pontilhada (banda
+exigiria um piso que o laudo não deu). **Sem migration de dados**: o painel (`panel: LabAnalyte[]`)
+entra no blob JSON já cifrado de `lab_exam.values_enc`; a migration 0022 guarda só a *seleção de
+apresentação*. Os laudos imprimem "Evolução do paciente" (resultados anteriores) — o import traz
+esse histórico, então a 1ª importação já nasce com LINHA de tendência em vez de um ponto solitário;
+`planHistoryImport` é idempotente (reimportar o mesmo PDF não duplica pontos). **Guard de colisão**
+(`resolveSlugCollisions`): dentro de um laudo um slug aparece UMA vez — o TTPA imprime 3 números
+(plasma paciente 38,5s, controle 28,8s, relação 1,34) e o RFG 2 (adulto negro/não negro); sem o
+guard virariam pontos incomparáveis na mesma série, com o "valor atual" sorteado pela ordem de
+inserção. A 1ª ocorrência fica com o slug canônico, as demais viram exame livre com o nome do laudo.
+O médico escolhe
+quais exames apresentar ao paciente e em QUE ORDEM (fila reordenável, teto de 12) — sem seleção, a
+Apresentação não mostra exames (40 gráficos seriam ruído, e escolher por ele seria decidir
+relevância clínica). **Extração REAL verificada** contra o laudo de 22 páginas do piloto
+(`npx tsx --env-file=.env scripts/poc-lab-panel.mjs <laudo.pdf>`, ~US$ 0,09 no Haiku, 39s):
+**70 analitos, 70/70 reconhecidos pelo catálogo, 66/70 com faixa interpretada, 31 com histórico**.
+Foi essa rodada que revelou os 3 bugs corrigidos (colisão TTPA/RFG; tempo de protrombina mapeado
+como atividade — 12,1s contra referência "> 70%"; glicemia média estimada fora do catálogo).
+Dívidas conhecidas: **não verificado no navegador** (o `npm run dev` está vetado pelo token de prod
+do bot) e o modelo às vezes **copia a referência da linha vizinha** quando o laudo agrupa grandezas
+sob um título só (o tempo de protrombina herdou o "> 70%" da atividade) — a tabela de confirmação
+mostra a faixa interpretada justamente para o médico flagrar isso.
+Suíte: **725 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
+CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) verde. Migrations 0001–0022.
 Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 · RUNBOOK Fase 5 = canal Telegram.
 
 | Épico | Status | Épico | Status |
@@ -81,6 +111,7 @@ Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 
 | E5 RAG namespaces + Reasoner | ✅ núcleo | E10 Observabilidade & Piloto | ✅ núcleo |
 | E9 Documentação Clínica | ✅ | E11 Pacientes & Dashboard | ✅ completo (4 fases) |
 | E12 Bot de Telegram (foto→nutrição vs metas) | ✅ completo (9 stories + grupo + texto; só alimentação) | E13 Relatório Nutricional (TACO) | ✅ completo (em produção) |
+| E14 Painel Laboratorial dinâmico (laudo completo + apresentação) | ✅ implementado (local; falta verificar no navegador) | — | — |
 | Transcrição Confiável (léxico + revisão do médico + POC) | ✅ completo (falta áudio real p/ POC) | — | — |
 
 **Fluxo vivo:** login (`demo@nutrimed.test`/`nutrimed123`) → consulta → consentimento (default NEGA)
@@ -98,7 +129,7 @@ sinalizados, delta vs meta do paciente (E11) quando vinculado — rascunho edit�
 com fontes TACO em kbSources → painel 🩺 Diagnóstico → telemetria (custo/gate/
 latência/ruído/autonomia).
 
-## Monorepo (27 pacotes)
+## Monorepo (28 pacotes)
 
 ```
 apps/web                 Tela de consulta + ficha/dashboard + gateway WS + webhook do bot Telegram
@@ -128,6 +159,7 @@ packages/telegram-link   E12: pareamento por código + gate de consentimento do 
 packages/telegram-bot    E12: lógica pura do bot (handlers de foto/comandos + orientação por IA)
 packages/taco            E13: tabela TACO 4ª ed. embarcada (591 alimentos) + busca lexical + porções caseiras (regen: scripts/gen-taco.mjs)
 packages/nutrition-report E13: recordatório (LLM) → mapeamento TACO → cálculo determinístico → relatório cifrado+auditado
+packages/lab-catalog     E14: catálogo canônico de exames (slug+sinônimos) + leitura da faixa de referência DO LAUDO — puro, sem faixa clínica própria
 ```
 
 Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build` · `npm run dev`.

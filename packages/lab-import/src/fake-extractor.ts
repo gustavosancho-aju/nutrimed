@@ -3,7 +3,9 @@ import {
   type LaudoInput,
   type LaudoKind,
   type ExtractedLaudo,
+  type ExtractedPanel,
   sanitizeExtraction,
+  sanitizePanel,
 } from './extractor';
 
 /**
@@ -26,5 +28,25 @@ export class FakeLabExtractor implements ILabExtractor {
       { values: SAMPLE[kind], notes: 'Valores de exemplo (extrator fake) — revise e corrija.' },
       kind,
     );
+  }
+
+  /**
+   * Painel de exemplo (E14) com os três formatos que a UI precisa exercitar:
+   * exame do catálogo com faixa de intervalo, exame com faixa só de teto, e
+   * exame com histórico impresso no laudo (que vira linha de tendência).
+   */
+  async extractPanel(_input: LaudoInput): Promise<ExtractedPanel> {
+    return sanitizePanel({
+      measuredAt: '2026-05-19',
+      analytes: [
+        { rawName: 'COLESTEROL LDL', value: 108.5, unit: 'mg/dL', referenceText: 'Inferior a 130 mg/dL', history: [{ measuredAt: '2025-10-22', value: 143.1 }, { measuredAt: '2025-03-25', value: 83.4 }] },
+        { rawName: 'COLESTEROL HDL', value: 37, unit: 'mg/dL', referenceText: 'Superior a 40 mg/dL' },
+        { rawName: 'TRIGLICERIDES', value: 183, unit: 'mg/dL', referenceText: 'Inferior a 150 mg/dL', history: [{ measuredAt: '2025-10-22', value: 293 }] },
+        { rawName: 'HEMOGLOBINA GLICADA (HBA1C)', value: 4.9, unit: '%', referenceText: 'Menor que 5,7%' },
+        { rawName: 'TSH ULTRA SENSÍVEL', value: 1.58, unit: 'mUI/mL', referenceText: 'De 0,40 a 4,05 mUI/mL' },
+        { rawName: 'MARCADOR EXEMPLO SEM CATÁLOGO', value: 12.3, unit: 'UI/L' },
+      ],
+      notes: 'Painel de exemplo (extrator fake) — revise e corrija.',
+    });
   }
 }

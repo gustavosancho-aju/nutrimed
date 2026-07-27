@@ -17,6 +17,10 @@ export {
   // Exames personalizados por paciente + metas corporais
   setCustomExamDefs,
   loadCustomExamDefs,
+  // E14 — seleção de exames apresentados ao paciente
+  setLabDisplayPrefs,
+  loadLabDisplayPrefs,
+  MAX_PRESENTED_ANALYTES,
   setBodyGoal,
   loadCurrentBodyGoal,
   // E12 — metas nutricionais & food log
@@ -48,6 +52,8 @@ export {
   type MeasurementInput,
   type BodyCompositionValues,
   type LabExamValues,
+  type LabAnalyte,
+  type LabDisplayPrefs,
   type CustomExamDef,
   type BodyGoalValues,
   type BodyGoal,

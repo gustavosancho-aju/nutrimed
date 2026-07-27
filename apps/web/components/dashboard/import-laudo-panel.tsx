@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { extractLaudoAction, type ImportState } from '@/lib/import-actions';
 import { MeasurementForm, type MeasurementField } from './measurement-form';
+import { LabPanelConfirm } from './lab-panel-confirm';
 
 const BODY_FIELDS: MeasurementField[] = [
   { name: 'peso', label: 'Peso', unit: 'kg' },
@@ -64,8 +65,26 @@ export function ImportLaudoPanel({ patientId, today }: { patientId: string; toda
         {state.error && <p className="text-sm text-red-600">{state.error}</p>}
       </form>
 
-      {/* Passo 2 — confirmação (gate humano obrigatório, ADR-012) */}
-      {draft && (
+      {/* Passo 2 — confirmação (gate humano obrigatório, ADR-012).
+          Laudo laboratorial lido como PAINEL COMPLETO (E14) usa a tabela; os
+          demais seguem no formulário de campos fixos. */}
+      {state.panel && (
+        <div className="space-y-3">
+          <div className="rounded-[10px] border border-amber-300/50 bg-amber-400/10 p-4 text-sm text-amber-800">
+            <strong>Valores extraídos por IA — confira antes de salvar.</strong> A IA assiste; a
+            decisão é sua. Corrija o que for necessário; nada é gravado sem a sua confirmação.
+            {state.message ? ` ${state.message}` : ''}
+          </div>
+          <LabPanelConfirm
+            patientId={patientId}
+            panel={state.panel}
+            modelVersion={state.modelVersion}
+            today={today}
+          />
+        </div>
+      )}
+
+      {draft && !state.panel && (
         <div>
           <div className="rounded-[10px] border border-amber-300/50 bg-amber-400/10 p-4 text-sm text-amber-800">
             <strong>Valores extraídos por IA — confira antes de salvar.</strong> A IA assiste; a

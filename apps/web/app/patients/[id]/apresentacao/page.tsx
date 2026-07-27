@@ -8,9 +8,12 @@ import {
   listBodyComposition,
   listLabExam,
   loadCustomExamDefs,
+  loadLabDisplayPrefs,
   loadCurrentBodyGoal,
   computeAge,
 } from '@nutrimed/patients';
+import { buildAnalyteSeries, rangeLabel, selectPresented } from '@/lib/lab-panel';
+import { bandAndTarget } from '@/components/dashboard/analyte-card';
 import {
   compareTrendPoints,
   deriveHeightMeters,
@@ -67,12 +70,15 @@ function EvolutionChart({
   unit,
   band,
   target,
+  reference,
 }: {
   label: string;
   points: readonly TrendPoint[];
   unit?: string;
   band?: TargetBand;
   target?: number;
+  /** Faixa impressa no laudo, exibida como legenda (exames — E14). */
+  reference?: string | null;
 }) {
   if (points.length === 0) return null;
   const sorted = [...points].sort(compareTrendPoints);
@@ -90,6 +96,9 @@ function EvolutionChart({
       <div className="mt-3">
         <TrendChart points={points} unit={unit} band={band} target={target} heightClass="h-24" />
       </div>
+      {reference && (
+        <p className="mt-1.5 text-[11px] text-ink-muted">Referência do laudo: {reference}</p>
+      )}
       <p className="mt-2 flex justify-between text-[10px] text-ink-muted" aria-hidden>
         <span>{fmtDate(first.measuredAt)}</span>
         <span>
@@ -115,6 +124,11 @@ export default async function ApresentacaoPage({ params }: { params: Promise<{ i
   const labs = await listLabExam(db, id, key);
   const customDefs = await loadCustomExamDefs(db, id, key);
   const bodyGoal = await loadCurrentBodyGoal(db, id, key);
+  // Exames a apresentar: escolha e ORDEM do médico (E14). Sem seleção salva, a
+  // tela não mostra exames — mostrar 40 gráficos ao paciente seria ruído, e
+  // escolher por ele seria decidir o que é relevante clinicamente.
+  const labPrefs = await loadLabDisplayPrefs(db, id, key);
+  const apresentados = selectPresented(buildAnalyteSeries(labs, customDefs), labPrefs.presented);
   const age = computeAge(patient.birthDate, new Date());
 
   const peso = lastOf(body, 'peso');
@@ -294,25 +308,29 @@ export default async function ApresentacaoPage({ params }: { params: Promise<{ i
             </div>
           </div>
 
-          {/* Exames laboratoriais — evolução (sem banda/meta: não inventamos
-              referência visual na tela do paciente; a interpretação é do médico) */}
-          {labs.length > 0 && (
+          {/* Exames laboratoriais — só os que o médico escolheu apresentar, na
+              ordem que ele definiu. A faixa mostrada é a do LAUDO (não uma
+              referência nossa); limite aberto vira linha, não banda. */}
+          {apresentados.length > 0 && (
             <div className="border-t border-ink/10 px-8 pb-8 pt-6 md:px-10">
               <h2 className="font-display text-base font-semibold text-ink">
                 Exames laboratoriais
               </h2>
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <EvolutionChart label="LDL" points={seriesOf(labs, 'ldl')} unit="mg/dL" />
-                <EvolutionChart label="HbA1C" points={seriesOf(labs, 'hba1c')} unit="%" />
-                <EvolutionChart label="Insulina" points={seriesOf(labs, 'insulina')} unit="µU/mL" />
-                {customDefs.map((d) => (
-                  <EvolutionChart
-                    key={d.slot}
-                    label={d.name}
-                    points={seriesOf(labs, `custom${d.slot}` as 'custom1' | 'custom2' | 'custom3')}
-                    unit={d.unit}
-                  />
-                ))}
+                {apresentados.map((s) => {
+                  const { band, target } = bandAndTarget(s);
+                  return (
+                    <EvolutionChart
+                      key={s.slug}
+                      label={s.label}
+                      points={s.points}
+                      unit={s.unit}
+                      band={band}
+                      target={target}
+                      reference={rangeLabel(s)}
+                    />
+                  );
+                })}
               </div>
             </div>
           )}

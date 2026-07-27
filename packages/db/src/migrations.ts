@@ -498,4 +498,17 @@ CREATE INDEX IF NOT EXISTS patient_self_log_patient_kind_idx
 ALTER TABLE food_log_entry ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
 `,
   },
+  {
+    name: '0022_patient_lab_prefs',
+    sql: `
+-- E14 (painel laboratorial dinâmico): quais exames o médico escolheu APRESENTAR
+-- ao paciente, e em que ordem. Os VALORES do painel não precisaram de migration
+-- (vão no blob JSON já cifrado de lab_exam.values_enc) — esta coluna guarda só a
+-- preferência de exibição, 1:1 com o paciente, como custom_exams_enc da 0007.
+-- Cifrada (NFR9) pelo mesmo motivo dos exames personalizados: a LISTA de exames
+-- que um médico acompanha em um paciente revela condição de saúde. Sem CHECK e
+-- sem versionamento — a auditoria 'lab-display-set' registra as edições.
+ALTER TABLE patient ADD COLUMN IF NOT EXISTS lab_prefs_enc text;
+`,
+  },
 ];

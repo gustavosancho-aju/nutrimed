@@ -61,6 +61,28 @@ export interface BodyCompositionValues {
   readonly tmb?: number;
 }
 
+/**
+ * Um analito do painel laboratorial (E14). Guarda, além do valor, a UNIDADE e a
+ * FAIXA DE REFERÊNCIA que o laudo imprimiu naquela data — copiadas para dentro
+ * da medição de propósito: se o laboratório mudar a referência depois (acontece),
+ * o resultado antigo continua exibido contra a faixa que valia quando foi colhido.
+ */
+export interface LabAnalyte {
+  /** Slug canônico do catálogo, ou `livre:<nome>` fora dele. Amarra a série. */
+  readonly slug: string;
+  /** Rótulo de exibição no momento da gravação. */
+  readonly label: string;
+  readonly value: number;
+  readonly unit?: string;
+  /** Limites da faixa do laudo (ausentes ⇒ o gráfico não desenha banda). */
+  readonly refMin?: number;
+  readonly refMax?: number;
+  /** Texto original da referência, para o médico conferir o que o lab escreveu. */
+  readonly refText?: string;
+  /** Nome exato impresso no laudo — rastreabilidade da canonicalização. */
+  readonly rawName?: string;
+}
+
 export interface LabExamValues {
   readonly ldl?: number;
   readonly hba1c?: number;
@@ -73,6 +95,13 @@ export interface LabExamValues {
   readonly custom1?: number;
   readonly custom2?: number;
   readonly custom3?: number;
+  /**
+   * Painel completo do laudo (E14) — chave nova no MESMO blob cifrado, sem
+   * migration: `values_enc` sempre foi JSON livre. Medições antigas não têm
+   * `panel` e seguem funcionando pelos campos acima; a leitura unificada
+   * (legado + painel) é feita na camada de apresentação.
+   */
+  readonly panel?: readonly LabAnalyte[];
 }
 
 /**
@@ -554,6 +583,77 @@ export async function loadCustomExamDefs(
   const enc = res.rows[0]?.custom_exams_enc ?? null;
   if (enc === null) return [];
   return JSON.parse(decryptField(enc, key)) as CustomExamDef[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Apresentação do painel laboratorial (E14) — quais exames o médico escolheu
+// mostrar ao paciente, e em que ordem. Configuração 1:1 cifrada na coluna
+// patient.lab_prefs_enc (a LISTA de exames acompanhados revela condição de
+// saúde, NFR9). Auditada como 'lab-display-set'.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Slugs escolhidos para a apresentação, NA ORDEM em que devem aparecer. */
+export interface LabDisplayPrefs {
+  readonly presented: readonly string[];
+}
+
+/** Teto de exames apresentáveis — a tela do paciente não comporta mais. */
+export const MAX_PRESENTED_ANALYTES = 12;
+
+/**
+ * Salva a seleção de exames a apresentar (substitui o conjunto; lista vazia ⇒
+ * limpa a coluna e a apresentação volta a não mostrar exames). Duplicatas são
+ * removidas preservando a ordem e o total é limitado a
+ * {@link MAX_PRESENTED_ANALYTES}. Cifrado + auditado.
+ */
+export async function setLabDisplayPrefs(
+  db: SqlExecutor,
+  patientId: string,
+  presented: readonly string[],
+  key: Buffer,
+  origin: WriteOrigin = { action: 'lab-display-set' },
+): Promise<void> {
+  const unicos = [...new Set(presented.filter((s) => s.trim() !== ''))].slice(
+    0,
+    MAX_PRESENTED_ANALYTES,
+  );
+  const enc = unicos.length > 0 ? encryptField(JSON.stringify({ presented: unicos }), key) : null;
+  await db.query(`UPDATE patient SET lab_prefs_enc = $2, updated_at = now() WHERE id = $1`, [
+    patientId,
+    enc,
+  ]);
+  await writeAudit(db, patientId, {
+    triggeredBy: origin.action,
+    kbSources: [],
+    modelVersion: origin.modelVersion ?? 'human-edit',
+  });
+}
+
+/**
+ * Seleção de exames a apresentar (coluna vazia ⇒ nenhum). Blob corrompido ou de
+ * formato inesperado ⇒ nenhum, nunca lança: a dashboard não pode quebrar por
+ * causa de uma preferência de exibição.
+ */
+export async function loadLabDisplayPrefs(
+  db: SqlExecutor,
+  patientId: string,
+  key: Buffer,
+): Promise<LabDisplayPrefs> {
+  const res = await db.query<{ lab_prefs_enc: string | null }>(
+    'SELECT lab_prefs_enc FROM patient WHERE id = $1',
+    [patientId],
+  );
+  const enc = res.rows[0]?.lab_prefs_enc ?? null;
+  if (enc === null) return { presented: [] };
+  try {
+    const parsed = JSON.parse(decryptField(enc, key)) as { presented?: unknown };
+    const presented = Array.isArray(parsed.presented)
+      ? parsed.presented.filter((s): s is string => typeof s === 'string')
+      : [];
+    return { presented };
+  } catch {
+    return { presented: [] };
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -21,6 +21,9 @@ import {
   softDeletePatient,
   setCustomExamDefs,
   loadCustomExamDefs,
+  setLabDisplayPrefs,
+  loadLabDisplayPrefs,
+  MAX_PRESENTED_ANALYTES,
   setBodyGoal,
   loadCurrentBodyGoal,
 } from './patients';
@@ -456,6 +459,95 @@ describe('Patient Service (E11 — 11.2)', () => {
       );
       expect(raw.rows[0]!.custom_exams_enc).toBeNull();
       expect(await loadCustomExamDefs(exec, patientId, KEY)).toEqual([]);
+    });
+  });
+
+  describe('Painel laboratorial (E14) — analitos no blob + seleção de apresentação', () => {
+    it('grava o painel completo no blob cifrado e faz roundtrip com faixa do laudo', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Com Painel' }, KEY);
+      await addLabExam(
+        exec,
+        patientId,
+        {
+          measuredAt: new Date('2026-05-19T00:00:00Z'),
+          values: {
+            panel: [
+              { slug: 'ldl', label: 'LDL', value: 108.5, unit: 'mg/dL', refMax: 130, refText: 'Inferior a 130 mg/dL', rawName: 'COLESTEROL LDL' },
+              { slug: 'livre:marcador-xpto', label: 'Marcador XPTO', value: 12.3 },
+            ],
+          },
+        },
+        KEY,
+      );
+
+      const raw = await exec.query<{ values_enc: string }>(
+        'SELECT values_enc FROM lab_exam WHERE patient_id = $1',
+        [patientId],
+      );
+      expect(raw.rows[0]!.values_enc).not.toContain('LDL'); // cifrado (NFR9)
+
+      const [medicao] = await listLabExam(exec, patientId, KEY);
+      expect(medicao!.values.panel).toHaveLength(2);
+      const ldl = medicao!.values.panel!.find((a) => a.slug === 'ldl')!;
+      expect(ldl.value).toBe(108.5);
+      expect(ldl.refMax).toBe(130);
+      expect(ldl.rawName).toBe('COLESTEROL LDL');
+    });
+
+    it('medição LEGADO (sem panel) continua legível — sem migration de dados', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Legado' }, KEY);
+      await addLabExam(
+        exec,
+        patientId,
+        { measuredAt: new Date('2025-10-22T00:00:00Z'), values: { ldl: 143, hba1c: 5 } },
+        KEY,
+      );
+      const [medicao] = await listLabExam(exec, patientId, KEY);
+      expect(medicao!.values.ldl).toBe(143);
+      expect(medicao!.values.panel).toBeUndefined();
+    });
+
+    it('seleção de apresentação: cifrada, ordenada, deduplicada e auditada', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Com Seleção' }, KEY);
+      expect((await loadLabDisplayPrefs(exec, patientId, KEY)).presented).toEqual([]);
+
+      await setLabDisplayPrefs(exec, patientId, ['triglicerides', 'ldl', 'triglicerides', ''], KEY);
+
+      const raw = await exec.query<{ lab_prefs_enc: string | null }>(
+        'SELECT lab_prefs_enc FROM patient WHERE id = $1',
+        [patientId],
+      );
+      expect(raw.rows[0]!.lab_prefs_enc).not.toContain('triglicerides');
+
+      // ordem do médico preservada; duplicata e vazio removidos
+      expect((await loadLabDisplayPrefs(exec, patientId, KEY)).presented).toEqual([
+        'triglicerides',
+        'ldl',
+      ]);
+
+      const trail = await getAuditTrail(exec, patientId);
+      expect(trail.some((e) => e.triggeredBy === 'lab-display-set')).toBe(true);
+    });
+
+    it('respeita o teto de exames apresentados', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Muitos' }, KEY);
+      const muitos = Array.from({ length: MAX_PRESENTED_ANALYTES + 5 }, (_, i) => `exame-${i}`);
+      await setLabDisplayPrefs(exec, patientId, muitos, KEY);
+      expect((await loadLabDisplayPrefs(exec, patientId, KEY)).presented).toHaveLength(
+        MAX_PRESENTED_ANALYTES,
+      );
+    });
+
+    it('lista vazia limpa a coluna', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Limpa' }, KEY);
+      await setLabDisplayPrefs(exec, patientId, ['ldl'], KEY);
+      await setLabDisplayPrefs(exec, patientId, [], KEY);
+      const raw = await exec.query<{ lab_prefs_enc: string | null }>(
+        'SELECT lab_prefs_enc FROM patient WHERE id = $1',
+        [patientId],
+      );
+      expect(raw.rows[0]!.lab_prefs_enc).toBeNull();
+      expect((await loadLabDisplayPrefs(exec, patientId, KEY)).presented).toEqual([]);
     });
   });
 

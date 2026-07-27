@@ -4,8 +4,10 @@ import {
   type LaudoInput,
   type LaudoKind,
   type ExtractedLaudo,
+  type ExtractedPanel,
   KNOWN_FIELDS,
   sanitizeExtraction,
+  sanitizePanel,
 } from './extractor';
 
 /**
@@ -23,6 +25,8 @@ export interface ClaudeExtractorConfig {
   readonly model?: string;
   readonly endpoint?: string;
   readonly maxTokens?: number;
+  /** Teto de saída do painel completo (E14) — separado do extract legado. */
+  readonly panelMaxTokens?: number;
   readonly fetchImpl?: typeof fetch;
   readonly onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void;
 }
@@ -73,6 +77,34 @@ function systemPrompt(kind: LaudoKind): string {
   );
 }
 
+/**
+ * Prompt do PAINEL COMPLETO (E14). Diferente do legado, NÃO há lista de campos:
+ * o laudo manda. Três exigências que vieram de laudos reais:
+ * - um analito por RESULTADO NUMÉRICO (hemograma e "bilirrubina total e frações"
+ *   trazem vários números sob um título só);
+ * - a faixa de referência JÁ ESCOLHIDA para o paciente (o laudo lista faixas por
+ *   sexo e por idade — mandar o bloco inteiro faria a banda do gráfico sair errada);
+ * - a "Evolução do paciente" que o próprio laudo imprime, que vira histórico.
+ */
+const PANEL_SYSTEM_PROMPT =
+  'Você extrai TODOS os resultados de um laudo laboratorial para revisão por um médico. ' +
+  'Retorne APENAS um objeto JSON válido (sem cercas de código) no formato ' +
+  '{"measuredAt":"YYYY-MM-DD"|null,"analytes":[{"rawName":"...","value":number,"unit":"..."|null,' +
+  '"referenceText":"..."|null,"history":[{"measuredAt":"YYYY-MM-DD","value":number}]}],"notes":"..."}. ' +
+  'REGRAS: ' +
+  '(1) Inclua TODOS os exames com resultado numérico, inclusive os do hemograma e as frações ' +
+  '(ex.: bilirrubina total, direta e indireta são TRÊS entradas separadas). Um resultado numérico = uma entrada. ' +
+  '(2) "rawName" é o nome do exame EXATAMENTE como impresso no laudo. ' +
+  '(3) "referenceText" é a faixa de referência aplicável A ESTE paciente: o laudo lista faixas por sexo e ' +
+  'por idade — escolha a linha correta usando o sexo e a idade do paciente no cabeçalho e copie SOMENTE ela ' +
+  '(ex.: "de 3,5 a 8,5 mg/dL"). Nunca copie o bloco inteiro de faixas. ' +
+  '(4) Se o laudo trouxer "Evolução do paciente" (resultados anteriores com data), inclua-os em "history"; ' +
+  'senão omita. Converta datas dd/mm/aaaa para YYYY-MM-DD. ' +
+  '(5) "measuredAt" é a data da COLETA. ' +
+  '(6) Resultados qualitativos (positivo/negativo, "normocitose") NÃO entram — só números. ' +
+  '(7) NÃO invente valores nem faixas; omita o que estiver ilegível e registre em "notes". ' +
+  'Números no padrão internacional (ponto decimal).';
+
 interface AnthropicResponse {
   model?: string;
   content?: Array<{ type: string; text?: string }>;
@@ -87,7 +119,13 @@ export class ClaudeLabExtractor implements ILabExtractor {
     }
   }
 
-  async extract(input: LaudoInput, kind: LaudoKind): Promise<ExtractedLaudo> {
+  /** Envia o PDF + prompt e devolve o JSON já parseado (ainda NÃO saneado). */
+  private async callModel(
+    input: LaudoInput,
+    system: string,
+    userText: string,
+    maxTokens: number,
+  ): Promise<unknown> {
     const doFetch = this.config.fetchImpl ?? fetch;
     const response = await doFetch(this.config.endpoint ?? DEFAULT_ENDPOINT, {
       method: 'POST',
@@ -98,8 +136,8 @@ export class ClaudeLabExtractor implements ILabExtractor {
       },
       body: JSON.stringify({
         model: this.config.model ?? DEFAULT_MODEL,
-        max_tokens: this.config.maxTokens ?? 600,
-        system: systemPrompt(kind),
+        max_tokens: maxTokens,
+        system,
         messages: [
           {
             role: 'user',
@@ -108,7 +146,7 @@ export class ClaudeLabExtractor implements ILabExtractor {
                 type: 'document',
                 source: { type: 'base64', media_type: 'application/pdf', data: input.base64 },
               },
-              { type: 'text', text: 'Extraia os campos do laudo conforme o formato JSON pedido.' },
+              { type: 'text', text: userText },
             ],
           },
         ],
@@ -131,14 +169,37 @@ export class ClaudeLabExtractor implements ILabExtractor {
     if (!text) throw new LabExtractorError('Resposta sem bloco de texto.', 'parse');
 
     const cleaned = stripJsonFences(text);
-    let parsed: unknown;
     try {
-      parsed = JSON.parse(cleaned);
+      return JSON.parse(cleaned);
     } catch {
       throw new LabExtractorError(`JSON inválido do modelo: ${text.slice(0, 120)}`, 'parse');
     }
+  }
+
+  async extract(input: LaudoInput, kind: LaudoKind): Promise<ExtractedLaudo> {
+    const parsed = await this.callModel(
+      input,
+      systemPrompt(kind),
+      'Extraia os campos do laudo conforme o formato JSON pedido.',
+      this.config.maxTokens ?? 600,
+    );
     // A sanitização é a fronteira de confiança — só campos conhecidos e numéricos.
     return sanitizeExtraction(parsed, kind);
+  }
+
+  /**
+   * Painel completo (E14). Teto de saída bem maior que o do extract legado: um
+   * laudo real deste tamanho passa de 40 analitos, e um `max_tokens` curto
+   * truncaria o JSON no meio (que viraria erro de parse, não painel incompleto).
+   */
+  async extractPanel(input: LaudoInput): Promise<ExtractedPanel> {
+    const parsed = await this.callModel(
+      input,
+      PANEL_SYSTEM_PROMPT,
+      'Extraia TODOS os resultados numéricos do laudo conforme o formato JSON pedido.',
+      this.config.panelMaxTokens ?? 16000,
+    );
+    return sanitizePanel(parsed);
   }
 
   /** Versão do modelo, para a proveniência da auditoria (NFR10) na confirmação. */

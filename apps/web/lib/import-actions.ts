@@ -2,7 +2,12 @@
 
 import { redirect } from 'next/navigation';
 import { loadPatient } from '@nutrimed/patients';
-import { createLabExtractor, type LaudoKind, type ExtractedLaudo } from '@nutrimed/lab-import';
+import {
+  createLabExtractor,
+  type LaudoKind,
+  type ExtractedLaudo,
+  type ExtractedPanel,
+} from '@nutrimed/lab-import';
 import { getDb } from './db';
 import { getCurrentUser } from './auth';
 import { getEncryptionKey } from './crypto-key';
@@ -12,6 +17,8 @@ const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 export interface ImportState {
   kind?: LaudoKind;
   draft?: ExtractedLaudo;
+  /** Painel completo (E14) — presente quando o laudo é laboratorial. */
+  panel?: ExtractedPanel;
   modelVersion?: string;
   message?: string;
   error?: string;
@@ -51,6 +58,24 @@ export async function extractLaudoAction(_prev: ImportState, formData: FormData)
 
   try {
     const base64 = Buffer.from(await file.arrayBuffer()).toString('base64');
+
+    // Laudo laboratorial: tenta o PAINEL COMPLETO (E14). O extract legado só lê
+    // 3 marcadores — num laudo real isso descartaria dezenas de exames em
+    // silêncio. Fonte sem `extractPanel` (ou painel vazio) cai no legado.
+    if (kind === 'lab' && extractor.extractPanel) {
+      const panel = await extractor.extractPanel({ base64, filename: file.name });
+      if (panel.analytes.length > 0) {
+        return {
+          kind,
+          panel,
+          modelVersion: extractor.modelVersion,
+          message:
+            panel.notes ??
+            `${panel.analytes.length} exames lidos — confira os valores antes de salvar.`,
+        };
+      }
+    }
+
     const draft = await extractor.extract({ base64, filename: file.name }, kind);
     const found = Object.keys(draft.values).length;
     return {

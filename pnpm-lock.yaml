@@ -68,6 +68,9 @@ importers:
       '@nutrimed/kb':
         specifier: workspace:^
         version: link:../../packages/kb
+      '@nutrimed/lab-catalog':
+        specifier: workspace:*
+        version: link:../../packages/lab-catalog
       '@nutrimed/lab-import':
         specifier: workspace:*
         version: link:../../packages/lab-import
@@ -382,6 +385,15 @@ importers:
       '@nutrimed/providers':
         specifier: workspace:*
         version: link:../providers
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.21
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
+  packages/lab-catalog:
     devDependencies:
       '@types/node':
         specifier: ^22.0.0

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sanitizeExtraction } from './extractor';
+import { sanitizeExtraction, sanitizePanel } from './extractor';
 import { FakeLabExtractor } from './fake-extractor';
 import { createLabExtractor } from './index';
 
@@ -37,6 +37,92 @@ describe('sanitizeExtraction — fronteira de confiança (E11/11.9)', () => {
   it('ignora valores não-finitos (NaN/Infinity)', () => {
     const r = sanitizeExtraction({ values: { peso: Number.NaN, imc: Infinity, cintura: 95 } }, 'body');
     expect(r.values).toEqual({ cintura: 95 });
+  });
+});
+
+describe('sanitizePanel — painel completo (E14)', () => {
+  it('mantém nome + valor e os campos opcionais reconhecidos', () => {
+    const r = sanitizePanel({
+      measuredAt: '2026-05-19',
+      analytes: [
+        { rawName: 'COLESTEROL LDL', value: 108.5, unit: 'mg/dL', referenceText: 'Inferior a 130 mg/dL' },
+      ],
+    });
+    expect(r.measuredAt).toBe('2026-05-19');
+    expect(r.analytes).toEqual([
+      { rawName: 'COLESTEROL LDL', value: 108.5, unit: 'mg/dL', referenceText: 'Inferior a 130 mg/dL' },
+    ]);
+  });
+
+  it('NÃO usa whitelist de nomes — exame fora do catálogo sobrevive', () => {
+    const r = sanitizePanel({ analytes: [{ rawName: 'Marcador XPTO', value: 3 }] });
+    expect(r.analytes).toHaveLength(1);
+    expect(r.analytes[0]!.rawName).toBe('Marcador XPTO');
+  });
+
+  it('descarta entradas sem nome ou sem valor numérico', () => {
+    const r = sanitizePanel({
+      analytes: [
+        { rawName: 'Ok', value: 1 },
+        { rawName: '', value: 2 },
+        { rawName: 'Sem valor' },
+        { rawName: 'Qualitativo', value: 'positivo' },
+        { rawName: 'NaN', value: Number.NaN },
+        'lixo',
+      ],
+    });
+    expect(r.analytes.map((a) => a.rawName)).toEqual(['Ok']);
+  });
+
+  it('aceita valor em string com vírgula (pt-BR)', () => {
+    expect(sanitizePanel({ analytes: [{ rawName: 'HbA1c', value: '4,9' }] }).analytes[0]!.value).toBe(4.9);
+  });
+
+  it('deduplica o mesmo exame repetido no laudo (1ª leitura vence)', () => {
+    // Neste laudo, SHBG e testosterona aparecem em duas páginas.
+    const r = sanitizePanel({
+      analytes: [
+        { rawName: 'SHBG', value: 12.9 },
+        { rawName: 'shbg', value: 99 },
+      ],
+    });
+    expect(r.analytes).toHaveLength(1);
+    expect(r.analytes[0]!.value).toBe(12.9);
+  });
+
+  it('histórico: só pontos com data ISO e valor numérico', () => {
+    const r = sanitizePanel({
+      analytes: [
+        {
+          rawName: 'LDL',
+          value: 108,
+          history: [
+            { measuredAt: '2025-10-22', value: 143.1 },
+            { measuredAt: '22/10/2025', value: 143.1 },
+            { measuredAt: '2025-03-25' },
+            { value: 5 },
+          ],
+        },
+      ],
+    });
+    expect(r.analytes[0]!.history).toEqual([{ measuredAt: '2025-10-22', value: 143.1 }]);
+  });
+
+  it('omite history quando não há ponto válido (não grava array vazio)', () => {
+    expect(sanitizePanel({ analytes: [{ rawName: 'LDL', value: 1, history: [] }] }).analytes[0]).toEqual({
+      rawName: 'LDL',
+      value: 1,
+    });
+  });
+
+  it('entrada inválida ⇒ painel vazio (nunca lança — NFR13)', () => {
+    expect(sanitizePanel(null)).toEqual({ analytes: [] });
+    expect(sanitizePanel('xxx')).toEqual({ analytes: [] });
+    expect(sanitizePanel({ analytes: 'nope' })).toEqual({ analytes: [] });
+  });
+
+  it('data de coleta inválida é ignorada', () => {
+    expect(sanitizePanel({ measuredAt: '19/05/2026', analytes: [] }).measuredAt).toBeUndefined();
   });
 });
 
