@@ -170,9 +170,13 @@ estimativa (ADR-015). A foto não é persistida.
 **Escopo do bot — só alimentação (2026-07-24):** o canal do paciente trata **exclusivamente** de
 alimentação. Comandos: foto do prato, `/comi` (texto), `/corrigir`, `/hoje`, `/meta`,
 `/start CÓDIGO`. Os comandos `/agua`, `/dormi` e `/acordei` (adicionados em 2026-07-20) foram
-**removidos** para manter o bot simples. O que ficou: a migration 0020 (`patient_self_log`), os
-serviços em `@nutrimed/patients`, as metas de água/sono na ficha e as colunas do dashboard — o
-dado já coletado continua visível e religar exige apenas re-adicionar os handlers.
+**removidos** para manter o bot simples. Em 2026-07-28 a limpeza se completou na interface: saíram
+também os cartões de Água e Sono do dashboard, as duas colunas do relatório diário e as metas
+`waterMl`/`sleepMinHours`/`sleepMaxHours` da ficha — meta sem medição para comparar é ruído.
+**Nada foi destruído:** a migration 0020 (`patient_self_log`), os serviços em `@nutrimed/patients`,
+os campos opcionais em `NutritionGoalValues` e os dados já coletados continuam no banco; as metas
+antigas seguem no blob cifrado, apenas não são mais editáveis. Religar é re-adicionar handlers e
+buscas.
 
 **Registro por texto — `/comi` (2026-07-24):** além da foto, o paciente pode digitar o que comeu
 com as quantidades (`/comi 100g de arroz, 150g de frango grelhado`). O caminho é **determinístico
@@ -201,6 +205,40 @@ Comandos aceitam a forma `/comando@RafaNutriBot`. Setup: privacy mode **OFF** no
 re-adicionar o bot ao grupo e enviar `/start CÓDIGO` no grupo. O vínculo segue sendo **1 chat por
 paciente** (grupo OU privado, nunca ambos). Atenção jurídica: o dado clínico circula num chat
 coletivo — reforça o item CJ-12.
+
+---
+
+### 5.4 Histórico mês a mês do plano de 12 meses (E15)
+
+O plano do paciente dura 12 meses e o médico o apresenta **mês a mês**. Duas telas leem a mesma
+verdade com enquadramentos diferentes: `<MonthlyHistory>` na aba Bem-estar (ferramenta de trabalho
+do médico — régua dos 12 meses com chips clicáveis, quatro números e o mês dia a dia) e
+`<MonthlyJourney>` no Modo Apresentação (fala com o **paciente**, em frase e tipografia grande, sem
+nenhuma ação na tela). São componentes separados de propósito: unificá-los num `variant` encheria o
+código de condicionais para servir a dois leitores distintos. Navegação por `?mes=YYYY-MM`.
+
+**Nada é arquivado em tabela nova.** `food_log_entry` (append-only, com soft-delete) e
+`nutrition_goal` (versionada por `effective_from`) **já são o arquivo** — e como a meta é versionada,
+cada dia é julgado pela meta que valia **naquele dia**: mudar a meta em março não reescreve janeiro.
+Um resumo materializado foi descartado porque mentiria assim que o médico removesse um lançamento
+retroativo, criando duas versões da verdade — e a errada seria a exibida.
+
+**Performance:** `listNutritionRange` lê o intervalo inteiro em **2 consultas fixas** (lançamentos +
+metas vigentes), agrupando por dia em memória. O `listNutritionDiary` original fazia 2 consultas por
+dia — 12 meses seriam ~730, o suficiente para congelar a Apresentação na frente do paciente. Os
+índices necessários já existiam; o gargalo era o laço na aplicação.
+
+**Decisão de produto — aderência e cobertura nunca se fundem.** Um mês com 12 dias registrados e 10
+metas batidas reporta **83% de aderência** (10/12, os dias *avaliáveis*) e **40% de cobertura**
+(12/30) — nunca 33%, que puniria o paciente por não ter anotado em vez de por ter comido mal. Mês sem
+dado avaliável mostra "—", jamais "0%", que se leria como fracasso. Na tela do paciente a cobertura é
+dita como fato **com a razão de existir** ("quanto mais registros, mais fiel fica o retrato"), e há
+teste garantindo que essa frase não contenha linguagem de culpa.
+
+**Padrão recorrente que este épico ajudou a nomear:** *ausência de dado tratada como valor*. Ele
+apareceu três vezes no sistema — "não registrou" virando "consumiu zero" nos cartões de métrica,
+"não registrou" virando "não bateu a meta" na aderência, e "silêncio prolongado" virando "pausa
+natural" no case review do board (o vazamento de custo de 2026-07-24). Os três estão corrigidos.
 
 ---
 

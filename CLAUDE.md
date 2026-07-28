@@ -10,7 +10,7 @@ deploy e roadmap — a referência única do estado atual).
 **📋 Registro histórico do MVP (E1–E10): [`docs/IMPLEMENTATION-RECORD.md`](docs/IMPLEMENTATION-RECORD.md)**
 (rastreabilidade FR/NFR/ADR e evidências ao vivo do snapshot de 2026-06-11).
 
-## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-07-24, main)
+## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-07-28, main @ 5a7788d, Fly v49)
 
 **9 de 10 épicos com núcleo implementado e verificado ao vivo** (falta E8 — vídeos).
 **E11 (Pacientes & Dashboard) COMPLETO** (4 fases + extras: faixa ideal/meta nos gráficos e
@@ -110,6 +110,31 @@ server action; extração cacheada ao lado do PDF — **o cache contém dado cl�
 Dívida conhecida: o modelo às vezes **copia a referência da linha vizinha** quando o laudo agrupa
 grandezas sob um título só (o tempo de protrombina herdou o "> 70%" da atividade) — a tabela de
 confirmação mostra a faixa interpretada justamente para o médico flagrar isso.
+**E15 (Histórico mês a mês do plano de 12 meses) COMPLETO e em produção (2026-07-28)** — o médico
+acompanha e apresenta ao paciente, mês a mês, o quanto ele bateu as metas ao longo do plano.
+4 fases: (1) **`listNutritionRange`** lê o intervalo inteiro em **2 consultas fixas**; o
+`listNutritionDiary` fazia 2 POR DIA (12 meses ≈ 730) e travaria a Apresentação na frente do
+paciente — os índices já existiam, o gargalo era o laço. Teste prova o custo (2 consultas para 1 mês
+E para 12) e o resultado idêntico ao laço antigo. (2) **`summarizeNutritionMonths`** + `monthDaysISO`
+/ `lastNMonths` / `adherenceTrendPoints` (série pronta p/ o `<TrendChart>`). (3) **`<MonthlyHistory>`**
+na aba Bem-estar: régua dos 12 meses com chips clicáveis + mês dia a dia, navegação por `?mes=`.
+(4) **`<MonthlyJourney>`** na Apresentação — componente PRÓPRIO (não um variant): fala com o
+PACIENTE em frase ("Você bateu a meta em 10 dias dos 12 que registrou"), tipografia grande, sem ação.
+**DECISÃO DE PRODUTO (a mais importante do épico):** aderência e cobertura NUNCA viram um número só.
+12 dias registrados com 10 metas batidas reporta **83% de aderência + 40% de cobertura**, nunca 33% —
+diluir os dias sem registro puniria o paciente por não ter anotado, e é esse número que o médico
+projeta na frente dele. Mês sem dado avaliável mostra "—", nunca "0%". Há teste garantindo que a
+frase da cobertura não contenha linguagem de culpa. **Nada é arquivado em tabela nova:**
+`food_log_entry` + `nutrition_goal` versionada JÁ são o arquivo, e resumo materializado mentiria
+quando o médico removesse um lançamento retroativo (soft-delete da 0021).
+**Cartões de métrica corrigidos (2026-07-28):** recebiam os 14 dias e um dia sem registro entrava
+como ZERO — antes de o paciente registrar, o cartão mostrava "0 kcal · ▼ -100% · 100% abaixo da
+meta". Agora a série usa só dias COM registro. É o MESMO erro do case review (silêncio eterno lido
+como pausa) e do "não registrou = não bateu": **ausência de dado tratada como valor** — o padrão
+apareceu 3× nesta sessão, nos 3 lugares corrigido.
+**Painel e ficha só de alimentação (2026-07-28):** saíram os cartões de Água e Sono, as 2 colunas do
+relatório diário e as metas `waterMl`/`sleepMinHours`/`sleepMaxHours` da ficha. Schema, serviços,
+campos opcionais no tipo e dados coletados FICARAM (metas antigas seguem no blob cifrado).
 Suíte: **736 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
 CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) verde. Migrations 0001–0022.
 Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 · RUNBOOK Fase 5 = canal Telegram.
@@ -123,7 +148,7 @@ Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 
 | E5 RAG namespaces + Reasoner | ✅ núcleo | E10 Observabilidade & Piloto | ✅ núcleo |
 | E9 Documentação Clínica | ✅ | E11 Pacientes & Dashboard | ✅ completo (4 fases) |
 | E12 Bot de Telegram (foto→nutrição vs metas) | ✅ completo (9 stories + grupo + texto; só alimentação) | E13 Relatório Nutricional (TACO) | ✅ completo (em produção) |
-| E14 Painel Laboratorial dinâmico (laudo completo + apresentação) | ✅ implementado (local; falta verificar no navegador) | — | — |
+| E14 Painel Laboratorial dinâmico (laudo completo + apresentação) | ✅ completo (verificado no navegador) | E15 Histórico mês a mês (plano de 12 meses) | ✅ completo (4 fases, em produção) |
 | Transcrição Confiável (léxico + revisão do médico + POC) | ✅ completo (falta áudio real p/ POC) | — | — |
 
 **Fluxo vivo:** login (`demo@nutrimed.test`/`nutrimed123`) → consulta → consentimento (default NEGA)
@@ -148,7 +173,7 @@ apps/web                 Tela de consulta + ficha/dashboard + gateway WS + webho
 packages/shared-types    Protocolo WS v1 (contribution/ping/transcript)
 packages/domain          CLINICAL_VOCABULARY (boost STT, curado) + métricas de acurácia STT (recall clínico/WER — POC 2.5)
 packages/crypto          AES-256-GCM (NFR9)
-packages/db              Migrations 0001–0010 (0008 transcript cifrado · 0009 relatório nutricional · 0010 transcript revisado) · PGlite dev / pg prod (TLS)
+packages/db              Migrations 0001–0022 (0021 soft-delete do food log · 0022 seleção de exames apresentados) · PGlite dev / pg prod (TLS)
 packages/auth            scrypt + sessões DB-backed
 packages/consent         Gate de gravação FR20 (servidor, default NEGA)
 packages/audit           Trilha append-only com proveniência (NFR10)
