@@ -94,11 +94,19 @@ relevância clínica). **Extração REAL verificada** contra o laudo de 22 pági
 **70 analitos, 70/70 reconhecidos pelo catálogo, 66/70 com faixa interpretada, 31 com histórico**.
 Foi essa rodada que revelou os 3 bugs corrigidos (colisão TTPA/RFG; tempo de protrombina mapeado
 como atividade — 12,1s contra referência "> 70%"; glicemia média estimada fora do catálogo).
-Dívidas conhecidas: **não verificado no navegador** (o `npm run dev` está vetado pelo token de prod
-do bot) e o modelo às vezes **copia a referência da linha vizinha** quando o laudo agrupa grandezas
-sob um título só (o tempo de protrombina herdou o "> 70%" da atividade) — a tabela de confirmação
-mostra a faixa interpretada justamente para o médico flagrar isso.
-Suíte: **725 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
+**Telas VERIFICADAS no navegador (2026-07-28)**, depois que a 0139ae1 derrubou o veto ao
+`npm run dev`: aba Exames com os 69 analitos do laudo real agrupados por categoria, banda da faixa
+desenhada e evolução ligando resultado antigo a novo; unificação das gerações confirmada (insulina
+digitada no formulário de 3 campos e insulina do laudo na MESMA série); seleção com fila
+reordenável persistindo a ordem; Apresentação obedecendo essa ordem; e a importação ponta a ponta
+(tabela de confirmação → gravação → dashboard). Sem erro de console ou servidor.
+Semear um laudo real localmente: `cd apps/web && npx tsx --env-file=.env.local
+scripts/seed-laudo-real.mjs <laudo.pdf> ["Nome do paciente"]` (passa pelo MESMO caminho de código da
+server action; extração cacheada ao lado do PDF — **o cache contém dado clínico, apague depois**).
+Dívida conhecida: o modelo às vezes **copia a referência da linha vizinha** quando o laudo agrupa
+grandezas sob um título só (o tempo de protrombina herdou o "> 70%" da atividade) — a tabela de
+confirmação mostra a faixa interpretada justamente para o médico flagrar isso.
+Suíte: **736 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
 CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) verde. Migrations 0001–0022.
 Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 · RUNBOOK Fase 5 = canal Telegram.
 
