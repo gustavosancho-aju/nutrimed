@@ -12,13 +12,9 @@ import {
   MAX_PRESENTED_ANALYTES,
   loadCurrentBodyGoal,
   loadCurrentNutritionGoal,
-  listWaterHistory,
-  listSleepSessions,
   listNutritionRange,
-  sleepTargetFromGoal,
   computeAge,
   type DailyNutritionDiary,
-  type SleepSession,
 } from '@nutrimed/patients';
 import {
   seriesOf,
@@ -96,23 +92,11 @@ export default async function DashboardPage({
   const now = new Date();
   const age = computeAge(patient.birthDate, now);
 
-  // Bem-estar (água/sono via Telegram): só busca quando a aba está ativa —
-  // listWaterHistory faz uma query por dia (14), custo desnecessário nas
-  // outras abas.
+  // Aba Bem-estar: SÓ alimentação (2026-07-28). Água e sono saíram do bot e do
+  // painel — o foco do registro do paciente é a alimentação. O schema e os
+  // serviços continuam no lugar; religar é re-adicionar as buscas.
   const nutritionGoal = aba === 'bem-estar' ? await loadCurrentNutritionGoal(db, id, key) : null;
-  const sleepTarget = sleepTargetFromGoal(nutritionGoal?.values);
   const wellnessDays = lastNDaysISO(now, WELLNESS_HISTORY_DAYS, BR_TZ_OFFSET_MINUTES);
-  const waterHistory =
-    aba === 'bem-estar' ? await listWaterHistory(db, id, wellnessDays, BR_TZ_OFFSET_MINUTES, key) : [];
-  const sleepSessions =
-    aba === 'bem-estar'
-      ? await listSleepSessions(
-          db,
-          id,
-          new Date(now.getTime() - WELLNESS_HISTORY_DAYS * 24 * 60 * 60 * 1000),
-          sleepTarget,
-        )
-      : [];
   // Histórico do plano de 12 meses (E15 fase 3). UMA leitura de intervalo cobre
   // tudo: a régua dos 12 meses E o mês selecionado (fatiado em memória). Custo
   // fixo de 2 consultas — o laço dia a dia faria ~730 e travaria a tela.
@@ -131,25 +115,27 @@ export default async function DashboardPage({
     mesRaw && monthlySummaries.some((m) => m.month === mesRaw) ? mesRaw : currentMonthISO;
   const monthDiary = planDiary.filter((d) => d.day.startsWith(selectedMonth));
 
-  // Últimos 14 dias (relatório diário de água/sono) — fatiado do MESMO intervalo
-  // já carregado, sem nova ida ao banco.
+  // Últimos 14 dias — fatiados do MESMO intervalo já carregado, sem nova ida ao banco.
   const wellnessDaySet = new Set(wellnessDays);
   const nutritionDiary: DailyNutritionDiary[] = planDiary.filter((d) => wellnessDaySet.has(d.day));
 
-  // Relatório diário (pedido do médico): uma linha por dia, mais recente
-  // primeiro, cruzando alimentação + água + sono num único "bateu a meta?".
-  const sleepByDay = new Map<string, SleepSession>();
-  for (const s of sleepSessions) sleepByDay.set(toLocalDayISO(s.end, BR_TZ_OFFSET_MINUTES), s);
+  /**
+   * Dias COM registro — série dos cartões de métrica.
+   *
+   * Antes os cartões recebiam todos os 14 dias, e um dia sem registro entrava
+   * como ZERO: hoje de manhã, antes do paciente registrar, o cartão mostrava
+   * "0 kcal · ▼ -100% · 100% abaixo da meta". Isso é o mesmo erro que o
+   * histórico mensal evita — "não registrou" NÃO é "consumiu zero", e exibir
+   * isso na frente do paciente é enganoso.
+   */
+  const diasComRegistro = nutritionDiary.filter((d) => d.entries.length > 0);
+
+  // Relatório diário: uma linha por dia, mais recente primeiro.
   const dailyReport = [...wellnessDays].reverse().map((day, idx) => {
     const i = wellnessDays.length - 1 - idx;
-    const diary = nutritionDiary[i];
-    const water = waterHistory[i];
-    return { day, diary, water, sleep: sleepByDay.get(day) ?? null };
+    return { day, diary: nutritionDiary[i] };
   });
-  const hasAnyWellnessData =
-    nutritionDiary.some((d) => d.entries.length > 0) ||
-    waterHistory.some((p) => p.consumedMl > 0) ||
-    sleepSessions.length > 0;
+  const hasAnyWellnessData = diasComRegistro.length > 0;
 
   // Campos das abas (form + histórico compartilham a mesma definição)
   const bodyFields = [
@@ -515,9 +501,9 @@ export default async function DashboardPage({
           <div className="space-y-6">
             <div className="flex items-start justify-between gap-4 rounded-[12px] border border-secondary/25 bg-secondary/[0.06] p-5">
               <p className="text-sm text-ink-muted">
-                Alimentação, água e sono que o paciente registrou pelo Telegram (fotos do prato,{' '}
-                <code className="font-mono-data">/agua</code>, <code className="font-mono-data">/dormi</code>,{' '}
-                <code className="font-mono-data">/acordei</code>) — últimos {WELLNESS_HISTORY_DAYS} dias.
+                Alimentação que o paciente registrou pelo Telegram — foto do prato ou{' '}
+                <code className="font-mono-data">/comi</code> com as quantidades. Os cartões mostram
+                os últimos {WELLNESS_HISTORY_DAYS} dias.
               </p>
               <Link
                 href={`/patients/${id}`}
@@ -534,60 +520,41 @@ export default async function DashboardPage({
               monthDiary={monthDiary}
             />
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <MetricCard
                 label="Kcal"
-                points={nutritionDiary.map((d) => ({ measuredAt: new Date(`${d.day}T12:00:00Z`), value: d.progress.consumed.kcal }))}
+                points={diasComRegistro.map((d) => ({ measuredAt: new Date(`${d.day}T12:00:00Z`), value: d.progress.consumed.kcal }))}
                 target={nutritionGoal?.values.kcal}
                 targetLabel={nutritionGoal?.values.kcal !== undefined ? doctorLabel : undefined}
               />
               <MetricCard
                 label="Proteína"
                 unit="g"
-                points={nutritionDiary.map((d) => ({ measuredAt: new Date(`${d.day}T12:00:00Z`), value: d.progress.consumed.protein }))}
+                points={diasComRegistro.map((d) => ({ measuredAt: new Date(`${d.day}T12:00:00Z`), value: d.progress.consumed.protein }))}
                 target={nutritionGoal?.values.protein}
                 targetLabel={nutritionGoal?.values.protein !== undefined ? doctorLabel : undefined}
               />
               <MetricCard
                 label="Carbo"
                 unit="g"
-                points={nutritionDiary.map((d) => ({ measuredAt: new Date(`${d.day}T12:00:00Z`), value: d.progress.consumed.carbs }))}
+                points={diasComRegistro.map((d) => ({ measuredAt: new Date(`${d.day}T12:00:00Z`), value: d.progress.consumed.carbs }))}
                 target={nutritionGoal?.values.carbs}
                 targetLabel={nutritionGoal?.values.carbs !== undefined ? doctorLabel : undefined}
               />
               <MetricCard
                 label="Gordura"
                 unit="g"
-                points={nutritionDiary.map((d) => ({ measuredAt: new Date(`${d.day}T12:00:00Z`), value: d.progress.consumed.fat }))}
+                points={diasComRegistro.map((d) => ({ measuredAt: new Date(`${d.day}T12:00:00Z`), value: d.progress.consumed.fat }))}
                 target={nutritionGoal?.values.fat}
                 targetLabel={nutritionGoal?.values.fat !== undefined ? doctorLabel : undefined}
-              />
-              <MetricCard
-                label="Água"
-                unit="ml"
-                points={waterHistory.map((p) => ({ measuredAt: new Date(`${p.day}T12:00:00Z`), value: p.consumedMl }))}
-                target={nutritionGoal?.values.waterMl}
-                targetLabel={nutritionGoal?.values.waterMl !== undefined ? doctorLabel : undefined}
-              />
-              <MetricCard
-                label="Sono"
-                unit="h"
-                points={sleepSessions.map((s) => ({ measuredAt: s.end, value: s.durationMinutes / 60 }))}
-                band={{ min: sleepTarget.minMinutes / 60, max: sleepTarget.maxMinutes / 60 }}
-                targetLabel={
-                  nutritionGoal?.values.sleepMinHours !== undefined && nutritionGoal?.values.sleepMaxHours !== undefined
-                    ? `${doctorLabel} · ${nutritionGoal.values.sleepMinHours}–${nutritionGoal.values.sleepMaxHours} h`
-                    : 'Faixa de referência · 6–9h30 (padrão)'
-                }
               />
             </div>
 
             {!hasAnyWellnessData ? (
               <p className="text-sm text-ink-muted">
                 Ainda não há registros de alimentação, água ou sono. O paciente precisa vincular o
-                Telegram (ficha do paciente) e enviar fotos do prato ou usar os comandos{' '}
-                <code className="font-mono-data">/agua</code>, <code className="font-mono-data">/dormi</code> e{' '}
-                <code className="font-mono-data">/acordei</code>.
+                Telegram (ficha do paciente) e enviar a foto do prato ou usar{' '}
+                <code className="font-mono-data">/comi</code> com as quantidades.
               </p>
             ) : (
               <div>
@@ -607,8 +574,6 @@ export default async function DashboardPage({
                         <th className="px-3 py-2 font-medium">Proteína</th>
                         <th className="px-3 py-2 font-medium">Carbo</th>
                         <th className="px-3 py-2 font-medium">Gordura</th>
-                        <th className="px-3 py-2 font-medium">Água</th>
-                        <th className="px-3 py-2 font-medium">Sono</th>
                         <th className="px-3 py-2 font-medium">Refeições</th>
                       </tr>
                     </thead>
@@ -617,7 +582,6 @@ export default async function DashboardPage({
                         const hasFood = (row.diary?.entries.length ?? 0) > 0;
                         const c = row.diary?.progress.consumed;
                         const g = row.diary?.progress.goal;
-                        const hasWater = (row.water?.consumedMl ?? 0) > 0;
                         return (
                           <tr key={row.day} className="border-t border-ink/10 text-ink">
                             <td className="px-3 py-2 whitespace-nowrap">
@@ -641,20 +605,6 @@ export default async function DashboardPage({
                             <td className="px-3 py-2 whitespace-nowrap">
                               {hasFood ? `${Math.round(c!.fat)}g` : '—'}{' '}
                               <GoalHitBadge status={classifyDailyStatus(hasFood, c?.fat ?? 0, g?.fat)} />
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              {hasWater ? `${row.water!.consumedMl}ml` : '—'}{' '}
-                              <GoalHitBadge status={classifyDailyStatus(hasWater, row.water?.consumedMl ?? 0, row.water?.goalMl)} />
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              {row.sleep ? (
-                                <>
-                                  {(row.sleep.durationMinutes / 60).toFixed(1)}h{' '}
-                                  <GoalHitBadge status={row.sleep.quality === 'boa' ? 'bateu' : 'nao-bateu'} />
-                                </>
-                              ) : (
-                                <GoalHitBadge status="sem-registro" />
-                              )}
                             </td>
                             <td className="px-3 py-2">
                               {row.diary && row.diary.entries.length > 0 ? (

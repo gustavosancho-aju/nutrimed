@@ -49,26 +49,19 @@ export async function setGoalAction(formData: FormData): Promise<void> {
   const patientId = String(formData.get('patientId') ?? '');
   const { user, db } = await assertOwner(patientId);
 
-  const waterMl = parseDecimal(formData.get('waterMl'));
-  const sleepMinHours = parseDecimal(formData.get('sleepMinHours'));
-  const sleepMaxHours = parseDecimal(formData.get('sleepMaxHours'));
+  // Metas de ÁGUA e SONO saíram (2026-07-28): o bot não coleta mais esses dados
+  // e o painel não os mostra — meta sem medição para comparar é ruído na ficha.
+  // Os campos seguem OPCIONAIS em NutritionGoalValues e as metas antigas
+  // continuam no blob cifrado; só deixaram de ser editáveis.
   const values: NutritionGoalValues = {
     kcal: parseDecimal(formData.get('kcal')) ?? 0,
     protein: parseDecimal(formData.get('protein')) ?? 0,
     carbs: parseDecimal(formData.get('carbs')) ?? 0,
     fat: parseDecimal(formData.get('fat')) ?? 0,
-    ...(waterMl !== undefined ? { waterMl } : {}),
-    ...(sleepMinHours !== undefined ? { sleepMinHours } : {}),
-    ...(sleepMaxHours !== undefined ? { sleepMaxHours } : {}),
   };
   const rangeError = checkRanges({ ...values });
   if (rangeError) {
     redirect(`/patients/${patientId}?erro=${encodeURIComponent(rangeError)}`);
-  }
-  if (sleepMinHours !== undefined && sleepMaxHours !== undefined && sleepMinHours >= sleepMaxHours) {
-    redirect(
-      `/patients/${patientId}?erro=${encodeURIComponent('Sono mín. deve ser menor que o máx. — nada foi salvo.')}`,
-    );
   }
   const dateRaw = String(formData.get('effectiveFrom') ?? '').trim();
   const effectiveFrom = dateRaw || new Date().toISOString().slice(0, 10);
