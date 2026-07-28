@@ -11,6 +11,8 @@ import {
   loadLabDisplayPrefs,
   loadCurrentBodyGoal,
   listNutritionRange,
+  loadPatientPhoto,
+  listBodyProjections,
   computeAge,
 } from '@nutrimed/patients';
 import { buildAnalyteSeries, rangeLabel, selectPresented } from '@/lib/lab-panel';
@@ -147,6 +149,10 @@ export default async function ApresentacaoPage({
   // escolher por ele seria decidir o que é relevante clinicamente.
   const labPrefs = await loadLabDisplayPrefs(db, id, key);
   const apresentados = selectPresented(buildAnalyteSeries(labs, customDefs), labPrefs.presented);
+  // Projeções corporais APROVADAS (a mais recente é a apresentada) + a foto que
+  // as originou. Sem aprovação do médico a lista vem vazia e a seção some.
+  const projecoes = await listBodyProjections(db, id, key, { onlyApproved: true });
+  const photo = projecoes.length > 0 ? await loadPatientPhoto(db, id, key) : null;
   const now = new Date();
   const age = computeAge(patient.birthDate, now);
 
@@ -374,6 +380,42 @@ export default async function ApresentacaoPage({
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {/* Projeção corporal — só o que o médico APROVOU (a geração e a
+              decisão ficam em /projecao). Sem aprovação, nada aparece aqui. */}
+          {projecoes.length > 0 && (
+            <div className="border-t border-ink/10 px-8 pb-8 pt-6 md:px-10">
+              <h2 className="font-display text-base font-semibold text-ink">
+                Como você pode ficar
+              </h2>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                {photo && (
+                  <figure className="space-y-2">
+                    {/* <img> e não next/image: data URL (cifrada em repouso, sem URL própria). */}
+                    <img src={`data:${photo.mimeType};base64,${photo.base64}`} alt="Foto atual" className="w-full rounded-[12px]" />
+                    <figcaption className="text-center text-sm text-ink-muted">
+                      Hoje — {projecoes[0]!.sourceWeightKg.toFixed(1)} kg
+                    </figcaption>
+                  </figure>
+                )}
+                <figure className="space-y-2">
+                  {/* data URL, mesmo caso do <img> acima. */}
+                  <img
+                    src={`data:${projecoes[0]!.image.mimeType};base64,${projecoes[0]!.image.base64}`}
+                    alt="Projeção no peso desejado"
+                    className="w-full rounded-[12px]"
+                  />
+                  <figcaption className="text-center text-sm font-semibold text-brand">
+                    Meta — {projecoes[0]!.targetWeightKg.toFixed(1)} kg
+                  </figcaption>
+                </figure>
+              </div>
+              <p className="mt-3 text-center text-[11px] text-ink-muted">
+                Imagem ilustrativa gerada por IA — não é previsão médica. O resultado real depende de
+                fatores individuais.
+              </p>
             </div>
           )}
 

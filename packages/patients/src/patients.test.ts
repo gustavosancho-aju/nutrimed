@@ -26,6 +26,12 @@ import {
   MAX_PRESENTED_ANALYTES,
   setBodyGoal,
   loadCurrentBodyGoal,
+  setPatientPhoto,
+  loadPatientPhoto,
+  addBodyProjection,
+  listBodyProjections,
+  approveBodyProjection,
+  softDeleteBodyProjection,
 } from './patients';
 
 
@@ -584,6 +590,99 @@ describe('Patient Service (E11 — 11.2)', () => {
       await setBodyGoal(exec, patientId, userId, '2099-01-01', { peso: 70 }, KEY);
       expect(await loadCurrentBodyGoal(exec, patientId, KEY)).toBeNull();
       expect(await loadCurrentBodyGoal(exec, patientId, KEY, '2099-06-01')).not.toBeNull();
+    });
+  });
+
+  describe('Projeção corporal por foto', () => {
+    const IMAGEM = { base64: Buffer.from('imagem-gerada').toString('base64'), mimeType: 'image/png' };
+    const FOTO = { base64: Buffer.from('foto-do-paciente').toString('base64'), mimeType: 'image/jpeg' };
+
+    it('grava e devolve a projeção decifrada, ainda NÃO aprovada', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Projeção' }, KEY);
+      const id = await addBodyProjection(
+        exec,
+        patientId,
+        { sourceWeightKg: 96, targetWeightKg: 78, image: IMAGEM, modelVersion: 'gemini-2.5-flash-image' },
+        KEY,
+      );
+
+      const [proj] = await listBodyProjections(exec, patientId, KEY);
+      expect(proj).toMatchObject({
+        id,
+        sourceWeightKg: 96,
+        targetWeightKg: 78,
+        image: IMAGEM,
+        modelVersion: 'gemini-2.5-flash-image',
+        approvedAt: null,
+      });
+
+      // A imagem NUNCA fica em claro no banco (NFR9).
+      const raw = await exec.query<{ result_enc: string }>('SELECT result_enc FROM body_projection WHERE id = $1', [id]);
+      expect(raw.rows[0]!.result_enc).not.toContain(IMAGEM.base64);
+
+      const trail = await getAuditTrail(exec, patientId);
+      expect(trail.some((e) => e.triggeredBy === 'body-projection-generate')).toBe(true);
+    });
+
+    it('só aparece para o paciente depois que o médico aprova', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Gate Humano' }, KEY);
+      const id = await addBodyProjection(
+        exec,
+        patientId,
+        { sourceWeightKg: 90, targetWeightKg: 80, image: IMAGEM, modelVersion: 'fake-projector' },
+        KEY,
+      );
+      expect(await listBodyProjections(exec, patientId, KEY, { onlyApproved: true })).toEqual([]);
+
+      await approveBodyProjection(exec, id, userId);
+      const aprovadas = await listBodyProjections(exec, patientId, KEY, { onlyApproved: true });
+      expect(aprovadas).toHaveLength(1);
+      expect(aprovadas[0]!.approvedAt).toBeInstanceOf(Date);
+    });
+
+    it('soft-delete some das listagens mas a linha permanece para a trilha', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Descartada' }, KEY);
+      const id = await addBodyProjection(
+        exec,
+        patientId,
+        { sourceWeightKg: 88, targetWeightKg: 75, image: IMAGEM, modelVersion: 'fake-projector' },
+        KEY,
+      );
+
+      await softDeleteBodyProjection(exec, id, userId);
+      expect(await listBodyProjections(exec, patientId, KEY)).toEqual([]);
+      const raw = await exec.query('SELECT id FROM body_projection WHERE id = $1', [id]);
+      expect(raw.rows).toHaveLength(1);
+    });
+
+    it('projeção de paciente de OUTRO médico não é aprovada nem excluída', async () => {
+      const outroMedico = await insertUser(exec, `outro-${Date.now()}@nutrimed.test`);
+      const patientId = await createPatient(exec, userId, { name: 'Do Dono' }, KEY);
+      const id = await addBodyProjection(
+        exec,
+        patientId,
+        { sourceWeightKg: 100, targetWeightKg: 85, image: IMAGEM, modelVersion: 'fake-projector' },
+        KEY,
+      );
+
+      await expect(approveBodyProjection(exec, id, outroMedico)).rejects.toThrow(/não encontrada/i);
+      await expect(softDeleteBodyProjection(exec, id, outroMedico)).rejects.toThrow(/não encontrada/i);
+      expect((await listBodyProjections(exec, patientId, KEY))[0]!.approvedAt).toBeNull();
+    });
+
+    it('foto do paciente: round-trip cifrado, sobrescrita e posse', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Com Foto' }, KEY);
+      expect(await loadPatientPhoto(exec, patientId, KEY)).toBeNull();
+
+      await setPatientPhoto(exec, patientId, userId, FOTO, KEY);
+      expect(await loadPatientPhoto(exec, patientId, KEY)).toEqual(FOTO);
+
+      const outra = { base64: Buffer.from('outra-foto').toString('base64'), mimeType: 'image/png' };
+      await setPatientPhoto(exec, patientId, userId, outra, KEY);
+      expect(await loadPatientPhoto(exec, patientId, KEY)).toEqual(outra);
+
+      const outroMedico = await insertUser(exec, `foto-${Date.now()}@nutrimed.test`);
+      await expect(setPatientPhoto(exec, patientId, outroMedico, FOTO, KEY)).rejects.toThrow(/não encontrado/i);
     });
   });
 

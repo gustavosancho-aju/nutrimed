@@ -46,6 +46,13 @@ export {
   classifySleepDuration,
   sleepTargetFromGoal,
   DEFAULT_SLEEP_TARGET,
+  // Projeção corporal por foto
+  setPatientPhoto,
+  loadPatientPhoto,
+  addBodyProjection,
+  listBodyProjections,
+  approveBodyProjection,
+  softDeleteBodyProjection,
   type Patient,
   type PatientInput,
   type WriteOrigin,
@@ -72,4 +79,7 @@ export {
   type SleepQuality,
   type SleepSession,
   type SleepTargetRange,
+  type StoredImage,
+  type NewBodyProjection,
+  type BodyProjectionRecord,
 } from './patients';

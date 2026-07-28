@@ -216,6 +216,12 @@ export default async function DashboardPage({
           >
             📄 Importar laudo (PDF)
           </Link>
+          <Link
+            href={`/patients/${id}/projecao`}
+            className="rounded-[10px] border border-ink/15 px-3.5 py-1.5 text-sm text-ink transition-colors hover:bg-surface-muted"
+          >
+            🖼️ Projeção corporal
+          </Link>
         </div>
       </header>
 

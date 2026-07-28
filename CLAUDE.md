@@ -135,8 +135,8 @@ apareceu 3× nesta sessão, nos 3 lugares corrigido.
 **Painel e ficha só de alimentação (2026-07-28):** saíram os cartões de Água e Sono, as 2 colunas do
 relatório diário e as metas `waterMl`/`sleepMinHours`/`sleepMaxHours` da ficha. Schema, serviços,
 campos opcionais no tipo e dados coletados FICARAM (metas antigas seguem no blob cifrado).
-Suíte: **736 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
-CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) verde. Migrations 0001–0022.
+Suíte: **771 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
+CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) verde. Migrations 0001–0023.
 Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 · RUNBOOK Fase 5 = canal Telegram.
 
 | Épico | Status | Épico | Status |
@@ -149,7 +149,32 @@ Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 
 | E9 Documentação Clínica | ✅ | E11 Pacientes & Dashboard | ✅ completo (4 fases) |
 | E12 Bot de Telegram (foto→nutrição vs metas) | ✅ completo (9 stories + grupo + texto; só alimentação) | E13 Relatório Nutricional (TACO) | ✅ completo (em produção) |
 | E14 Painel Laboratorial dinâmico (laudo completo + apresentação) | ✅ completo (verificado no navegador) | E15 Histórico mês a mês (plano de 12 meses) | ✅ completo (4 fases, em produção) |
-| Transcrição Confiável (léxico + revisão do médico + POC) | ✅ completo (falta áudio real p/ POC) | — | — |
+| Transcrição Confiável (léxico + revisão do médico + POC) | ✅ completo (falta áudio real p/ POC) | Projeção Corporal por foto (IA) | ✅ implementado (local; falta verificar no navegador) |
+
+**Projeção Corporal por foto (2026-07-28).** O médico sobe uma foto do paciente, informa peso atual
+e desejado, e a IA gera como o corpo ficaria no peso-alvo — apoio VISUAL/motivacional na consulta,
+não previsão clínica nem estimativa de composição corporal (isso segue sendo bioimpedância). Página
+própria `/patients/[id]/projecao` (mesmo padrão da importação de laudo); **gate humano**: a imagem
+nasce com `approved_at NULL` e só entra no Modo Apresentação depois que o médico aprova. Gemini
+`gemini-2.5-flash-image` no modo EDIÇÃO (imagem+texto→imagem) atrás de `IBodyProjector`, com
+`FakeBodyProjector` e factory por env (prod sem key ⇒ `null` ⇒ recurso some, sem quebrar a tela).
+**Escolha do provedor:** o critério NÃO foi custo (poucas imagens, US$ 0,04 cada) e sim preservação
+de IDENTIDADE — se o rosto muda, a imagem vira a foto de outra pessoa e perde o sentido clínico.
+**Verificado contra o Gemini real** (`npx tsx --env-file=.env scripts/poc-body-projection.mjs <foto>
+<pesoAtual> <pesoDesejado> [alturaCm]`, 10,3s, US$ 0,0387): sem recusa por política, rosto/roupa/pose/
+fundo/luz idênticos. Ressalva do teste: a cobaia foi o retrato de persona (busto, pessoa já magra),
+onde a mudança de silhueta fica sutil — o prompt pede foto de CORPO INTEIRO por isso. A foto de
+origem vai em `patient.photo_enc` (coluna da 0017, até então sem uso) e a projeção na tabela nova da
+migration 0023, ambas cifradas; as imagens chegam ao browser como data URL dentro do HTML
+autenticado, NUNCA por URL própria (rosto de paciente é dado sensível — item novo para o checklist
+CJ, com consentimento exigido e auditado a cada geração). Sem telemetria própria de custo: cada
+geração já grava auditoria `body-projection-generate` com o `modelVersion`, que é a contagem exata;
+o teto de verdade é o limite por chave no console (lição do vazamento de 2026-07-24). A foto é
+reduzida a 1024 px no NAVEGADOR antes do upload (o re-encode em JPEG também descarta o EXIF).
+`GEMINI_API_KEY` foi copiada para `apps/web/.env.local` em 2026-07-28 (o Next não lê o `.env` da
+raiz; sem ela o app cai no fake). Dívidas: **não verificado no navegador** (o `npm run dev` segue
+vetado pelo token de prod do bot); falta setar o secret no Fly antes do deploy; e a imagem que o
+Gemini devolve tem ~2 MB, bem acima dos 200–600 KB estimados, o que engorda a coluna cifrada.
 
 **Fluxo vivo:** login (`demo@nutrimed.test`/`nutrimed123`) → consulta → consentimento (default NEGA)
 → `/consultations/[id]`: transcrição AO VIVO + board (3 personas com retratos, feed com hierarquia
@@ -166,7 +191,7 @@ sinalizados, delta vs meta do paciente (E11) quando vinculado — rascunho edit�
 com fontes TACO em kbSources → painel 🩺 Diagnóstico → telemetria (custo/gate/
 latência/ruído/autonomia).
 
-## Monorepo (28 pacotes)
+## Monorepo (29 pacotes)
 
 ```
 apps/web                 Tela de consulta + ficha/dashboard + gateway WS + webhook do bot Telegram
@@ -197,6 +222,7 @@ packages/telegram-bot    E12: lógica pura do bot (handlers de foto/comandos + o
 packages/taco            E13: tabela TACO 4ª ed. embarcada (591 alimentos) + busca lexical + porções caseiras (regen: scripts/gen-taco.mjs)
 packages/nutrition-report E13: recordatório (LLM) → mapeamento TACO → cálculo determinístico → relatório cifrado+auditado
 packages/lab-catalog     E14: catálogo canônico de exames (slug+sinônimos) + leitura da faixa de referência DO LAUDO — puro, sem faixa clínica própria
+packages/body-projection Projeção corporal por foto (IBodyProjector: Gemini imagem+texto→imagem + fake) — nunca persiste
 ```
 
 Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build` · `npm run dev`.

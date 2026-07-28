@@ -1537,3 +1537,204 @@ export async function listSleepSessions(
   }
   return sessions;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Projeção corporal por foto — a IA gera como o corpo ficaria no peso-alvo, a
+// partir de uma foto real. Apoio VISUAL/motivacional, não previsão clínica.
+//
+// Duas decisões que explicam o formato abaixo:
+// - A imagem gerada é guardada CIFRADA (rosto de paciente é dado sensível) e
+//   nunca vira arquivo servido por URL — chega ao browser como data URL dentro
+//   do HTML já autenticado.
+// - Nasce com `approvedAt = null`: só aparece no Modo Apresentação depois que o
+//   médico olhou e aprovou (gate humano, mesmo princípio do ADR-012).
+// A foto de ORIGEM fica em patient.photo_enc (1 vigente por paciente).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Uma imagem (base64) com o seu mime — o que se cifra e o que se exibe. */
+export interface StoredImage {
+  readonly base64: string;
+  readonly mimeType: string;
+}
+
+/** Nome distinto do `BodyProjectionInput` de @nutrimed/body-projection (que é a
+ * ENTRADA da IA); aqui é o que se GRAVA depois de gerada. */
+export interface NewBodyProjection {
+  readonly sourceWeightKg: number;
+  readonly targetWeightKg: number;
+  readonly image: StoredImage;
+  readonly modelVersion: string;
+}
+
+export interface BodyProjectionRecord {
+  readonly id: string;
+  readonly patientId: string;
+  readonly sourceWeightKg: number;
+  readonly targetWeightKg: number;
+  readonly image: StoredImage;
+  readonly modelVersion: string;
+  readonly approvedAt: Date | null;
+  readonly createdAt: Date;
+}
+
+interface BodyProjectionRow {
+  id: string;
+  patient_id: string;
+  source_weight_kg: string | number;
+  target_weight_kg: string | number;
+  result_enc: string;
+  model_version: string;
+  approved_at: Date | null;
+  created_at: Date;
+}
+
+function toBodyProjection(row: BodyProjectionRow, key: Buffer): BodyProjectionRecord {
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    sourceWeightKg: Number(row.source_weight_kg),
+    targetWeightKg: Number(row.target_weight_kg),
+    image: JSON.parse(decryptField(row.result_enc, key)) as StoredImage,
+    modelVersion: row.model_version,
+    approvedAt: row.approved_at ? new Date(row.approved_at) : null,
+    createdAt: new Date(row.created_at),
+  };
+}
+
+/**
+ * Guarda a foto vigente do paciente (cifrada) — a origem das projeções.
+ * Uma por paciente: regerar com outra foto sobrescreve.
+ */
+export async function setPatientPhoto(
+  db: SqlExecutor,
+  patientId: string,
+  userId: string,
+  photo: StoredImage,
+  key: Buffer,
+  origin: WriteOrigin = { action: 'patient-photo-set' },
+): Promise<void> {
+  const res = await db.query<{ id: string }>(
+    `UPDATE patient SET photo_enc = $3, updated_at = now()
+     WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL RETURNING id`,
+    [patientId, userId, encryptField(JSON.stringify(photo), key)],
+  );
+  if (res.rows.length === 0) throw new Error('Paciente não encontrado para este médico.');
+  await writeAudit(db, patientId, {
+    triggeredBy: origin.action,
+    kbSources: [],
+    modelVersion: origin.modelVersion ?? 'human-edit',
+  });
+}
+
+/** Foto vigente do paciente (null se nunca enviada). */
+export async function loadPatientPhoto(
+  db: SqlExecutor,
+  patientId: string,
+  key: Buffer,
+): Promise<StoredImage | null> {
+  const res = await db.query<{ photo_enc: string | null }>(
+    'SELECT photo_enc FROM patient WHERE id = $1 AND deleted_at IS NULL',
+    [patientId],
+  );
+  const enc = res.rows[0]?.photo_enc ?? null;
+  return enc ? (JSON.parse(decryptField(enc, key)) as StoredImage) : null;
+}
+
+/** Grava a projeção gerada, ainda NÃO aprovada. Cifrada (NFR9) + auditada (NFR10). */
+export async function addBodyProjection(
+  db: SqlExecutor,
+  patientId: string,
+  input: NewBodyProjection,
+  key: Buffer,
+  origin: WriteOrigin = { action: 'body-projection-generate' },
+): Promise<string> {
+  const res = await db.query<{ id: string }>(
+    `INSERT INTO body_projection
+       (patient_id, source_weight_kg, target_weight_kg, result_enc, model_version)
+     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+    [
+      patientId,
+      input.sourceWeightKg,
+      input.targetWeightKg,
+      encryptField(JSON.stringify(input.image), key),
+      input.modelVersion,
+    ],
+  );
+  const id = res.rows[0]!.id;
+  await writeAudit(db, patientId, {
+    triggeredBy: origin.action,
+    kbSources: [],
+    modelVersion: origin.modelVersion ?? input.modelVersion,
+  });
+  return id;
+}
+
+/**
+ * Lista as projeções vivas do paciente, mais recentes primeiro.
+ * `onlyApproved` é o que a Apresentação usa — o paciente só vê o que passou
+ * pelo olho do médico.
+ */
+export async function listBodyProjections(
+  db: SqlExecutor,
+  patientId: string,
+  key: Buffer,
+  options: { onlyApproved?: boolean } = {},
+): Promise<BodyProjectionRecord[]> {
+  const res = await db.query<BodyProjectionRow>(
+    `SELECT * FROM body_projection
+     WHERE patient_id = $1 AND deleted_at IS NULL
+       AND ($2::boolean IS NOT TRUE OR approved_at IS NOT NULL)
+     ORDER BY created_at DESC, id DESC`,
+    [patientId, options.onlyApproved ?? false],
+  );
+  return res.rows.map((row) => toBodyProjection(row, key));
+}
+
+/**
+ * Gate humano: o médico aprova a projeção para exibir ao paciente. O WHERE
+ * amarra o paciente ao médico dono — projeção de outro médico nunca é tocada.
+ */
+export async function approveBodyProjection(
+  db: SqlExecutor,
+  projectionId: string,
+  userId: string,
+  origin: WriteOrigin = { action: 'body-projection-approve' },
+): Promise<void> {
+  const res = await db.query<{ patient_id: string }>(
+    `UPDATE body_projection SET approved_at = now()
+     WHERE id = $1 AND deleted_at IS NULL
+       AND patient_id IN (SELECT id FROM patient WHERE user_id = $2 AND deleted_at IS NULL)
+     RETURNING patient_id`,
+    [projectionId, userId],
+  );
+  const patientId = res.rows[0]?.patient_id;
+  if (!patientId) throw new Error('Projeção não encontrada para este médico.');
+  await writeAudit(db, patientId, {
+    triggeredBy: origin.action,
+    kbSources: [],
+    modelVersion: origin.modelVersion ?? 'human-edit',
+  });
+}
+
+/** SOFT-delete: some das listagens, a linha permanece para trilha (CJ-2). */
+export async function softDeleteBodyProjection(
+  db: SqlExecutor,
+  projectionId: string,
+  userId: string,
+  origin: WriteOrigin = { action: 'body-projection-delete' },
+): Promise<void> {
+  const res = await db.query<{ patient_id: string }>(
+    `UPDATE body_projection SET deleted_at = now()
+     WHERE id = $1 AND deleted_at IS NULL
+       AND patient_id IN (SELECT id FROM patient WHERE user_id = $2 AND deleted_at IS NULL)
+     RETURNING patient_id`,
+    [projectionId, userId],
+  );
+  const patientId = res.rows[0]?.patient_id;
+  if (!patientId) throw new Error('Projeção não encontrada para este médico.');
+  await writeAudit(db, patientId, {
+    triggeredBy: origin.action,
+    kbSources: [],
+    modelVersion: origin.modelVersion ?? 'human-edit',
+  });
+}

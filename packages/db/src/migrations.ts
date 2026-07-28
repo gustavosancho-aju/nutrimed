@@ -511,4 +511,34 @@ ALTER TABLE food_log_entry ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
 ALTER TABLE patient ADD COLUMN IF NOT EXISTS lab_prefs_enc text;
 `,
   },
+  {
+    name: '0023_body_projection',
+    sql: `
+-- Projeção corporal por foto: a partir de uma foto real do paciente, a IA
+-- (Gemini, atrás de IBodyProjector) gera como o corpo ficaria no peso-alvo.
+-- Ferramenta MOTIVACIONAL na consulta, não previsão clínica — por isso a
+-- imagem nasce com approved_at NULL: só aparece no Modo Apresentação depois
+-- que o médico olhou e aprovou (gate humano, mesmo princípio do ADR-012).
+--
+-- result_enc guarda a imagem gerada (base64) CIFRADA: rosto de paciente é dado
+-- pessoal sensível (LGPD) e não pode virar arquivo servido por URL. A foto de
+-- ORIGEM não se repete aqui — vai em patient.photo_enc (0017, até agora sem
+-- uso), 1 vigente por paciente; os pesos guardados abaixo já dizem de que
+-- ponto a projeção partiu. Soft-delete como na 0013/0021: a linha permanece
+-- para trilha (CJ-2) mas some das listagens.
+CREATE TABLE IF NOT EXISTS body_projection (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  patient_id       uuid NOT NULL REFERENCES patient(id),
+  source_weight_kg numeric NOT NULL,
+  target_weight_kg numeric NOT NULL,
+  result_enc       text NOT NULL,
+  model_version    text NOT NULL,
+  approved_at      timestamptz,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  deleted_at       timestamptz
+);
+CREATE INDEX IF NOT EXISTS body_projection_patient_idx
+  ON body_projection (patient_id, created_at);
+`,
+  },
 ];
