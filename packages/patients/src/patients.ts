@@ -1077,6 +1077,27 @@ function localDayRangeUtc(
   return { start: new Date(startMs), end: new Date(startMs + 24 * 60 * 60 * 1000) };
 }
 
+/** Dia local (`YYYY-MM-DD`) de um instante, dado o offset do fuso. */
+function localDayISOOf(at: Date, tzOffsetMinutes: number): string {
+  return new Date(at.getTime() + tzOffsetMinutes * 60_000).toISOString().slice(0, 10);
+}
+
+/**
+ * Dias `YYYY-MM-DD` de `start` a `end`, INCLUSIVOS, em ordem crescente.
+ * Aritmética em UTC puro (sem fuso do servidor) — atravessa virada de mês e ano
+ * sem caso especial. `end < start` ⇒ lista vazia.
+ */
+function eachDayISO(startDayISO: string, endDayISO: string): string[] {
+  const startMs = Date.parse(`${startDayISO}T00:00:00Z`);
+  const endMs = Date.parse(`${endDayISO}T00:00:00Z`);
+  if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs < startMs) return [];
+  const out: string[] = [];
+  for (let ms = startMs; ms <= endMs; ms += 24 * 60 * 60 * 1000) {
+    out.push(new Date(ms).toISOString().slice(0, 10));
+  }
+  return out;
+}
+
 /**
  * Entradas de consumo do dia local `dayISO` (janela pelo offset explícito),
  * decifradas e em ordem cronológica.
@@ -1156,6 +1177,78 @@ export interface DailyNutritionDiary {
   readonly day: string;
   readonly entries: readonly FoodLogEntry[];
   readonly progress: DailyProgress;
+}
+
+/**
+ * Diário nutricional de um INTERVALO em 2 consultas — base do histórico de 12
+ * meses (2026-07-24).
+ *
+ * O {@link listNutritionDiary} busca dia a dia num laço (2 idas ao banco por
+ * dia): 30 dias = 60 consultas, 12 meses = ~730. Isso congelaria o Modo
+ * Apresentação na frente do paciente. Aqui o custo é FIXO — 1 consulta para os
+ * lançamentos do período + 1 para as metas vigentes — e o agrupamento por dia
+ * acontece em memória. Os índices já existiam (`idx_food_log_patient_eaten`,
+ * `idx_nutrition_goal_patient`); o gargalo era o laço, não o banco.
+ *
+ * Fidelidade histórica preservada: como `nutrition_goal` é versionada por
+ * `effective_from`, cada dia é comparado com a meta que valia NAQUELE dia — se
+ * a meta mudou em março, janeiro continua julgado pela meta de janeiro.
+ *
+ * `startDayISO`/`endDayISO` são dias locais (`YYYY-MM-DD`), ambos inclusivos.
+ */
+export async function listNutritionRange(
+  db: SqlExecutor,
+  patientId: string,
+  startDayISO: string,
+  endDayISO: string,
+  tzOffsetMinutes: number,
+  key: Buffer,
+): Promise<DailyNutritionDiary[]> {
+  const days = eachDayISO(startDayISO, endDayISO);
+  if (days.length === 0) return [];
+
+  // 1ª consulta: TODOS os lançamentos da janela (exclui os removidos pelo médico)
+  const { start } = localDayRangeUtc(days[0]!, tzOffsetMinutes);
+  const { end } = localDayRangeUtc(days[days.length - 1]!, tzOffsetMinutes);
+  const entriesRes = await db.query<FoodLogRow>(
+    `SELECT id, patient_id, eaten_at, source, photo_ref, values_enc, model_version, created_at
+     FROM food_log_entry
+     WHERE patient_id = $1 AND eaten_at >= $2 AND eaten_at < $3 AND deleted_at IS NULL
+     ORDER BY eaten_at ASC, id ASC`,
+    [patientId, start, end],
+  );
+  const byDay = new Map<string, FoodLogEntry[]>();
+  for (const row of entriesRes.rows) {
+    const entry = toFoodLogEntry(row, key);
+    const day = localDayISOOf(entry.eatenAt, tzOffsetMinutes);
+    const bucket = byDay.get(day);
+    if (bucket) bucket.push(entry);
+    else byDay.set(day, [entry]);
+  }
+
+  // 2ª consulta: metas que já valiam em algum dia do período (a vigente no
+  // início pode ter sido definida MESES antes — daí `effective_from <= fim`,
+  // sem piso, e a escolha por dia feita abaixo).
+  const goalsRes = await db.query<NutritionGoalRow>(
+    `SELECT id, patient_id, set_by_user_id, effective_from::text AS effective_from, values_enc, created_at
+     FROM nutrition_goal
+     WHERE patient_id = $1 AND effective_from <= $2::date
+     ORDER BY effective_from DESC, created_at DESC`,
+    [patientId, endDayISO],
+  );
+  const goals = goalsRes.rows.map((r) => toNutritionGoal(r, key));
+
+  return days.map((day) => {
+    const entries = byDay.get(day) ?? [];
+    const consumed = sumNutrition(entries);
+    // já ordenadas do mais recente ao mais antigo ⇒ o 1º match é a vigente
+    const goalValues = goals.find((g) => g.effectiveFrom <= day)?.values ?? null;
+    return {
+      day,
+      entries,
+      progress: { day, consumed, goal: goalValues, remaining: remainingOf(consumed, goalValues) },
+    };
+  });
 }
 
 export async function listNutritionDiary(

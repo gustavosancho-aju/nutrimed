@@ -34,6 +34,7 @@ export {
   listFoodLogByDay,
   sumFoodLogForDay,
   listNutritionDiary,
+  listNutritionRange,
   // Água + sono via Telegram (2026-07-20)
   addWaterLog,
   listWaterLogByDay,

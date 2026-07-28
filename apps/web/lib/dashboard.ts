@@ -254,3 +254,139 @@ export function parseDecimal(raw: FormDataEntryValue | null): number | undefined
   const n = Number(s);
   return Number.isFinite(n) ? n : undefined;
 }
+
+// ── Histórico mês a mês do plano de 12 meses (2026-07-24) ────────────────────
+// O médico apresenta a evolução mês a mês ao paciente. Funções PURAS sobre o
+// diário já carregado (`listNutritionRange`) — sem banco, sem tela.
+
+/** Dias `YYYY-MM-DD` de um mês (`month` = 1–12), em ordem. */
+export function monthDaysISO(year: number, month: number): string[] {
+  const out: string[] = [];
+  const startMs = Date.UTC(year, month - 1, 1);
+  for (let ms = startMs; new Date(ms).getUTCMonth() === month - 1; ms += 24 * 60 * 60 * 1000) {
+    out.push(new Date(ms).toISOString().slice(0, 10));
+  }
+  return out;
+}
+
+/** Primeiro e último dia de um mês — extremos para `listNutritionRange`. */
+export function monthRangeISO(year: number, month: number): { start: string; end: string } {
+  const days = monthDaysISO(year, month);
+  return { start: days[0]!, end: days[days.length - 1]! };
+}
+
+/** Os N meses que terminam em (e incluem) o mês de `reference`, do mais antigo ao atual. */
+export function lastNMonths(reference: Date, count: number): Array<{ year: number; month: number }> {
+  const out: Array<{ year: number; month: number }> = [];
+  for (let i = count - 1; i >= 0; i -= 1) {
+    const d = new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth() - i, 1));
+    out.push({ year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 });
+  }
+  return out;
+}
+
+/**
+ * Resumo de um mês do plano.
+ *
+ * DECISÃO DE PRODUTO (2026-07-24): "não bateu a meta" e "não registrou" são
+ * coisas DIFERENTES e nunca podem virar um número só. Diluir os dias sem
+ * registro na aderência produziria um número cruel e clinicamente falso — o
+ * paciente seria punido por não ter anotado, não por ter comido mal, e é esse
+ * número que o médico projeta na frente dele. Por isso `adherencePct` usa como
+ * denominador apenas os dias AVALIÁVEIS (com registro E com meta), e a lacuna
+ * de registro é reportada à parte, em `coveragePct`.
+ */
+export interface MonthlyNutritionSummary {
+  /** `YYYY-MM`. */
+  readonly month: string;
+  readonly daysInMonth: number;
+  /** Dias com ao menos um lançamento. */
+  readonly daysWithRecord: number;
+  /** Dias com registro E meta definida — o denominador honesto da aderência. */
+  readonly evaluatedDays: number;
+  readonly daysHitGoal: number;
+  /** % dos dias AVALIÁVEIS em que bateu a meta. `null` se nada era avaliável. */
+  readonly adherencePct: number | null;
+  /** % do mês com registro — o quanto a aderência acima representa. */
+  readonly coveragePct: number;
+  /** Média de kcal dos dias COM registro (dia vazio não vira "zero kcal"). */
+  readonly avgKcal: number | null;
+  /** Média da meta de kcal vigente nos dias avaliáveis (a meta pode ter mudado). */
+  readonly avgGoalKcal: number | null;
+}
+
+interface DiaryDayLike {
+  readonly day: string;
+  readonly entries: readonly unknown[];
+  readonly progress: {
+    readonly consumed: { readonly kcal: number };
+    readonly goal: { readonly kcal: number } | null;
+  };
+}
+
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+/**
+ * Agrupa o diário por mês (`YYYY-MM`) e resume cada um. Aceita qualquer
+ * intervalo — os meses saem na ordem em que aparecem no diário (cronológica).
+ */
+export function summarizeNutritionMonths(
+  diary: readonly DiaryDayLike[],
+  tolerancePct: number = GOAL_HIT_TOLERANCE_PCT,
+): MonthlyNutritionSummary[] {
+  const byMonth = new Map<string, DiaryDayLike[]>();
+  for (const day of diary) {
+    const month = day.day.slice(0, 7);
+    const bucket = byMonth.get(month);
+    if (bucket) bucket.push(day);
+    else byMonth.set(month, [day]);
+  }
+
+  return [...byMonth.entries()].map(([month, days]) => {
+    let daysWithRecord = 0;
+    let evaluatedDays = 0;
+    let daysHitGoal = 0;
+    let kcalSum = 0;
+    let goalKcalSum = 0;
+
+    for (const day of days) {
+      const hasData = day.entries.length > 0;
+      if (hasData) {
+        daysWithRecord += 1;
+        kcalSum += day.progress.consumed.kcal;
+      }
+      const status = classifyDailyStatus(
+        hasData,
+        day.progress.consumed.kcal,
+        day.progress.goal?.kcal,
+        tolerancePct,
+      );
+      if (status === 'bateu' || status === 'nao-bateu') {
+        evaluatedDays += 1;
+        goalKcalSum += day.progress.goal?.kcal ?? 0;
+        if (status === 'bateu') daysHitGoal += 1;
+      }
+    }
+
+    return {
+      month,
+      daysInMonth: days.length,
+      daysWithRecord,
+      evaluatedDays,
+      daysHitGoal,
+      adherencePct: evaluatedDays > 0 ? Math.round((daysHitGoal / evaluatedDays) * 100) : null,
+      coveragePct: days.length > 0 ? Math.round((daysWithRecord / days.length) * 100) : 0,
+      avgKcal: daysWithRecord > 0 ? round1(kcalSum / daysWithRecord) : null,
+      avgGoalKcal: evaluatedDays > 0 ? round1(goalKcalSum / evaluatedDays) : null,
+    };
+  });
+}
+
+/** Série p/ o `<TrendChart>`: um ponto por mês com aderência medida. */
+export function adherenceTrendPoints(summaries: readonly MonthlyNutritionSummary[]): TrendPoint[] {
+  return summaries
+    .filter((s) => s.adherencePct !== null)
+    .map((s) => ({ measuredAt: new Date(`${s.month}-01T00:00:00Z`), value: s.adherencePct! }));
+}
