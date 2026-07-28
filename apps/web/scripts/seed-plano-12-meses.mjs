@@ -11,7 +11,12 @@
  * e os pacotes do workspace estão visíveis.
  *
  * Uso:
- *   cd apps/web && npx tsx --env-file=.env.local scripts/seed-plano-12-meses.mjs
+ *   cd apps/web && npx tsx --env-file=.env.local scripts/seed-plano-12-meses.mjs ["Nome do paciente"]
+ *   cd apps/web && npx tsx --env-file=.env.local scripts/seed-plano-12-meses.mjs --remove "Nome"
+ *
+ * O paciente precisa EXISTIR: o script nunca cria um novo. Criar era o
+ * comportamento antigo e gerou paciente duplicado quando o nome não batia
+ * exatamente com o do banco — semear no paciente errado é pior que falhar.
  *
  * Idempotente: reexecutar limpa os registros semeados do paciente e refaz.
  */
@@ -20,10 +25,11 @@ import { fileURLToPath } from 'node:url';
 import { PGlite } from '@electric-sql/pglite';
 import { runMigrations, pgliteExecutor } from '@nutrimed/db';
 import { loadEncryptionKey } from '@nutrimed/crypto';
-import { createPatient, setNutritionGoal, addFoodLogEntry } from '@nutrimed/patients';
+import { setNutritionGoal, addFoodLogEntry } from '@nutrimed/patients';
 import { hashPassword } from '@nutrimed/auth';
 
-const PATIENT_NAME = 'Gustavo';
+const REMOVE_MODE = process.argv[2] === '--remove';
+const PATIENT_NAME = (REMOVE_MODE ? process.argv[3] : process.argv[2]) ?? 'Gustavo (Teste Importação)';
 const TZ = -180; // BR
 const DEMO_EMAIL = 'demo@nutrimed.test';
 const DEMO_PASSWORD = 'nutrimed123';
@@ -78,30 +84,52 @@ async function main() {
   }
   const userId = user.rows[0].id;
 
-  // Paciente: procura pelo nome decifrando (name_enc tem IV aleatório, não é buscável em SQL).
-  const existing = await exec.query('SELECT id, name_enc FROM patient WHERE user_id = $1', [userId]);
+  // Paciente: procura pelo nome DECIFRANDO (name_enc tem IV aleatório — não dá
+  // para buscar por SQL). Match exato: "Gustavo" e "Gustavo (Teste Importação)"
+  // são pacientes diferentes, e confundi-los foi o que criou a duplicata.
   const { decryptField } = await import('@nutrimed/crypto');
+  const existing = await exec.query('SELECT id, name_enc FROM patient WHERE user_id = $1', [userId]);
+  const nomes = [];
   let patientId = null;
   for (const row of existing.rows) {
+    let nome = null;
     try {
-      if (decryptField(row.name_enc, key) === PATIENT_NAME) patientId = row.id;
+      nome = decryptField(row.name_enc, key);
     } catch {
-      /* linha de outra chave — ignora */
+      continue; // linha cifrada com outra chave
     }
+    nomes.push(nome);
+    if (nome === PATIENT_NAME) patientId = row.id;
   }
-  if (patientId) {
+
+  if (!patientId) {
+    console.error(`\n❌ Paciente "${PATIENT_NAME}" não encontrado. Existentes:`);
+    for (const n of nomes) console.error(`   - ${n}`);
+    console.error('\nPasse o nome exato como argumento. O script NÃO cria paciente novo.');
+    await db.close();
+    process.exit(1);
+  }
+
+  if (REMOVE_MODE) {
+    // Remoção de dado de TESTE local. audit_log é append-only (trigger no banco)
+    // e não referencia patient por FK — as linhas de trilha ficam, órfãs e inertes.
+    const antes = await exec.query('SELECT count(*)::int AS n FROM food_log_entry WHERE patient_id = $1', [patientId]);
     await exec.query('DELETE FROM food_log_entry WHERE patient_id = $1', [patientId]);
     await exec.query('DELETE FROM nutrition_goal WHERE patient_id = $1', [patientId]);
-    console.log(`Paciente "${PATIENT_NAME}" já existia — registros anteriores limpos.`);
-  } else {
-    patientId = await createPatient(
-      exec,
-      userId,
-      { name: PATIENT_NAME, birthDate: '1990-05-14', heightCm: 178, goal: 'Recomposição corporal' },
-      key,
-    );
-    console.log(`Paciente "${PATIENT_NAME}" criado.`);
+    await exec.query('DELETE FROM patient_self_log WHERE patient_id = $1', [patientId]);
+    await exec.query('DELETE FROM telegram_link WHERE patient_id = $1', [patientId]);
+    await exec.query('DELETE FROM body_composition WHERE patient_id = $1', [patientId]);
+    await exec.query('DELETE FROM lab_exam WHERE patient_id = $1', [patientId]);
+    await exec.query('UPDATE consultation SET patient_id = NULL WHERE patient_id = $1', [patientId]);
+    await exec.query('DELETE FROM patient WHERE id = $1', [patientId]);
+    console.log(`\n🗑️  Paciente "${PATIENT_NAME}" removido (${antes.rows[0].n} lançamentos).`);
+    await db.close();
+    return;
   }
+
+  await exec.query('DELETE FROM food_log_entry WHERE patient_id = $1', [patientId]);
+  await exec.query('DELETE FROM nutrition_goal WHERE patient_id = $1', [patientId]);
+  console.log(`Paciente "${PATIENT_NAME}" encontrado — registros anteriores limpos.`);
 
   // 12 meses terminando no mês atual.
   const now = new Date();
