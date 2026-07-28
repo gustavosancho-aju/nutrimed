@@ -10,6 +10,7 @@ import {
   loadCustomExamDefs,
   loadLabDisplayPrefs,
   loadCurrentBodyGoal,
+  listNutritionRange,
   computeAge,
 } from '@nutrimed/patients';
 import { buildAnalyteSeries, rangeLabel, selectPresented } from '@/lib/lab-panel';
@@ -22,9 +23,14 @@ import {
   seriesOf,
   HEALTHY_IMC,
   TARGET_IMC,
+  lastNMonths,
+  monthRangeISO,
+  summarizeNutritionMonths,
+  toLocalDayISO,
   type TrendPoint,
   type TargetBand,
 } from '@/lib/dashboard';
+import { MonthlyJourney } from '@/components/dashboard/monthly-journey';
 import { BodySimulator } from '@/components/dashboard/body-simulator';
 import { ImcScale } from '@/components/dashboard/imc-scale';
 import { TrendChart } from '@/components/dashboard/trend-chart';
@@ -35,6 +41,11 @@ import { TrendChart } from '@/components/dashboard/trend-chart';
  * régua de classificação OMS, números grandes e evolução resumida. Tudo apoio
  * visual — a interpretação e a conduta são do médico (NFR10).
  */
+
+/** Fuso do piloto (BR, UTC-3) — mesmo default da dashboard e do bot. */
+const BR_TZ_OFFSET_MINUTES = -180;
+/** Horizonte do plano do paciente — apresentado mês a mês. */
+const PLAN_MONTHS = 12;
 
 function fmt(n: number, digits = 1): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(digits);
@@ -110,11 +121,18 @@ function EvolutionChart({
   );
 }
 
-export default async function ApresentacaoPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ApresentacaoPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ mes?: string }>;
+}) {
   const user = await getCurrentUser();
   if (!user) redirect('/login');
 
   const { id } = await params;
+  const { mes: mesRaw } = await searchParams;
   const db = await getDb();
   const key = getEncryptionKey();
   const patient = await loadPatient(db, id, key);
@@ -129,7 +147,21 @@ export default async function ApresentacaoPage({ params }: { params: Promise<{ i
   // escolher por ele seria decidir o que é relevante clinicamente.
   const labPrefs = await loadLabDisplayPrefs(db, id, key);
   const apresentados = selectPresented(buildAnalyteSeries(labs, customDefs), labPrefs.presented);
-  const age = computeAge(patient.birthDate, new Date());
+  const now = new Date();
+  const age = computeAge(patient.birthDate, now);
+
+  // Jornada alimentar do plano de 12 meses (E15 fase 4). Uma leitura de
+  // intervalo (2 consultas) serve a régua E o mês em foco, fatiado em memória.
+  const planMonths = lastNMonths(now, PLAN_MONTHS);
+  const planStart = monthRangeISO(planMonths[0]!.year, planMonths[0]!.month).start;
+  const lastMonth = planMonths[planMonths.length - 1]!;
+  const planEnd = monthRangeISO(lastMonth.year, lastMonth.month).end;
+  const planDiary = await listNutritionRange(db, id, planStart, planEnd, BR_TZ_OFFSET_MINUTES, key);
+  const monthlySummaries = summarizeNutritionMonths(planDiary);
+  const currentMonthISO = toLocalDayISO(now, BR_TZ_OFFSET_MINUTES).slice(0, 7);
+  const selectedMonth =
+    mesRaw && monthlySummaries.some((m) => m.month === mesRaw) ? mesRaw : currentMonthISO;
+  const monthDiary = planDiary.filter((d) => d.day.startsWith(selectedMonth));
 
   const peso = lastOf(body, 'peso');
   const imc = lastOf(body, 'imc');
@@ -307,6 +339,16 @@ export default async function ApresentacaoPage({ params }: { params: Promise<{ i
               />
             </div>
           </div>
+
+          {/* Jornada alimentar — metas batidas mês a mês ao longo do plano.
+              Some por completo quando não há registro nenhum (não se apresenta
+              tela vazia ao paciente). */}
+          <MonthlyJourney
+            patientId={id}
+            months={monthlySummaries}
+            selectedMonth={selectedMonth}
+            monthDiary={monthDiary}
+          />
 
           {/* Exames laboratoriais — só os que o médico escolheu apresentar, na
               ordem que ele definiu. A faixa mostrada é a do LAUDO (não uma

@@ -19,7 +19,8 @@ function day(dayISO: string, kcal: number | null, goalKcal: number | null): Dail
   const consumed = { kcal: kcal ?? 0, protein: 0, carbs: 0, fat: 0 };
   return {
     day: dayISO,
-    entries: (kcal === null ? [] : [{ id: dayISO }]) as DailyNutritionDiary['entries'],
+    // a tela só usa `entries.length`; o fixture não precisa de uma entrada real
+    entries: (kcal === null ? [] : [{ id: dayISO }]) as unknown as DailyNutritionDiary['entries'],
     progress: {
       day: dayISO,
       consumed,
