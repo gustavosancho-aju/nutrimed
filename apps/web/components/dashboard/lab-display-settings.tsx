@@ -156,7 +156,7 @@ export function LabDisplaySettings({
                       />
                       <span className="flex-1 truncate text-ink">{o.label}</span>
                       <span className="text-[10px] text-ink-muted">
-                        {o.pontos} {o.pontos === 1 ? 'result.' : 'results.'}
+                        {o.pontos} {o.pontos === 1 ? 'resultado' : 'resultados'}
                       </span>
                     </label>
                   );
