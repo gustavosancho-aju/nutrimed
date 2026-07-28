@@ -227,6 +227,17 @@ Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build`
   `cd apps/web && npx tsx --env-file=.env.local scripts/seed-plano-12-meses.mjs` — cria o paciente
   de teste com metas versionadas e ~560 lançamentos (adesão crescente ao longo do plano). Só banco
   LOCAL; produção usa Neon via `DATABASE_URL`, que não existe no `.env.local`.
+- **🧹 Processo auxiliar: derrube AO SAIR DA ETAPA — inclusive quando ela FALHA (2026-07-28).**
+  Para injetar um laudo no input de arquivo, subi um servidor HTTP efêmero servindo o PDF em
+  `127.0.0.1:45678`. A abordagem falhou (o painel de navegação bloqueia fetch cross-origin), troquei
+  pelo seed direto no banco — e **esqueci o servidor de pé por ~3h**, publicando dado clínico de um
+  paciente real na loopback. Risco concreto baixo (só alcançável da própria máquina), mas
+  desnecessário. O esquecimento acontece justamente quando a tentativa é ABANDONADA: quem conclui a
+  etapa lembra de limpar, quem desiste dela troca de assunto. Regra: todo processo auxiliar
+  (servidor de arquivos, túnel, watcher) morre no mesmo passo em que deixa de ser necessário, e no
+  fim da sessão vale varrer o que ficou — `preview_stop` só cobre o que subiu pelo preview.
+  Vale para artefatos também: a extração do laudo cacheia `.laudo-cache.json` AO LADO do PDF, com o
+  painel clínico em texto puro — apague depois.
 - **WS em produção = MESMA porta do HTTP (443)** — `BOARD_WS_MODE=attached` + `apps/web/server.mjs`
   (CMD do Dockerfile). Dev local segue `next dev` + gateway na 3001. Rollback: `BOARD_WS_MODE=port`
   + CMD `next start`. Listener legado na 3001 ativo só na transição.
