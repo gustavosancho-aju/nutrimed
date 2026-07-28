@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { REFERENCE_STATUS_LABEL, type ReferenceStatus } from '@nutrimed/lab-catalog';
 import { rangeLabel, type AnalyteSeries } from '@/lib/lab-panel';
 import type { TargetBand } from '@/lib/dashboard';
@@ -53,10 +54,16 @@ export function bandAndTarget(s: AnalyteSeries): { band?: TargetBand; target?: n
 export function AnalyteCard({
   series,
   showChart = true,
+  actions,
 }: {
   series: AnalyteSeries;
   /** Gráfico só faz sentido com 2+ pontos; a lista compacta pode desligá-lo. */
   showChart?: boolean;
+  /**
+   * Controles do card (reordenar, remover). Ficam NO cabeçalho, não flutuando
+   * por cima: sobrepostos, cobriam a unidade do exame.
+   */
+  actions?: ReactNode;
 }) {
   const faixa = rangeLabel(series);
   const { band, target } = bandAndTarget(series);
@@ -64,8 +71,13 @@ export function AnalyteCard({
   return (
     <div className="card-premium p-5">
       <div className="flex items-baseline justify-between gap-3">
-        <p className="text-xs uppercase tracking-wide text-ink-muted">{series.label}</p>
-        {series.unit && <span className="text-[11px] text-ink-muted">{series.unit}</span>}
+        <p className="min-w-0 flex-1 truncate text-xs uppercase tracking-wide text-ink-muted">
+          {series.label}
+        </p>
+        <div className="flex shrink-0 items-center gap-2">
+          {series.unit && <span className="text-[11px] text-ink-muted">{series.unit}</span>}
+          {actions}
+        </div>
       </div>
 
       <div className="mt-1 flex flex-wrap items-center gap-3">

@@ -86,10 +86,14 @@ esse histórico, então a 1ª importação já nasce com LINHA de tendência em 
 (plasma paciente 38,5s, controle 28,8s, relação 1,34) e o RFG 2 (adulto negro/não negro); sem o
 guard virariam pontos incomparáveis na mesma série, com o "valor atual" sorteado pela ordem de
 inserção. A 1ª ocorrência fica com o slug canônico, as demais viram exame livre com o nome do laudo.
-O médico escolhe
-quais exames apresentar ao paciente e em QUE ORDEM (fila reordenável, teto de 12) — sem seleção, a
-Apresentação não mostra exames (40 gráficos seriam ruído, e escolher por ele seria decidir
-relevância clínica). **Extração REAL verificada** contra o laudo de 22 páginas do piloto
+**A aba Exames é uma LISTA, não uma parede de gráficos** (correção de rumo do Gustavo,
+2026-07-28): a 1ª versão desenhava um gráfico por exame e 69 gráficos empilhados não deixam nada em
+destaque. Agora é uma linha por exame (valor · faixa do laudo · dentro/fora · nº de medições ·
+data), com busca, e o médico MARCA o que vira gráfico — o gráfico aparece na hora, sem salvar,
+porque na consulta ele está explorando. Salvar persiste a seleção E a ordem, e é a MESMA seleção que
+alimenta a Apresentação (teto de 12): duas listas separadas dobrariam o trabalho por uma distinção
+que ninguém pediu. Sem seleção, a Apresentação não mostra exames (40 gráficos seriam ruído, e
+escolher por ele seria decidir relevância clínica). **Extração REAL verificada** contra o laudo de 22 páginas do piloto
 (`npx tsx --env-file=.env scripts/poc-lab-panel.mjs <laudo.pdf>`, ~US$ 0,09 no Haiku, 39s):
 **70 analitos, 70/70 reconhecidos pelo catálogo, 66/70 com faixa interpretada, 31 com histórico**.
 Foi essa rodada que revelou os 3 bugs corrigidos (colisão TTPA/RFG; tempo de protrombina mapeado

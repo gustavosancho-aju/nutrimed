@@ -116,7 +116,7 @@ export function LabPanelConfirm({
         </button>
         {comHistorico > 0 && (
           <label className="flex items-center gap-2 text-sm text-ink">
-            <input type="checkbox" name="importarHistorico" defaultChecked className="h-4 w-4 accent-[color:var(--brand)]" />
+            <input type="checkbox" name="importarHistorico" defaultChecked className="h-4 w-4 accent-brand" />
             Importar também os resultados anteriores impressos no laudo
             <span className="text-xs text-ink-muted">
               ({comHistorico} {comHistorico === 1 ? 'exame traz' : 'exames trazem'} histórico)
@@ -154,7 +154,7 @@ export function LabPanelConfirm({
                       checked={incluido}
                       onChange={() => alternar(l.indice)}
                       aria-label={`Incluir ${l.label}`}
-                      className="mt-1 h-4 w-4 accent-[color:var(--brand)]"
+                      className="mt-1 h-4 w-4 accent-brand"
                     />
                   </td>
                   <td className="px-3 py-2 align-top">

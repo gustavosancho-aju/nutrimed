@@ -34,11 +34,9 @@ import {
   monthRangeISO,
   summarizeNutritionMonths,
 } from '@/lib/dashboard';
-import { buildAnalyteSeries, groupByCategory } from '@/lib/lab-panel';
-import { LAB_CATEGORY_LABEL } from '@nutrimed/lab-catalog';
+import { buildAnalyteSeries } from '@/lib/lab-panel';
 import { MetricCard } from '@/components/dashboard/metric-card';
-import { AnalyteCard } from '@/components/dashboard/analyte-card';
-import { LabDisplaySettings } from '@/components/dashboard/lab-display-settings';
+import { LabPanelSection } from '@/components/dashboard/lab-panel-section';
 import { MeasurementForm } from '@/components/dashboard/measurement-form';
 import { MeasurementHistory } from '@/components/dashboard/measurement-history';
 import { CustomExamSettings } from '@/components/dashboard/custom-exam-settings';
@@ -474,11 +472,7 @@ export default async function DashboardPage({
               </div>
             ) : (
               <>
-                <div className="flex flex-wrap items-baseline justify-between gap-3">
-                  <p className="text-sm text-ink-muted">
-                    {analyteSeries.length}{' '}
-                    {analyteSeries.length === 1 ? 'exame acompanhado' : 'exames acompanhados'}
-                  </p>
+                <div className="mb-4 flex justify-end">
                   <Link
                     href={`/patients/${id}/import`}
                     className="text-sm text-brand transition-opacity hover:opacity-80"
@@ -486,37 +480,14 @@ export default async function DashboardPage({
                     + Importar laudo
                   </Link>
                 </div>
-                {groupByCategory(analyteSeries).map((grupo) => (
-                  <section key={grupo.category} className="mt-5">
-                    <h2 className="text-[11px] uppercase tracking-wide text-ink-muted">
-                      {LAB_CATEGORY_LABEL[grupo.category]}
-                    </h2>
-                    <div className="mt-2 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                      {grupo.series.map((s) => (
-                        <AnalyteCard key={s.slug} series={s} />
-                      ))}
-                    </div>
-                  </section>
-                ))}
+                {/* Lista como visão padrão; o médico marca o que vira gráfico. */}
+                <LabPanelSection
+                  patientId={id}
+                  series={analyteSeries}
+                  presentedIniciais={labPrefs.presented}
+                  max={MAX_PRESENTED_ANALYTES}
+                />
               </>
-            )}
-            <p className="mt-4 text-xs text-ink-muted">
-              As faixas exibidas são as que o próprio laboratório imprimiu no laudo — apoio visual,
-              não diagnóstico. A interpretação é do médico responsável.
-            </p>
-
-            {analyteSeries.length > 0 && (
-              <LabDisplaySettings
-                patientId={id}
-                max={MAX_PRESENTED_ANALYTES}
-                selecionadosIniciais={labPrefs.presented}
-                opcoes={analyteSeries.map((s) => ({
-                  slug: s.slug,
-                  label: s.label,
-                  category: s.category,
-                  pontos: s.points.length,
-                }))}
-              />
             )}
             <MeasurementForm
               patientId={id}
