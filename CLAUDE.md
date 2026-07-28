@@ -199,6 +199,22 @@ Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build`
   no boot e derruba o webhook de produção (aconteceu em 2026-07-02). Para dev do bot: criar um bot
   de teste no @BotFather. Guards no código: polling é RECUSADO se o token já tem webhook ativo
   (`getWebhookInfo`) e IGNORADO com `NODE_ENV=production` — mas o bot de teste continua obrigatório.
+- **Para VERIFICAR TELAS, o bot de teste NÃO é necessário (2026-07-28):** basta
+  `TELEGRAM_MODE=webhook` no `.env.local`. Sem `PUBLIC_BASE_URL` (que não existe local), o runtime
+  do Telegram fica **inerte** — não faz polling, não chama `deleteWebhook`, não registra webhook.
+  Produção intocada. Foi o veto ao `npm run dev` que fez E14 e as fases 3–4 do E15 subirem sem
+  ninguém olhar a tela; o bot de teste só é preciso para exercitar o BOT em si.
+  Voltar ao polling (com bot de teste): trocar para `TELEGRAM_MODE=polling`.
+- **Um dev server por diretório (Next 16)** — subir um segundo `next dev` em `apps/web` morre logo
+  após o "Ready" com *"Another next dev server is already running"*, e o log some junto (o erro só
+  aparece rodando em primeiro plano). Se o preview morrer sem explicação, procure o PID antigo.
+- **PGlite não é compartilhável entre processos** — é Postgres DENTRO do processo. Um script que
+  escreve no `.pgdata` enquanto o dev server roda **não é visto por ele** (cada um tem sua cópia em
+  memória), e F5 não resolve. Ordem correta: parar o servidor → semear → subir o servidor.
+- **Seed de 12 meses p/ verificar o histórico:**
+  `cd apps/web && npx tsx --env-file=.env.local scripts/seed-plano-12-meses.mjs` — cria o paciente
+  de teste com metas versionadas e ~560 lançamentos (adesão crescente ao longo do plano). Só banco
+  LOCAL; produção usa Neon via `DATABASE_URL`, que não existe no `.env.local`.
 - **WS em produção = MESMA porta do HTTP (443)** — `BOARD_WS_MODE=attached` + `apps/web/server.mjs`
   (CMD do Dockerfile). Dev local segue `next dev` + gateway na 3001. Rollback: `BOARD_WS_MODE=port`
   + CMD `next start`. Listener legado na 3001 ativo só na transição.

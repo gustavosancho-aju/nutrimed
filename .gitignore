@@ -2,7 +2,7 @@
 
 # Environment & Secrets (AIOX)
 .env
-.env.local
+.env.local*
 .env.*.local
 *.key
 *.pem
