@@ -14,7 +14,7 @@ import {
   loadCurrentNutritionGoal,
   listWaterHistory,
   listSleepSessions,
-  listNutritionDiary,
+  listNutritionRange,
   sleepTargetFromGoal,
   computeAge,
   type DailyNutritionDiary,
@@ -30,6 +30,9 @@ import {
   lastNDaysISO,
   toLocalDayISO,
   classifyDailyStatus,
+  lastNMonths,
+  monthRangeISO,
+  summarizeNutritionMonths,
 } from '@/lib/dashboard';
 import { buildAnalyteSeries, groupByCategory } from '@/lib/lab-panel';
 import { LAB_CATEGORY_LABEL } from '@nutrimed/lab-catalog';
@@ -41,6 +44,7 @@ import { MeasurementHistory } from '@/components/dashboard/measurement-history';
 import { CustomExamSettings } from '@/components/dashboard/custom-exam-settings';
 import { BodyGoalSettings } from '@/components/dashboard/body-goal-settings';
 import { GoalHitBadge } from '@/components/dashboard/goal-hit-badge';
+import { MonthlyHistory } from '@/components/dashboard/monthly-history';
 import { deleteFoodLogAction } from '@/lib/measurement-actions';
 
 type Aba = 'geral' | 'bioimpedancia' | 'exames' | 'bem-estar';
@@ -55,6 +59,8 @@ const ABAS: { key: Aba; label: string }[] = [
 const BR_TZ_OFFSET_MINUTES = -180;
 /** Janela do gráfico de água/sono no dashboard. */
 const WELLNESS_HISTORY_DAYS = 14;
+/** Horizonte do plano do paciente — o médico acompanha e apresenta mês a mês. */
+const PLAN_MONTHS = 12;
 
 /**
  * Dashboard de evolução do paciente (E11 Fase 3) — 3 abas (Geral · Bioimpedância
@@ -65,13 +71,13 @@ export default async function DashboardPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ aba?: string; erro?: string; editar?: string }>;
+  searchParams: Promise<{ aba?: string; erro?: string; editar?: string; mes?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect('/login');
 
   const { id } = await params;
-  const { aba: abaRaw, erro, editar } = await searchParams;
+  const { aba: abaRaw, erro, editar, mes: mesRaw } = await searchParams;
   const aba: Aba =
     abaRaw === 'bioimpedancia' || abaRaw === 'exames' || abaRaw === 'bem-estar' ? abaRaw : 'geral';
 
@@ -109,8 +115,28 @@ export default async function DashboardPage({
           sleepTarget,
         )
       : [];
-  const nutritionDiary: DailyNutritionDiary[] =
-    aba === 'bem-estar' ? await listNutritionDiary(db, id, wellnessDays, BR_TZ_OFFSET_MINUTES, key) : [];
+  // Histórico do plano de 12 meses (E15 fase 3). UMA leitura de intervalo cobre
+  // tudo: a régua dos 12 meses E o mês selecionado (fatiado em memória). Custo
+  // fixo de 2 consultas — o laço dia a dia faria ~730 e travaria a tela.
+  const planMonths = lastNMonths(now, PLAN_MONTHS);
+  const planStart = monthRangeISO(planMonths[0]!.year, planMonths[0]!.month).start;
+  const planEnd = monthRangeISO(
+    planMonths[planMonths.length - 1]!.year,
+    planMonths[planMonths.length - 1]!.month,
+  ).end;
+  const planDiary: DailyNutritionDiary[] =
+    aba === 'bem-estar' ? await listNutritionRange(db, id, planStart, planEnd, BR_TZ_OFFSET_MINUTES, key) : [];
+  const monthlySummaries = summarizeNutritionMonths(planDiary);
+  // Mês em exibição: o pedido na URL, se for um dos meses do plano; senão, o atual.
+  const currentMonthISO = toLocalDayISO(now, BR_TZ_OFFSET_MINUTES).slice(0, 7);
+  const selectedMonth =
+    mesRaw && monthlySummaries.some((m) => m.month === mesRaw) ? mesRaw : currentMonthISO;
+  const monthDiary = planDiary.filter((d) => d.day.startsWith(selectedMonth));
+
+  // Últimos 14 dias (relatório diário de água/sono) — fatiado do MESMO intervalo
+  // já carregado, sem nova ida ao banco.
+  const wellnessDaySet = new Set(wellnessDays);
+  const nutritionDiary: DailyNutritionDiary[] = planDiary.filter((d) => wellnessDaySet.has(d.day));
 
   // Relatório diário (pedido do médico): uma linha por dia, mais recente
   // primeiro, cruzando alimentação + água + sono num único "bateu a meta?".
@@ -529,6 +555,13 @@ export default async function DashboardPage({
                 ⚙️ Editar metas
               </Link>
             </div>
+
+            <MonthlyHistory
+              patientId={id}
+              months={monthlySummaries}
+              selectedMonth={selectedMonth}
+              monthDiary={monthDiary}
+            />
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
               <MetricCard
