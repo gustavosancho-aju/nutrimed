@@ -64,7 +64,9 @@ export default async function DashboardPage({
       <section className="mt-10 flex items-end justify-between gap-4">
         <div className="space-y-1">
           <h2 className="font-display text-xl font-semibold text-ink">
-            Bem-vinda, {user.displayName}
+            {/* "Olá" e não "Bem-vindo(a)": o cadastro não guarda gênero, e
+                qualquer flexão erra com metade dos médicos. */}
+            Olá, {user.displayName}
           </h2>
           <p className="text-sm text-ink-muted">
             {total > 0
