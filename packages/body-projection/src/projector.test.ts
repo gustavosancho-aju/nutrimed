@@ -9,6 +9,7 @@ import {
 } from './projector';
 import { FakeBodyProjector } from './fake-projector';
 import { GeminiBodyProjector, buildPrompt } from './gemini-projector';
+import { OpenAiBodyProjector } from './openai-projector';
 import { createBodyProjector } from './index';
 
 const FOTO = Buffer.from('foto-fake-do-paciente').toString('base64');
@@ -113,21 +114,59 @@ describe('sniffImageMime — formato pelos bytes, não pelo que o cliente diz', 
 });
 
 describe('buildPrompt', () => {
-  it('descreve a direção, o delta e o IMC de origem/destino', () => {
+  it('ancora no ESTADO FINAL: IMC de destino e sua categoria OMS', () => {
     const p = buildPrompt(BASE);
-    expect(p).toContain('weight loss');
-    expect(p).toContain('18.0 kg');
-    expect(p).toContain('BMI change from 31.3 to 25.5');
-    expect(p).toContain('MUST PRESERVE');
+    expect(p).toContain('BMI is 31.3 — obesity class I');
+    expect(p).toContain('Redraw them at 78.0 kg, BMI 25.5 — overweight');
+    expect(p).toContain('19% of their body mass'); // 18/96
   });
 
-  it('inverte a direção quando a meta é ganhar peso', () => {
-    expect(buildPrompt({ ...BASE, currentWeightKg: 52, targetWeightKg: 60 })).toContain('weight gain');
+  it('proíbe copiar as proporções atuais — o bug era devolver o mesmo corpo', () => {
+    expect(buildPrompt(BASE)).toContain('Do not copy the current body proportions');
   });
 
-  it('omite o IMC quando a altura é desconhecida', () => {
+  it('nomeia a categoria de IMC em cada faixa da OMS', () => {
+    const cat = (cur: number, tgt: number) =>
+      buildPrompt({ ...BASE, currentWeightKg: cur, targetWeightKg: tgt, heightCm: 170 });
+    expect(cat(120, 100)).toContain('obesity class III'); // 41.5
+    expect(cat(110, 100)).toContain('obesity class II'); // 38.1
+    expect(cat(95, 85)).toContain('obesity class I'); // 32.9
+    expect(cat(80, 70)).toContain('overweight'); // 27.7
+    expect(cat(70, 60)).toContain('a normal, healthy weight'); // 24.2
+    expect(cat(60, 52)).toContain('underweight'); // 18.0 no destino
+  });
+
+  it('descreve a anatomia concreta em vez de "distribuição de gordura"', () => {
+    const p = buildPrompt(BASE);
+    expect(p).toContain('waist and abdomen are visibly narrower');
+    expect(p).toContain('jawline and chin clearly more defined');
+  });
+
+  it('manda a roupa VESTIR o novo corpo (ela é que desenha a silhueta)', () => {
+    expect(buildPrompt(BASE)).toContain('hanging more loosely');
+    expect(buildPrompt({ ...BASE, currentWeightKg: 52, targetWeightKg: 60 })).toContain('tighter across the body');
+  });
+
+  it('inverte a anatomia quando a meta é ganhar peso', () => {
+    const p = buildPrompt({ ...BASE, currentWeightKg: 52, targetWeightKg: 60 });
+    expect(p).toContain('Redraw them at 60.0 kg');
+    expect(p).toContain('abdomen are fuller and rounder');
+    expect(p).not.toContain('narrower');
+  });
+
+  it('escala a frase de magnitude pela % da massa corporal', () => {
+    const em = (cur: number, tgt: number) => buildPrompt({ ...BASE, currentWeightKg: cur, targetWeightKg: tgt });
+    expect(em(100, 78)).toContain('dramatic, unmistakable transformation'); // 22%
+    expect(em(100, 88)).toContain('substantial, clearly visible change'); // 12%
+    expect(em(100, 93)).toContain('clearly noticeable change'); // 7%
+    expect(em(100, 97)).toContain('modest but still perceptible change'); // 3%
+  });
+
+  it('preserva a identidade e omite o IMC sem altura', () => {
     const { heightCm: _omitida, ...semAltura } = BASE;
-    expect(buildPrompt(semAltura)).not.toContain('BMI');
+    const p = buildPrompt(semAltura);
+    expect(p).not.toContain('BMI');
+    expect(p).toContain('same face and identity');
   });
 });
 
@@ -221,15 +260,105 @@ describe('GeminiBodyProjector', () => {
   });
 });
 
+describe('OpenAiBodyProjector', () => {
+  function respostaOk(imagem = 'IMG-OPENAI') {
+    return {
+      ok: true,
+      json: async () => ({ data: [{ b64_json: imagem }], usage: { input_tokens: 900, output_tokens: 1500 } }),
+    } as unknown as Response;
+  }
+
+  it('envia multipart com a foto e o prompt, no gpt-image-2 por default', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(respostaOk());
+    const onUsage = vi.fn();
+    const r = await new OpenAiBodyProjector({ apiKey: 'sk-1', fetchImpl, onUsage }).project(BASE);
+
+    expect(r).toEqual({ imageBase64: 'IMG-OPENAI', mimeType: 'image/png', modelVersion: 'gpt-image-2' });
+    expect(onUsage).toHaveBeenCalledWith({ inputTokens: 900, outputTokens: 1500 });
+
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toContain('/v1/images/edits');
+    expect((init.headers as Record<string, string>).authorization).toBe('Bearer sk-1');
+    const form = init.body as FormData;
+    expect(form.get('model')).toBe('gpt-image-2');
+    expect(form.get('image')).toBeInstanceOf(Blob);
+    // Mesmo prompt do Gemini — no comparativo o modelo é a única variável.
+    expect(form.get('prompt')).toBe(buildPrompt(BASE));
+    // content-type é do fetch (precisa do boundary) — defini-lo à mão quebraria.
+    expect((init.headers as Record<string, string>)['content-type']).toBeUndefined();
+  });
+
+  it('input_fidelity só vai para a família gpt-image-1 (o 2 responde 400)', async () => {
+    const chamar = async (model?: string) => {
+      const fetchImpl = vi.fn().mockResolvedValue(respostaOk());
+      await new OpenAiBodyProjector({ apiKey: 'k', fetchImpl, ...(model ? { model } : {}) }).project(BASE);
+      return fetchImpl.mock.calls[0]![1].body as FormData;
+    };
+
+    expect((await chamar()).get('input_fidelity')).toBeNull(); // gpt-image-2
+    expect((await chamar('gpt-image-2')).get('input_fidelity')).toBeNull();
+    expect((await chamar('gpt-image-1')).get('input_fidelity')).toBe('high');
+    expect((await chamar('gpt-image-1-mini')).get('input_fidelity')).toBe('high');
+  });
+
+  it('403 vira kind=config (organização não verificada), não "tente outra foto"', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: async () => ({ error: { message: 'must be verified' } }),
+    } as unknown as Response);
+    await expect(new OpenAiBodyProjector({ apiKey: 'k', fetchImpl }).project(BASE)).rejects.toMatchObject({
+      kind: 'config',
+    });
+  });
+
+  it('moderation_blocked vira kind=safety', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: { code: 'moderation_blocked' } }),
+    } as unknown as Response);
+    await expect(new OpenAiBodyProjector({ apiKey: 'k', fetchImpl }).project(BASE)).rejects.toMatchObject({
+      kind: 'safety',
+    });
+  });
+
+  it('resposta sem imagem vira kind=parse e entrada inválida não chama a API', async () => {
+    const semImagem = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: [] }) } as unknown as Response);
+    await expect(new OpenAiBodyProjector({ apiKey: 'k', fetchImpl: semImagem }).project(BASE)).rejects.toMatchObject({
+      kind: 'parse',
+    });
+
+    const nunca = vi.fn();
+    await expect(
+      new OpenAiBodyProjector({ apiKey: 'k', fetchImpl: nunca }).project({ ...BASE, photoBase64: '' }),
+    ).rejects.toBeInstanceOf(BodyProjectorError);
+    expect(nunca).not.toHaveBeenCalled();
+  });
+});
+
 describe('createBodyProjector — seleção por ambiente', () => {
   it('BODY_PROJECTOR=fake força o fake mesmo com key presente', () => {
     const p = createBodyProjector({ BODY_PROJECTOR: 'fake', GEMINI_API_KEY: 'k' } as NodeJS.ProcessEnv);
     expect(p).toBeInstanceOf(FakeBodyProjector);
   });
 
-  it('key presente ⇒ Gemini', () => {
+  it('key presente ⇒ Gemini (default histórico, inalterado)', () => {
     const p = createBodyProjector({ GEMINI_API_KEY: 'k' } as NodeJS.ProcessEnv);
     expect(p).toBeInstanceOf(GeminiBodyProjector);
+  });
+
+  it('BODY_PROJECTOR=openai escolhe a OpenAI; sem a key ⇒ null', () => {
+    expect(
+      createBodyProjector({ BODY_PROJECTOR: 'openai', OPENAI_API_KEY: 'sk' } as NodeJS.ProcessEnv),
+    ).toBeInstanceOf(OpenAiBodyProjector);
+    expect(createBodyProjector({ BODY_PROJECTOR: 'openai' } as NodeJS.ProcessEnv)).toBeNull();
+  });
+
+  it('OPENAI_API_KEY sozinha NÃO troca o provedor (a var já é do STT)', () => {
+    const p = createBodyProjector({ OPENAI_API_KEY: 'sk', GEMINI_API_KEY: 'k' } as NodeJS.ProcessEnv);
+    expect(p).toBeInstanceOf(GeminiBodyProjector);
+    expect(createBodyProjector({ OPENAI_API_KEY: 'sk', NODE_ENV: 'production' } as NodeJS.ProcessEnv)).toBeNull();
   });
 
   it('sem key fora de produção ⇒ fake; em produção ⇒ null (UI esconde o recurso)', () => {

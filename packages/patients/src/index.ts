@@ -49,7 +49,9 @@ export {
   // Projeção corporal por foto
   setPatientPhoto,
   loadPatientPhoto,
-  addBodyProjection,
+  startBodyProjection,
+  completeBodyProjection,
+  failBodyProjection,
   listBodyProjections,
   approveBodyProjection,
   softDeleteBodyProjection,
@@ -82,4 +84,5 @@ export {
   type StoredImage,
   type NewBodyProjection,
   type BodyProjectionRecord,
+  type BodyProjectionStatus,
 } from './patients';

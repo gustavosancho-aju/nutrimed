@@ -149,10 +149,13 @@ export default async function ApresentacaoPage({
   // escolher por ele seria decidir o que é relevante clinicamente.
   const labPrefs = await loadLabDisplayPrefs(db, id, key);
   const apresentados = selectPresented(buildAnalyteSeries(labs, customDefs), labPrefs.presented);
-  // Projeções corporais APROVADAS (a mais recente é a apresentada) + a foto que
-  // as originou. Sem aprovação do médico a lista vem vazia e a seção some.
-  const projecoes = await listBodyProjections(db, id, key, { onlyApproved: true });
-  const photo = projecoes.length > 0 ? await loadPatientPhoto(db, id, key) : null;
+  // Projeção corporal APROVADA mais recente + a foto que a originou. Sem
+  // aprovação do médico não há nada aqui e a seção some. O filtro por `image`
+  // é redundante com o `status = 'ready'` da consulta, mas é o que prova ao
+  // tipo que existe imagem — projeção em geração tem `image: null`.
+  const aprovadas = await listBodyProjections(db, id, key, { onlyApproved: true });
+  const projecao = aprovadas.find((p) => p.image !== null);
+  const photo = projecao ? await loadPatientPhoto(db, id, key) : null;
   const now = new Date();
   const age = computeAge(patient.birthDate, now);
 
@@ -233,7 +236,7 @@ export default async function ApresentacaoPage({
           </p>
           <Link
             href={`/patients/${id}/dashboard?aba=bioimpedancia`}
-            className="mt-5 inline-block rounded-[10px] bg-brand px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+            className="mt-5 inline-block rounded-[10px] bg-brand px-5 py-2.5 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
           >
             Lançar medição
           </Link>
@@ -385,7 +388,7 @@ export default async function ApresentacaoPage({
 
           {/* Projeção corporal — só o que o médico APROVOU (a geração e a
               decisão ficam em /projecao). Sem aprovação, nada aparece aqui. */}
-          {projecoes.length > 0 && (
+          {projecao?.image && (
             <div className="border-t border-ink/10 px-8 pb-8 pt-6 md:px-10">
               <h2 className="font-display text-base font-semibold text-ink">
                 Como você pode ficar
@@ -396,19 +399,19 @@ export default async function ApresentacaoPage({
                     {/* <img> e não next/image: data URL (cifrada em repouso, sem URL própria). */}
                     <img src={`data:${photo.mimeType};base64,${photo.base64}`} alt="Foto atual" className="w-full rounded-[12px]" />
                     <figcaption className="text-center text-sm text-ink-muted">
-                      Hoje — {projecoes[0]!.sourceWeightKg.toFixed(1)} kg
+                      Hoje — {projecao.sourceWeightKg.toFixed(1)} kg
                     </figcaption>
                   </figure>
                 )}
                 <figure className="space-y-2">
                   {/* data URL, mesmo caso do <img> acima. */}
                   <img
-                    src={`data:${projecoes[0]!.image.mimeType};base64,${projecoes[0]!.image.base64}`}
+                    src={`data:${projecao.image.mimeType};base64,${projecao.image.base64}`}
                     alt="Projeção no peso desejado"
                     className="w-full rounded-[12px]"
                   />
                   <figcaption className="text-center text-sm font-semibold text-brand">
-                    Meta — {projecoes[0]!.targetWeightKg.toFixed(1)} kg
+                    Meta — {projecao.targetWeightKg.toFixed(1)} kg
                   </figcaption>
                 </figure>
               </div>

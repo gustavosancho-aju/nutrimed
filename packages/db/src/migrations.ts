@@ -541,4 +541,22 @@ CREATE INDEX IF NOT EXISTS body_projection_patient_idx
   ON body_projection (patient_id, created_at);
 `,
   },
+  {
+    name: '0024_body_projection_async',
+    sql: `
+-- A projeção virou ASSÍNCRONA. Medido em 2026-07-28: o gpt-image-2 leva ~142s
+-- por imagem (contra 10s do Gemini, que porém quase não mudava o corpo). Dois
+-- minutos e meio dentro de uma server action prendem a página do médico no meio
+-- da consulta e estouram timeout de proxy — então a linha passa a nascer ANTES
+-- da imagem existir, com status='processing', e a geração termina em segundo
+-- plano (o app roda como processo Node persistente no Fly, não serverless).
+--
+-- result_enc perde o NOT NULL por consequência: a linha existe antes da imagem.
+-- Linhas antigas já têm imagem, por isso o DEFAULT 'ready' — nenhuma projeção
+-- já aprovada muda de comportamento.
+ALTER TABLE body_projection ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'ready';
+ALTER TABLE body_projection ADD COLUMN IF NOT EXISTS error_message text;
+ALTER TABLE body_projection ALTER COLUMN result_enc DROP NOT NULL;
+`,
+  },
 ];

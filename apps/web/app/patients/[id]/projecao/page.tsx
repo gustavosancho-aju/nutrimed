@@ -11,7 +11,8 @@ import {
   listBodyProjections,
 } from '@nutrimed/patients';
 import { BodyProjectionPanel } from '@/components/dashboard/body-projection-panel';
-import { BodyProjectionList } from '@/components/dashboard/body-projection-list';
+import { BodyProjectionList, travada } from '@/components/dashboard/body-projection-list';
+import { ProjectionRefresher } from '@/components/dashboard/projection-refresher';
 
 /**
  * Projeção corporal por foto. Página própria como a importação de laudo: o
@@ -68,6 +69,12 @@ export default async function ProjecaoPage({ params }: { params: Promise<{ id: s
         <h2 className="font-display text-lg font-semibold text-ink">Projeções salvas</h2>
         <BodyProjectionList patientId={id} photo={photo} projections={projections} />
       </section>
+
+      {/* Só liga o polling se há geração em andamento — e para de contar as que
+          já passaram do limite, senão a tela ficaria recarregando para sempre. */}
+      <ProjectionRefresher
+        ativo={projections.some((p) => p.status === 'processing' && !travada(p))}
+      />
     </main>
   );
 }

@@ -1557,12 +1557,17 @@ export interface StoredImage {
   readonly mimeType: string;
 }
 
+/**
+ * Estado da geração. A imagem demora (~142s no gpt-image-2), então a linha
+ * nasce em 'processing' e só depois vira 'ready' — ou 'failed', com o motivo.
+ */
+export type BodyProjectionStatus = 'processing' | 'ready' | 'failed';
+
 /** Nome distinto do `BodyProjectionInput` de @nutrimed/body-projection (que é a
- * ENTRADA da IA); aqui é o que se GRAVA depois de gerada. */
+ * ENTRADA da IA); aqui é o que se ABRE antes de gerar. */
 export interface NewBodyProjection {
   readonly sourceWeightKg: number;
   readonly targetWeightKg: number;
-  readonly image: StoredImage;
   readonly modelVersion: string;
 }
 
@@ -1571,7 +1576,10 @@ export interface BodyProjectionRecord {
   readonly patientId: string;
   readonly sourceWeightKg: number;
   readonly targetWeightKg: number;
-  readonly image: StoredImage;
+  readonly status: BodyProjectionStatus;
+  /** Null enquanto 'processing' e quando falhou. */
+  readonly image: StoredImage | null;
+  readonly errorMessage: string | null;
   readonly modelVersion: string;
   readonly approvedAt: Date | null;
   readonly createdAt: Date;
@@ -1582,7 +1590,9 @@ interface BodyProjectionRow {
   patient_id: string;
   source_weight_kg: string | number;
   target_weight_kg: string | number;
-  result_enc: string;
+  result_enc: string | null;
+  status: string;
+  error_message: string | null;
   model_version: string;
   approved_at: Date | null;
   created_at: Date;
@@ -1594,7 +1604,9 @@ function toBodyProjection(row: BodyProjectionRow, key: Buffer): BodyProjectionRe
     patientId: row.patient_id,
     sourceWeightKg: Number(row.source_weight_kg),
     targetWeightKg: Number(row.target_weight_kg),
-    image: JSON.parse(decryptField(row.result_enc, key)) as StoredImage,
+    status: (row.status as BodyProjectionStatus) ?? 'ready',
+    image: row.result_enc ? (JSON.parse(decryptField(row.result_enc, key)) as StoredImage) : null,
+    errorMessage: row.error_message,
     modelVersion: row.model_version,
     approvedAt: row.approved_at ? new Date(row.approved_at) : null,
     createdAt: new Date(row.created_at),
@@ -1640,25 +1652,22 @@ export async function loadPatientPhoto(
   return enc ? (JSON.parse(decryptField(enc, key)) as StoredImage) : null;
 }
 
-/** Grava a projeção gerada, ainda NÃO aprovada. Cifrada (NFR9) + auditada (NFR10). */
-export async function addBodyProjection(
+/**
+ * ABRE a projeção antes de gerar a imagem: a linha nasce 'processing', o médico
+ * vê "gerando…" na hora e a geração segue em segundo plano. Auditada aqui (a
+ * intenção já é o evento); o desfecho é registrado em complete/fail.
+ */
+export async function startBodyProjection(
   db: SqlExecutor,
   patientId: string,
   input: NewBodyProjection,
-  key: Buffer,
   origin: WriteOrigin = { action: 'body-projection-generate' },
 ): Promise<string> {
   const res = await db.query<{ id: string }>(
     `INSERT INTO body_projection
-       (patient_id, source_weight_kg, target_weight_kg, result_enc, model_version)
-     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-    [
-      patientId,
-      input.sourceWeightKg,
-      input.targetWeightKg,
-      encryptField(JSON.stringify(input.image), key),
-      input.modelVersion,
-    ],
+       (patient_id, source_weight_kg, target_weight_kg, model_version, status)
+     VALUES ($1, $2, $3, $4, 'processing') RETURNING id`,
+    [patientId, input.sourceWeightKg, input.targetWeightKg, input.modelVersion],
   );
   const id = res.rows[0]!.id;
   await writeAudit(db, patientId, {
@@ -1669,10 +1678,41 @@ export async function addBodyProjection(
   return id;
 }
 
+/** Fecha a projeção com a imagem pronta (cifrada, NFR9). */
+export async function completeBodyProjection(
+  db: SqlExecutor,
+  projectionId: string,
+  image: StoredImage,
+  key: Buffer,
+): Promise<void> {
+  await db.query(
+    `UPDATE body_projection SET result_enc = $2, status = 'ready', error_message = NULL
+     WHERE id = $1 AND deleted_at IS NULL`,
+    [projectionId, encryptField(JSON.stringify(image), key)],
+  );
+}
+
+/**
+ * Marca a projeção como falha, com o motivo em pt-BR já pronto para a tela.
+ * A linha PERMANECE: o médico precisa saber que tentou e não deu, senão fica
+ * esperando uma imagem que nunca vem.
+ */
+export async function failBodyProjection(
+  db: SqlExecutor,
+  projectionId: string,
+  errorMessage: string,
+): Promise<void> {
+  await db.query(
+    `UPDATE body_projection SET status = 'failed', error_message = $2
+     WHERE id = $1 AND deleted_at IS NULL`,
+    [projectionId, errorMessage.slice(0, 500)],
+  );
+}
+
 /**
  * Lista as projeções vivas do paciente, mais recentes primeiro.
  * `onlyApproved` é o que a Apresentação usa — o paciente só vê o que passou
- * pelo olho do médico.
+ * pelo olho do médico E terminou de gerar.
  */
 export async function listBodyProjections(
   db: SqlExecutor,
@@ -1683,7 +1723,7 @@ export async function listBodyProjections(
   const res = await db.query<BodyProjectionRow>(
     `SELECT * FROM body_projection
      WHERE patient_id = $1 AND deleted_at IS NULL
-       AND ($2::boolean IS NOT TRUE OR approved_at IS NOT NULL)
+       AND ($2::boolean IS NOT TRUE OR (approved_at IS NOT NULL AND status = 'ready'))
      ORDER BY created_at DESC, id DESC`,
     [patientId, options.onlyApproved ?? false],
   );
@@ -1702,7 +1742,7 @@ export async function approveBodyProjection(
 ): Promise<void> {
   const res = await db.query<{ patient_id: string }>(
     `UPDATE body_projection SET approved_at = now()
-     WHERE id = $1 AND deleted_at IS NULL
+     WHERE id = $1 AND deleted_at IS NULL AND status = 'ready'
        AND patient_id IN (SELECT id FROM patient WHERE user_id = $2 AND deleted_at IS NULL)
      RETURNING patient_id`,
     [projectionId, userId],

@@ -28,7 +28,9 @@ import {
   loadCurrentBodyGoal,
   setPatientPhoto,
   loadPatientPhoto,
-  addBodyProjection,
+  startBodyProjection,
+  completeBodyProjection,
+  failBodyProjection,
   listBodyProjections,
   approveBodyProjection,
   softDeleteBodyProjection,
@@ -597,24 +599,28 @@ describe('Patient Service (E11 — 11.2)', () => {
     const IMAGEM = { base64: Buffer.from('imagem-gerada').toString('base64'), mimeType: 'image/png' };
     const FOTO = { base64: Buffer.from('foto-do-paciente').toString('base64'), mimeType: 'image/jpeg' };
 
-    it('grava e devolve a projeção decifrada, ainda NÃO aprovada', async () => {
+    it('nasce processando (sem imagem) e fecha pronta, cifrada', async () => {
       const patientId = await createPatient(exec, userId, { name: 'Projeção' }, KEY);
-      const id = await addBodyProjection(
-        exec,
-        patientId,
-        { sourceWeightKg: 96, targetWeightKg: 78, image: IMAGEM, modelVersion: 'gemini-2.5-flash-image' },
-        KEY,
-      );
+      const id = await startBodyProjection(exec, patientId, {
+        sourceWeightKg: 96,
+        targetWeightKg: 78,
+        modelVersion: 'gpt-image-2',
+      });
 
-      const [proj] = await listBodyProjections(exec, patientId, KEY);
-      expect(proj).toMatchObject({
+      const [pendente] = await listBodyProjections(exec, patientId, KEY);
+      expect(pendente).toMatchObject({
         id,
         sourceWeightKg: 96,
         targetWeightKg: 78,
-        image: IMAGEM,
-        modelVersion: 'gemini-2.5-flash-image',
+        status: 'processing',
+        image: null,
+        modelVersion: 'gpt-image-2',
         approvedAt: null,
       });
+
+      await completeBodyProjection(exec, id, IMAGEM, KEY);
+      const [pronta] = await listBodyProjections(exec, patientId, KEY);
+      expect(pronta).toMatchObject({ status: 'ready', image: IMAGEM, errorMessage: null });
 
       // A imagem NUNCA fica em claro no banco (NFR9).
       const raw = await exec.query<{ result_enc: string }>('SELECT result_enc FROM body_projection WHERE id = $1', [id]);
@@ -624,14 +630,36 @@ describe('Patient Service (E11 — 11.2)', () => {
       expect(trail.some((e) => e.triggeredBy === 'body-projection-generate')).toBe(true);
     });
 
-    it('só aparece para o paciente depois que o médico aprova', async () => {
+    it('falha guarda o motivo e a linha permanece (o médico precisa saber)', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Falhou' }, KEY);
+      const id = await startBodyProjection(exec, patientId, {
+        sourceWeightKg: 90,
+        targetWeightKg: 80,
+        modelVersion: 'gpt-image-2',
+      });
+
+      await failBodyProjection(exec, id, 'O modelo recusou editar esta foto.');
+      const [proj] = await listBodyProjections(exec, patientId, KEY);
+      expect(proj).toMatchObject({
+        status: 'failed',
+        image: null,
+        errorMessage: 'O modelo recusou editar esta foto.',
+      });
+    });
+
+    it('só aparece para o paciente depois de PRONTA e aprovada', async () => {
       const patientId = await createPatient(exec, userId, { name: 'Gate Humano' }, KEY);
-      const id = await addBodyProjection(
-        exec,
-        patientId,
-        { sourceWeightKg: 90, targetWeightKg: 80, image: IMAGEM, modelVersion: 'fake-projector' },
-        KEY,
-      );
+      const id = await startBodyProjection(exec, patientId, {
+        sourceWeightKg: 90,
+        targetWeightKg: 80,
+        modelVersion: 'fake-projector',
+      });
+
+      // Ainda gerando: aprovar não tem efeito — não há imagem para mostrar.
+      await expect(approveBodyProjection(exec, id, userId)).rejects.toThrow(/não encontrada/i);
+      expect(await listBodyProjections(exec, patientId, KEY, { onlyApproved: true })).toEqual([]);
+
+      await completeBodyProjection(exec, id, IMAGEM, KEY);
       expect(await listBodyProjections(exec, patientId, KEY, { onlyApproved: true })).toEqual([]);
 
       await approveBodyProjection(exec, id, userId);
@@ -642,12 +670,12 @@ describe('Patient Service (E11 — 11.2)', () => {
 
     it('soft-delete some das listagens mas a linha permanece para a trilha', async () => {
       const patientId = await createPatient(exec, userId, { name: 'Descartada' }, KEY);
-      const id = await addBodyProjection(
-        exec,
-        patientId,
-        { sourceWeightKg: 88, targetWeightKg: 75, image: IMAGEM, modelVersion: 'fake-projector' },
-        KEY,
-      );
+      const id = await startBodyProjection(exec, patientId, {
+        sourceWeightKg: 88,
+        targetWeightKg: 75,
+        modelVersion: 'fake-projector',
+      });
+      await completeBodyProjection(exec, id, IMAGEM, KEY);
 
       await softDeleteBodyProjection(exec, id, userId);
       expect(await listBodyProjections(exec, patientId, KEY)).toEqual([]);
@@ -658,12 +686,12 @@ describe('Patient Service (E11 — 11.2)', () => {
     it('projeção de paciente de OUTRO médico não é aprovada nem excluída', async () => {
       const outroMedico = await insertUser(exec, `outro-${Date.now()}@nutrimed.test`);
       const patientId = await createPatient(exec, userId, { name: 'Do Dono' }, KEY);
-      const id = await addBodyProjection(
-        exec,
-        patientId,
-        { sourceWeightKg: 100, targetWeightKg: 85, image: IMAGEM, modelVersion: 'fake-projector' },
-        KEY,
-      );
+      const id = await startBodyProjection(exec, patientId, {
+        sourceWeightKg: 100,
+        targetWeightKg: 85,
+        modelVersion: 'fake-projector',
+      });
+      await completeBodyProjection(exec, id, IMAGEM, KEY);
 
       await expect(approveBodyProjection(exec, id, outroMedico)).rejects.toThrow(/não encontrada/i);
       await expect(softDeleteBodyProjection(exec, id, outroMedico)).rejects.toThrow(/não encontrada/i);

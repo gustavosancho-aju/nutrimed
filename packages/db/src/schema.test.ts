@@ -56,6 +56,7 @@ describe('Migrations 0001 — schema base (AC1, AC3)', () => {
       '0021_food_log_soft_delete',
       '0022_patient_lab_prefs',
       '0023_body_projection',
+      '0024_body_projection_async',
     ]);
   });
 

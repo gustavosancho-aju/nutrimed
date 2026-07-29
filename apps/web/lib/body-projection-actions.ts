@@ -6,7 +6,9 @@ import {
   loadPatient,
   listBodyComposition,
   setPatientPhoto,
-  addBodyProjection,
+  startBodyProjection,
+  completeBodyProjection,
+  failBodyProjection,
   approveBodyProjection,
   softDeleteBodyProjection,
 } from '@nutrimed/patients';
@@ -37,12 +39,8 @@ import { parseDecimal } from './dashboard';
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 export interface ProjectionState {
-  /** Projeção recém-gerada, aguardando o olhar do médico. */
+  /** Projeção ABERTA — a imagem ainda está sendo gerada em segundo plano. */
   projectionId?: string;
-  /** Imagem gerada como data URL — trafega no HTML autenticado, nunca por URL. */
-  imageDataUrl?: string;
-  /** Foto enviada, para o comparativo antes/depois na tela. */
-  photoDataUrl?: string;
   sourceWeightKg?: number;
   targetWeightKg?: number;
   modelVersion?: string;
@@ -110,42 +108,69 @@ export async function generateBodyProjectionAction(
     };
   }
 
+  const modelVersion = projector.modelVersion ?? 'desconhecido';
   try {
-    const resultado = await projector.project(input);
-
     await setPatientPhoto(db, patientId, user.id, { base64: input.photoBase64, mimeType }, key, {
       action: 'patient-photo-set',
     });
-    const projectionId = await addBodyProjection(
-      db,
-      patientId,
-      {
-        sourceWeightKg,
-        targetWeightKg,
-        image: { base64: resultado.imageBase64, mimeType: resultado.mimeType },
-        modelVersion: resultado.modelVersion,
-      },
-      key,
-    );
-
-    revalidatePath(`/patients/${patientId}/dashboard`);
-    return {
-      projectionId,
-      imageDataUrl: `data:${resultado.mimeType};base64,${resultado.imageBase64}`,
-      photoDataUrl: `data:${mimeType};base64,${input.photoBase64}`,
+    const projectionId = await startBodyProjection(db, patientId, {
       sourceWeightKg,
       targetWeightKg,
-      modelVersion: resultado.modelVersion,
-      message: 'Imagem ilustrativa gerada por IA — confira antes de mostrar ao paciente.',
-    };
-  } catch (err) {
-    // As mensagens de 'input' e 'safety' já vêm em pt-BR acionáveis; o resto
-    // vira uma frase genérica (detalhe de API não ajuda o médico).
-    const kind = (err as { kind?: string }).kind;
-    if (kind === 'safety' || kind === 'input') return { error: (err as Error).message };
+      modelVersion,
+    });
+
+    // A geração NÃO é aguardada: o gpt-image-2 leva ~142s e a página do médico
+    // não pode ficar presa nisso (nem sobreviveria ao timeout do proxy). Isto
+    // funciona porque o app roda como processo Node PERSISTENTE no Fly
+    // (server.mjs) — em runtime serverless a promise seria morta na resposta.
+    void gerarEmSegundoPlano(projectionId, input, projector);
+
+    revalidatePath(`/patients/${patientId}/projecao`);
     return {
-      error: 'Falha ao gerar a projeção — tente novamente em alguns minutos.',
+      projectionId,
+      sourceWeightKg,
+      targetWeightKg,
+      modelVersion,
+      message: 'Gerando a projeção — leva alguns minutos. A lista abaixo atualiza sozinha.',
     };
+  } catch {
+    return { error: 'Falha ao iniciar a projeção — tente novamente em alguns minutos.' };
+  }
+}
+
+/**
+ * Roda a geração fora do ciclo da requisição e fecha a linha (pronta ou falha).
+ * NUNCA lança: uma exceção aqui viraria unhandled rejection e derrubaria o
+ * processo do servidor inteiro — que atende as consultas ao vivo.
+ */
+async function gerarEmSegundoPlano(
+  projectionId: string,
+  input: BodyProjectionInput,
+  projector: NonNullable<ReturnType<typeof createBodyProjector>>,
+): Promise<void> {
+  try {
+    const resultado = await projector.project(input);
+    const db = await getDb();
+    await completeBodyProjection(
+      db,
+      projectionId,
+      { base64: resultado.imageBase64, mimeType: resultado.mimeType },
+      getEncryptionKey(),
+    );
+  } catch (err) {
+    // 'input' e 'safety' já trazem frase acionável em pt-BR; o resto vira uma
+    // mensagem genérica (detalhe de API não ajuda o médico a decidir o que fazer).
+    const kind = (err as { kind?: string }).kind;
+    const mensagem =
+      kind === 'safety' || kind === 'input'
+        ? (err as Error).message
+        : 'Falha ao gerar a projeção — tente novamente em alguns minutos.';
+    try {
+      await failBodyProjection(await getDb(), projectionId, mensagem);
+    } catch {
+      // Banco fora do ar no momento da falha: a linha fica em 'processing' e a
+      // UI a trata como travada pelo tempo decorrido. Nada mais a fazer aqui.
+    }
   }
 }
 

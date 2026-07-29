@@ -10,7 +10,7 @@ deploy e roadmap — a referência única do estado atual).
 **📋 Registro histórico do MVP (E1–E10): [`docs/IMPLEMENTATION-RECORD.md`](docs/IMPLEMENTATION-RECORD.md)**
 (rastreabilidade FR/NFR/ADR e evidências ao vivo do snapshot de 2026-06-11).
 
-## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-07-28, main @ 5a7788d, Fly v49)
+## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-07-28, main @ 4e58521, Fly v50)
 
 **9 de 10 épicos com núcleo implementado e verificado ao vivo** (falta E8 — vídeos).
 **E11 (Pacientes & Dashboard) COMPLETO** (4 fases + extras: faixa ideal/meta nos gráficos e
@@ -135,8 +135,8 @@ apareceu 3× nesta sessão, nos 3 lugares corrigido.
 **Painel e ficha só de alimentação (2026-07-28):** saíram os cartões de Água e Sono, as 2 colunas do
 relatório diário e as metas `waterMl`/`sleepMinHours`/`sleepMaxHours` da ficha. Schema, serviços,
 campos opcionais no tipo e dados coletados FICARAM (metas antigas seguem no blob cifrado).
-Suíte: **771 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
-CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) verde. Migrations 0001–0023.
+Suíte: **784 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
+CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) verde. Migrations 0001–0024.
 Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 · RUNBOOK Fase 5 = canal Telegram.
 
 | Épico | Status | Épico | Status |
@@ -149,32 +149,66 @@ Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 
 | E9 Documentação Clínica | ✅ | E11 Pacientes & Dashboard | ✅ completo (4 fases) |
 | E12 Bot de Telegram (foto→nutrição vs metas) | ✅ completo (9 stories + grupo + texto; só alimentação) | E13 Relatório Nutricional (TACO) | ✅ completo (em produção) |
 | E14 Painel Laboratorial dinâmico (laudo completo + apresentação) | ✅ completo (verificado no navegador) | E15 Histórico mês a mês (plano de 12 meses) | ✅ completo (4 fases, em produção) |
-| Transcrição Confiável (léxico + revisão do médico + POC) | ✅ completo (falta áudio real p/ POC) | Projeção Corporal por foto (IA) | ✅ implementado (local; falta verificar no navegador) |
+| Transcrição Confiável (léxico + revisão do médico + POC) | ✅ completo (falta áudio real p/ POC) | Projeção Corporal por foto (IA) | ✅ gpt-image-2 + geração assíncrona (falta navegador) |
 
 **Projeção Corporal por foto (2026-07-28).** O médico sobe uma foto do paciente, informa peso atual
 e desejado, e a IA gera como o corpo ficaria no peso-alvo — apoio VISUAL/motivacional na consulta,
 não previsão clínica nem estimativa de composição corporal (isso segue sendo bioimpedância). Página
 própria `/patients/[id]/projecao` (mesmo padrão da importação de laudo); **gate humano**: a imagem
-nasce com `approved_at NULL` e só entra no Modo Apresentação depois que o médico aprova. Gemini
-`gemini-2.5-flash-image` no modo EDIÇÃO (imagem+texto→imagem) atrás de `IBodyProjector`, com
-`FakeBodyProjector` e factory por env (prod sem key ⇒ `null` ⇒ recurso some, sem quebrar a tela).
-**Escolha do provedor:** o critério NÃO foi custo (poucas imagens, US$ 0,04 cada) e sim preservação
-de IDENTIDADE — se o rosto muda, a imagem vira a foto de outra pessoa e perde o sentido clínico.
-**Verificado contra o Gemini real** (`npx tsx --env-file=.env scripts/poc-body-projection.mjs <foto>
-<pesoAtual> <pesoDesejado> [alturaCm]`, 10,3s, US$ 0,0387): sem recusa por política, rosto/roupa/pose/
-fundo/luz idênticos. Ressalva do teste: a cobaia foi o retrato de persona (busto, pessoa já magra),
-onde a mudança de silhueta fica sutil — o prompt pede foto de CORPO INTEIRO por isso. A foto de
-origem vai em `patient.photo_enc` (coluna da 0017, até então sem uso) e a projeção na tabela nova da
-migration 0023, ambas cifradas; as imagens chegam ao browser como data URL dentro do HTML
+nasce com `approved_at NULL` e só entra no Modo Apresentação depois que o médico aprova.
+**Provedor: OpenAI `gpt-image-2`** (`BODY_PROJECTOR=openai`), atrás de `IBodyProjector`, com adapter
+do Gemini, `FakeBodyProjector` e factory por env (prod sem key ⇒ `null` ⇒ recurso some, sem quebrar
+a tela). A OpenAI NUNCA é escolhida implicitamente: `OPENAI_API_KEY` já é do STT, e usá-la como
+sinal trocaria o provedor de imagem sem ninguém pedir.
+**A escolha do modelo foi por MEDIÇÃO, não por opinião** — mesma foto, mesmos pesos, MESMO prompt
+(há teste garantindo isso), 108 kg → 82 kg em foto sintética de corpo inteiro:
+
+| | gemini-2.5-flash-image | gpt-image-2 |
+|---|---|---|
+| corpo muda? | quase nada (falha o propósito) | **sim, claramente** |
+| identidade | preservada | preservada |
+| tempo | 10,7s | **142s** |
+| custo | US$ 0,039 | **US$ 0,329** |
+
+O Gemini preserva a entrada tão bem que se recusa a reestruturar o corpo; o gpt-image-2 re-renderiza
+a cena, que é o que permite a mudança (e reenquadra levemente, efeito colateral aceito). ATENÇÃO:
+`input_fidelity` é da família `gpt-image-1` — mandá-lo ao `gpt-image-2` dá 400, então o adapter só
+o envia para quem suporta. Antes disso o **prompt foi reescrito** (a 1ª versão devolvia o mesmo
+corpo): âncora no ESTADO FINAL por IMC + categoria da OMS, anatomia concreta, proibição de copiar as
+proporções atuais, e a roupa passa a VESTIR o novo corpo. Ficou registrado no adapter que a versão
+imperativa ("THE DIFFERENCE MUST BE OBVIOUS") é **recusada de forma determinística** pela política
+do Gemini — não repetir.
+**Geração ASSÍNCRONA (migration 0024)**: 142s não cabem numa server action (prende a página e
+estoura timeout de proxy), então a linha nasce `status='processing'`, a action retorna na hora e a
+geração roda em segundo plano — possível porque o app é processo Node PERSISTENTE no Fly
+(`server.mjs`), não serverless. `result_enc` perdeu o NOT NULL; `<ProjectionRefresher>` dá
+`router.refresh()` a cada 5s só enquanto há geração em andamento; projeção parada há +15 min é
+mostrada como TRAVADA (o processo caiu no meio) e o polling desliga. Aprovar exige `status='ready'`.
+A foto de origem vai em `patient.photo_enc` (coluna da 0017, até então sem uso) e a projeção na
+tabela da migration 0023, ambas cifradas; as imagens chegam ao browser como data URL dentro do HTML
 autenticado, NUNCA por URL própria (rosto de paciente é dado sensível — item novo para o checklist
 CJ, com consentimento exigido e auditado a cada geração). Sem telemetria própria de custo: cada
 geração já grava auditoria `body-projection-generate` com o `modelVersion`, que é a contagem exata;
 o teto de verdade é o limite por chave no console (lição do vazamento de 2026-07-24). A foto é
 reduzida a 1024 px no NAVEGADOR antes do upload (o re-encode em JPEG também descarta o EXIF).
-`GEMINI_API_KEY` foi copiada para `apps/web/.env.local` em 2026-07-28 (o Next não lê o `.env` da
-raiz; sem ela o app cai no fake). Dívidas: **não verificado no navegador** (o `npm run dev` segue
-vetado pelo token de prod do bot); falta setar o secret no Fly antes do deploy; e a imagem que o
-Gemini devolve tem ~2 MB, bem acima dos 200–600 KB estimados, o que engorda a coluna cifrada.
+POC: `BODY_PROJECTOR=openai npx tsx --env-file=.env scripts/poc-body-projection.mjs <foto> <pesoAtual>
+<pesoDesejado> [alturaCm]` (aceita `gemini` para comparar).
+Dívidas: **não verificado no navegador** (o `npm run dev` segue vetado pelo token de prod do bot) —
+em especial o polling e o fluxo assíncrono só têm cobertura de teste, nunca de clique; falta setar
+`OPENAI_API_KEY` + `BODY_PROJECTOR=openai` nos secrets do Fly antes do deploy; e a imagem tem ~1,6 MB,
+bem acima dos 200–600 KB estimados, o que engorda a coluna cifrada.
+
+**Tema escuro "UNIC Noir" (2026-07-28)** — 4º tema em `/seguranca` (claro `unic` segue o default e
+NÃO mudou): ouro sobre preto QUENTE (matiz 40°, mesmo eixo do dourado — em grafite azulado o ouro
+lê como amarelo fluorescente), dourado como único acento (a referência do cliente não tem verde/teal).
+O que destravou o escuro foram 2 tokens que estavam hardcoded: **`--surface-raised`** (o antigo
+`bg-white` de cards/inputs, 44 usos — branco puro no claro, preto elevado no Noir) e **`--on-brand`**
+(a tinta SOBRE o botão dourado, 30 usos: branco sobre o dourado luminoso do escuro dá ~2,2:1,
+reprova AA; com o token dá 8,4:1). Os `text-white` sobre `.surface-deep-gradient` FICARAM — aquele
+chrome é escuro em qualquer tema. `--hairline-alpha`/`--shadow-alpha` porque em fundo claro quem
+separa o card é a sombra e em fundo escuro é a borda. Verificado no navegador nos 2 temas
+(claro: body marfim + input branco + botão 6,4:1; noir: 0 superfícies brancas, corpo 16,3:1,
+secundário 8,7:1), console e servidor limpos.
 
 **Fluxo vivo:** login (`demo@nutrimed.test`/`nutrimed123`) → consulta → consentimento (default NEGA)
 → `/consultations/[id]`: transcrição AO VIVO + board (3 personas com retratos, feed com hierarquia

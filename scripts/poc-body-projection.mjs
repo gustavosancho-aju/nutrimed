@@ -4,16 +4,19 @@
 // (b) se ele preserva o ROSTO mudando só a silhueta. Se o rosto muda, a
 // projeção perde o sentido clínico: vira a foto de outra pessoa.
 //
-//   node --experimental-strip-types --env-file=.env scripts/poc-body-projection.mjs <foto.jpg> <pesoAtual> <pesoDesejado> [alturaCm]
+//   npx tsx --env-file=.env scripts/poc-body-projection.mjs <foto.jpg> <pesoAtual> <pesoDesejado> [alturaCm]
+//
+// Provedor: BODY_PROJECTOR=gemini (default) | openai — o prompt é o MESMO nos
+// dois, para que o comparativo tenha o modelo como única variável.
 //
 // NÃO grava nada no banco: a imagem sai num arquivo temporário FORA do repo
 // (foto de paciente é dado sensível — nunca versionar). ~US$ 0,04 por chamada.
 import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-// imports relativos ao source (evitam resolução de workspace da raiz); requer
-// `node --experimental-strip-types` (Node 22+) para carregar os .ts diretamente.
+// imports relativos ao source (evitam resolução de workspace da raiz).
 import { GeminiBodyProjector, buildPrompt } from '../packages/body-projection/src/gemini-projector.ts';
+import { OpenAiBodyProjector } from '../packages/body-projection/src/openai-projector.ts';
 
 const [fotoPath, pesoAtualArg, pesoDesejadoArg, alturaArg] = process.argv.slice(2);
 if (!fotoPath || !pesoAtualArg || !pesoDesejadoArg) {
@@ -22,9 +25,12 @@ if (!fotoPath || !pesoAtualArg || !pesoDesejadoArg) {
   );
   process.exit(1);
 }
-const apiKey = process.env.GEMINI_API_KEY;
+const provedor = process.env.BODY_PROJECTOR === 'openai' ? 'openai' : 'gemini';
+const apiKey = provedor === 'openai' ? process.env.OPENAI_API_KEY : process.env.GEMINI_API_KEY;
 if (!apiKey) {
-  console.error('GEMINI_API_KEY ausente — rode com --env-file=.env');
+  console.error(
+    `${provedor === 'openai' ? 'OPENAI_API_KEY' : 'GEMINI_API_KEY'} ausente — rode com --env-file=.env`,
+  );
   process.exit(1);
 }
 
@@ -50,13 +56,15 @@ console.log(`Projeção: ${input.currentWeightKg} kg → ${input.targetWeightKg}
 console.log(`\n--- prompt enviado ---\n${buildPrompt(input)}\n----------------------\n`);
 
 let usage = { inputTokens: 0, outputTokens: 0 };
-const projector = new GeminiBodyProjector({
+const config = {
   apiKey,
   ...(process.env.BODY_PROJECTOR_MODEL ? { model: process.env.BODY_PROJECTOR_MODEL } : {}),
   onUsage: (u) => {
     usage = u;
   },
-});
+};
+const projector = provedor === 'openai' ? new OpenAiBodyProjector(config) : new GeminiBodyProjector(config);
+console.log(`Provedor: ${provedor} (${projector.modelVersion})`);
 
 const inicio = Date.now();
 let resultado;
@@ -77,8 +85,8 @@ writeFileSync(destino, imagem);
 console.log(`OK em ${segundos}s  ·  modelo ${resultado.modelVersion}`);
 console.log(`Imagem: ${(imagem.length / 1024).toFixed(0)} KB, ${resultado.mimeType}`);
 console.log(`Salva em: ${destino}`);
-// Imagem = ~1290 tokens de saída; a US$ 30/1M isso dá ~US$ 0,039 por chamada.
-const custo = (usage.outputTokens * 30) / 1e6;
+// Saída de imagem: US$ 30/1M tokens no Gemini, US$ 40/1M no gpt-image-1.
+const custo = (usage.outputTokens * (provedor === 'openai' ? 40 : 30)) / 1e6;
 console.log(
   `\nTokens: ${usage.inputTokens} entrada / ${usage.outputTokens} saída` +
     (custo > 0 ? `  (~US$ ${custo.toFixed(4)})` : ''),

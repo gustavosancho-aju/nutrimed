@@ -5,7 +5,7 @@ import { generateBodyProjectionAction, type ProjectionState } from '@/lib/body-p
 import { downscaleImage } from '@/lib/image-downscale';
 
 const INPUT =
-  'w-full rounded-[10px] border border-ink/15 bg-white px-3.5 py-2.5 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20';
+  'w-full rounded-[10px] border border-ink/15 bg-surface-raised px-3.5 py-2.5 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20';
 
 /**
  * Passo 1 da projeção corporal: foto + pesos → imagem gerada por IA.
@@ -124,16 +124,14 @@ export function BodyProjectionPanel({
       <button
         type="submit"
         disabled={pending}
-        className="rounded-[10px] bg-brand px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60"
+        className="rounded-[10px] bg-brand px-5 py-2.5 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60"
       >
         {pending ? 'Gerando a projeção…' : 'Gerar projeção'}
       </button>
 
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}
       {state.projectionId && !state.error && (
-        <p className="text-sm text-ink-muted">
-          Projeção gerada — confira abaixo e decida se ela vai para a apresentação.
-        </p>
+        <p className="text-sm text-ink-muted">{state.message}</p>
       )}
     </form>
   );

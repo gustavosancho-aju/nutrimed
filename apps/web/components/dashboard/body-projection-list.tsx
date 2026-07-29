@@ -5,6 +5,32 @@ import {
 } from '@/lib/body-projection-actions';
 
 /**
+ * Depois disto, uma projeção ainda 'processing' está travada — o processo do
+ * servidor caiu ou reiniciou no meio da geração (que leva ~2,5 min). Sem esse
+ * corte o médico ficaria olhando "gerando…" para sempre.
+ */
+const LIMITE_PROCESSANDO_MS = 15 * 60_000;
+
+export function travada(p: BodyProjectionRecord): boolean {
+  return p.status === 'processing' && Date.now() - p.createdAt.getTime() > LIMITE_PROCESSANDO_MS;
+}
+
+function StatusBadge({ projection: p }: { projection: BodyProjectionRecord }) {
+  const [texto, classe] =
+    p.status === 'processing'
+      ? travada(p)
+        ? ['Travada', 'bg-red-500/10 text-red-700']
+        : ['Gerando…', 'bg-ink/10 text-ink-muted']
+      : p.status === 'failed'
+        ? ['Falhou', 'bg-red-500/10 text-red-700']
+        : p.approvedAt
+          ? ['✓ Aprovada para a apresentação', 'bg-brand/10 text-brand']
+          : ['Pendente da sua revisão', 'bg-amber-400/15 text-amber-800'];
+
+  return <span className={`rounded-full px-3 py-1 text-xs font-semibold ${classe}`}>{texto}</span>;
+}
+
+/**
  * Projeções salvas do paciente — onde o GATE HUMANO acontece: enquanto o médico
  * não aprovar, a imagem não existe para o paciente (não aparece no Modo
  * Apresentação). Server Component: as imagens vão como data URL dentro do HTML
@@ -40,17 +66,21 @@ export function BodyProjectionList({
                 {p.createdAt.toLocaleDateString('pt-BR')} · {p.modelVersion}
               </p>
             </div>
-            {p.approvedAt ? (
-              <span className="rounded-full bg-brand/10 px-3 py-1 text-xs font-semibold text-brand">
-                ✓ Aprovada para a apresentação
-              </span>
-            ) : (
-              <span className="rounded-full bg-amber-400/15 px-3 py-1 text-xs font-semibold text-amber-800">
-                Pendente da sua revisão
-              </span>
-            )}
+            <StatusBadge projection={p} />
           </div>
 
+          {p.status === 'processing' && (
+            <p className="text-sm text-ink-muted">
+              {travada(p)
+                ? 'A geração não respondeu a tempo. Descarte esta e tente novamente.'
+                : 'Gerando a imagem… leva alguns minutos. Pode sair desta tela: o resultado fica salvo aqui.'}
+            </p>
+          )}
+          {p.status === 'failed' && (
+            <p className="text-sm text-red-600">{p.errorMessage ?? 'Falha ao gerar a projeção.'}</p>
+          )}
+
+          {p.image && (
           <div className="grid gap-3 sm:grid-cols-2">
             {photo && (
               <figure className="space-y-1.5">
@@ -78,15 +108,16 @@ export function BodyProjectionList({
               </figcaption>
             </figure>
           </div>
+          )}
 
           <div className="flex flex-wrap gap-2">
-            {!p.approvedAt && (
+            {p.status === 'ready' && !p.approvedAt && (
               <form action={approveBodyProjectionAction}>
                 <input type="hidden" name="patientId" value={patientId} />
                 <input type="hidden" name="projectionId" value={p.id} />
                 <button
                   type="submit"
-                  className="rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+                  className="rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
                 >
                   Aprovar para a apresentação
                 </button>

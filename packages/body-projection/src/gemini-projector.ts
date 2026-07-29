@@ -30,37 +30,106 @@ const DEFAULT_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/model
 const DEFAULT_MODEL = 'gemini-2.5-flash-image';
 
 /**
+ * Quanto da massa corporal muda — é ISSO que dá escala ao modelo. "18 kg" não
+ * diz nada sozinho: 18 kg num paciente de 150 kg é outra coisa que 18 kg num de
+ * 90 kg. A frase de magnitude nasce daqui.
+ */
+function magnitude(pct: number): string {
+  if (pct >= 20) return 'a dramatic, unmistakable transformation';
+  if (pct >= 10) return 'a substantial, clearly visible change';
+  if (pct >= 5) return 'a clearly noticeable change';
+  return 'a modest but still perceptible change';
+}
+
+/**
+ * Categoria de IMC pela OMS, em inglês. É a âncora VISUAL mais forte que
+ * achamos: "render this person as overweight (BMI 26.8)" produz mudança de
+ * verdade, enquanto "perca 26 kg" produzia a mesma pessoa — o modelo sabe como
+ * cada categoria se parece, mas não sabe converter subtração em silhueta.
+ */
+function categoriaImc(bmi: number): string {
+  if (bmi < 18.5) return 'underweight';
+  if (bmi < 25) return 'a normal, healthy weight';
+  if (bmi < 30) return 'overweight';
+  if (bmi < 35) return 'obesity class I';
+  if (bmi < 40) return 'obesity class II';
+  return 'obesity class III';
+}
+
+/**
+ * Descrição ANATÔMICA do que muda. A 1ª versão do prompt dizia só "distribuição
+ * de gordura consistente com a mudança de peso" — abstrato demais: o modelo
+ * devolvia a mesma pessoa. Modelo de imagem responde a descrição visual
+ * concreta (cintura, papada, contorno do maxilar), não a conceito clínico.
+ */
+function anatomia(perdendo: boolean): string {
+  return perdendo
+    ? '- the waist and abdomen are visibly narrower; the belly is flatter and projects much less\n' +
+        '- the chest, ribcage and back are slimmer; the neck is thinner\n' +
+        '- the arms and thighs are noticeably less thick\n' +
+        '- the face is leaner: cheeks less full, the jawline and chin clearly more defined, little or no double chin'
+    : '- the waist and abdomen are fuller and rounder\n' +
+        '- the chest, ribcage and back are broader; the neck is thicker\n' +
+        '- the arms and thighs are noticeably fuller\n' +
+        '- the face is fuller: rounder cheeks, a softer jawline';
+}
+
+/**
  * O prompt vai em INGLÊS de propósito (o resto do repo comenta em pt-BR): os
- * modelos de imagem seguem instrução de preservação com bem mais fidelidade em
- * inglês, e aqui a instrução que não pode falhar é "não mexa no rosto".
+ * modelos de imagem seguem instrução visual com mais fidelidade em inglês.
+ *
+ * Reescrito em 2026-07-28 depois de duas simulações reais do médico saírem com
+ * o corpo praticamente igual. A versão anterior empilhava travas de contenção
+ * ("no exaggeration", "no idealised body", "no slimming of the face beyond…")
+ * contra UMA frase abstrata sobre o que mudar — com o peso todo da instrução no
+ * lado da preservação, o modelo jogava seguro e não mexia em nada. Agora:
+ * estado-alvo em IMC + categoria da OMS, anatomia concreta, proibição explícita
+ * de copiar as proporções atuais, e a roupa passa a VESTIR o novo corpo
+ * (mantê-la idêntica ancorava a silhueta: é a roupa que desenha o contorno).
+ *
+ * LIMITE CONHECIDO (medido, não suposto): mesmo assim o gemini-2.5-flash-image
+ * muda POUCO o corpo. Três estratégias foram testadas contra a API real, com
+ * foto sintética de corpo inteiro, 108 kg → 82 kg (24% da massa):
+ *   1. imperativa ("THE DIFFERENCE MUST BE OBVIOUS", "failed result")
+ *      ⇒ RECUSADA por política de conteúdo, de forma determinística;
+ *   2. magnitude em % + anatomia concreta ⇒ passa, mudança sutil demais;
+ *   3. IMC de destino + categoria OMS (esta) ⇒ passa, ainda sutil.
+ * A leitura é que o adapter de EDIÇÃO do modelo é enviesado a preservar a
+ * imagem de entrada, e a força de instrução necessária para vencer esse viés é
+ * justamente a que dispara o filtro. Não é problema de redação: para diferença
+ * realmente visível, o caminho é outro modelo (ver ADR/IBodyProjector).
  *
  * Exportado para o script POC imprimir exatamente o que foi enviado.
  */
 export function buildPrompt(input: BodyProjectionInput): string {
   const perdendo = input.targetWeightKg < input.currentWeightKg;
-  const direcao = perdendo ? 'weight loss' : 'weight gain';
-  const delta = Math.abs(input.targetWeightKg - input.currentWeightKg).toFixed(1);
+  const delta = Math.abs(input.targetWeightKg - input.currentWeightKg);
+  const pct = (delta / input.currentWeightKg) * 100;
 
-  const imc = input.heightCm
-    ? ` This corresponds to a BMI change from ${bmiFrom(input.currentWeightKg, input.heightCm).toFixed(1)} to ${bmiFrom(input.targetWeightKg, input.heightCm).toFixed(1)}.`
-    : '';
-  const sexo = input.sex ? (input.sex === 'F' ? ' The patient is female.' : ' The patient is male.') : '';
+  // Estado de DESTINO em termos absolutos. A âncora é a categoria de IMC, não a
+  // diferença de peso: pedir "perca 26 kg" devolvia a mesma pessoa, porque o
+  // modelo não converte subtração em silhueta — mas ele sabe muito bem como um
+  // corpo "overweight" difere de um "obesity class II".
+  const alvo = input.heightCm
+    ? `This is a person of ${input.heightCm.toFixed(0)} cm. At ${input.currentWeightKg.toFixed(1)} kg their BMI is ` +
+      `${bmiFrom(input.currentWeightKg, input.heightCm).toFixed(1)} — ${categoriaImc(bmiFrom(input.currentWeightKg, input.heightCm))}. ` +
+      `Redraw them at ${input.targetWeightKg.toFixed(1)} kg, BMI ${bmiFrom(input.targetWeightKg, input.heightCm).toFixed(1)} — ` +
+      `${categoriaImc(bmiFrom(input.targetWeightKg, input.heightCm))}. Give them the body of someone in that category.`
+    : `The person weighs ${input.currentWeightKg.toFixed(1)} kg. Redraw them at ${input.targetWeightKg.toFixed(1)} kg.`;
+  const sexo = input.sex ? ` The patient is ${input.sex === 'F' ? 'female' : 'male'}.` : '';
 
   return (
-    `Edit this photograph for a medical weight-management consultation. ` +
-    `The person currently weighs ${input.currentWeightKg.toFixed(1)} kg and the treatment goal is ` +
-    `${input.targetWeightKg.toFixed(1)} kg — a ${direcao} of ${delta} kg.${imc}${sexo} ` +
-    `Show the SAME person at the target weight.\n\n` +
-    `MUST PRESERVE, unchanged and recognisable: the face and all facial features, the identity, ` +
-    `age, skin tone, hair, glasses or accessories, the clothing and its style, the body pose, ` +
-    `the camera angle and framing, the background and the lighting.\n\n` +
-    `MUST CHANGE, and nothing else: body composition and silhouette — the distribution of body fat ` +
-    `consistent with the weight change, in an anatomically plausible way and proportional to the ` +
-    `stated difference.\n\n` +
-    `Keep it clinical, realistic and dignified: no exaggeration, no idealised or athletic body, ` +
-    `no added muscle definition, no beautification of the face or skin, no slimming of the face ` +
-    `beyond what the weight change justifies, no sexualisation. Keep the original image dimensions. ` +
-    `Return a single edited photograph.`
+    `Edit this photograph for a medical weight-management consultation.\n\n` +
+    `${alvo}${sexo} That is ${pct.toFixed(0)}% of their body mass — ${magnitude(pct)}.\n\n` +
+    `Do not copy the current body proportions: the whole point is that the body must match the new ` +
+    `weight. Anatomically, at the target weight:\n${anatomia(perdendo)}\n\n` +
+    `Keep the person recognisable: same face and identity, same age, same skin tone, same hair, same ` +
+    `glasses or accessories, same pose, same camera angle and framing, same background, same lighting. ` +
+    `Same clothes too — same garment, same colour, same style — but they must now fit the new body: ` +
+    `${perdendo ? 'looser, hanging more loosely, no longer stretched tight' : 'filled out more, tighter across the body'}.\n\n` +
+    `Make it a real, plausible body at ${input.targetWeightKg.toFixed(1)} kg — not an athletic or idealised ` +
+    `one. Do not add muscle definition, do not retouch or beautify the face, no sexualisation. Keep the ` +
+    `original image dimensions. Return a single edited photograph.`
   );
 }
 
