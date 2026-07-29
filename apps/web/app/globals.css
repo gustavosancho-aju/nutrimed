@@ -74,9 +74,12 @@
 
 /* Tema "UNIC Noir" — ouro sobre preto (referência do cliente 2026-07-28).
    Preto QUENTE (não azulado: matiz 40°, o mesmo eixo do dourado) para o ouro
-   ler como metal e não como amarelo fluorescente sobre grafite. O dourado é o
-   ÚNICO acento cromático — a referência não tem verde nem teal, e trocar a
-   secundária por bronze mantém a sobriedade em vez de virar semáforo.
+   ler como metal e não como amarelo fluorescente sobre grafite. No CHROME —
+   fundo, header, secundária — o dourado é o único acento: a referência não tem
+   verde nem teal, e bronze no lugar da secundária mantém a sobriedade em vez de
+   virar semáforo. Isso NÃO vale para as cores que carregam significado (attn,
+   suggest, hypothesis, success) nem para as das personas logo abaixo: dourar o
+   que informa apagaria a informação. Elas seguem o tema claro, reacendidas.
    Contraste: dourado #D6A63C sobre o preto da superfície ≈ 9:1 (AAA), e a
    mesma tinta escura sobre o dourado ≈ 9:1 — passa nos dois sentidos. */
 :root[data-theme='noir'] {
