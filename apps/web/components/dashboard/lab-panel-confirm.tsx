@@ -20,7 +20,7 @@ import { saveLabPanelAction } from '@/lib/lab-panel-actions';
  */
 
 const INPUT =
-  'w-full rounded-[8px] border border-ink/15 bg-white px-2.5 py-1.5 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20';
+  'w-full rounded-[8px] border border-ink/15 bg-surface-raised px-2.5 py-1.5 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20';
 
 interface Linha {
   readonly indice: number;
@@ -204,7 +204,7 @@ export function LabPanelConfirm({
       <button
         type="submit"
         disabled={marcados.size === 0}
-        className="mt-5 rounded-[10px] bg-brand px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+        className="mt-5 rounded-[10px] bg-brand px-5 py-2.5 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
       >
         Salvar {marcados.size} {marcados.size === 1 ? 'exame' : 'exames'}
       </button>

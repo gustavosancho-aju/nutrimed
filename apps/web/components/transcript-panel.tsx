@@ -116,7 +116,7 @@ export function TranscriptPanel({ source }: { source: TranscriptSource }) {
         <button
           type="button"
           onClick={resumeFollow}
-          className="border-t border-ink/10 bg-surface-muted px-4 py-2 text-xs font-medium text-ink transition-colors hover:bg-white"
+          className="border-t border-ink/10 bg-surface-muted px-4 py-2 text-xs font-medium text-ink transition-colors hover:bg-surface-raised"
         >
           ↓ Voltar ao vivo
         </button>

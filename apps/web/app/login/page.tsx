@@ -38,7 +38,7 @@ export default function LoginPage() {
                 autoFocus
                 required
                 placeholder="000000"
-                className="w-full rounded-[10px] border border-ink/15 bg-white px-3.5 py-2.5 text-center text-lg tracking-[0.4em] text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                className="w-full rounded-[10px] border border-ink/15 bg-surface-raised px-3.5 py-2.5 text-center text-lg tracking-[0.4em] text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               />
               <span className="block text-xs text-ink-muted">
                 Abra seu app autenticador e digite o código de 6 dígitos.
@@ -55,7 +55,7 @@ export default function LoginPage() {
                   autoCapitalize="none"
                   spellCheck={false}
                   required
-                  className="w-full rounded-[10px] border border-ink/15 bg-white px-3.5 py-2.5 text-sm text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                  className="w-full rounded-[10px] border border-ink/15 bg-surface-raised px-3.5 py-2.5 text-sm text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                 />
               </label>
 
@@ -66,7 +66,7 @@ export default function LoginPage() {
                   type="password"
                   autoComplete="current-password"
                   required
-                  className="w-full rounded-[10px] border border-ink/15 bg-white px-3.5 py-2.5 text-sm text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                  className="w-full rounded-[10px] border border-ink/15 bg-surface-raised px-3.5 py-2.5 text-sm text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                 />
               </label>
             </>
@@ -81,7 +81,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={pending}
-            className="w-full rounded-[10px] bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60"
+            className="w-full rounded-[10px] bg-brand px-4 py-2.5 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60"
           >
             {pending ? 'Entrando…' : state.needsTotp ? 'Verificar' : 'Entrar'}
           </button>

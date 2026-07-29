@@ -19,6 +19,11 @@ const THEME_INFO: Record<Theme, { label: string; description: string; swatch: st
     description: 'Dourado + verde-sálvia sobre marfim — identidade padrão, reforçada.',
     swatch: ['#5c4720', '#4a5233', '#f8f5ee'],
   },
+  noir: {
+    label: 'UNIC Noir',
+    description: 'Ouro sobre preto — a mesma marca em tom escuro, para salas com pouca luz.',
+    swatch: ['#d9ab41', '#8a6f34', '#111008'],
+  },
   authority: {
     label: 'Autoridade',
     description: 'Escuro, alto contraste — âmbar sobre grafite.',
@@ -37,9 +42,9 @@ function grouped(s: string): string {
 }
 
 const CODE_INPUT =
-  'w-40 rounded-[10px] border border-ink/15 bg-white px-3.5 py-2.5 text-center text-lg tracking-[0.4em] text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20';
+  'w-40 rounded-[10px] border border-ink/15 bg-surface-raised px-3.5 py-2.5 text-center text-lg tracking-[0.4em] text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20';
 const BTN =
-  'rounded-[10px] bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90';
+  'rounded-[10px] bg-brand px-4 py-2.5 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90';
 
 /**
  * Segurança da conta: verificação em duas etapas (TOTP). Cadastro por chave
@@ -168,7 +173,7 @@ export default async function SecurityPage({
         <p className="mt-1 text-sm text-ink-muted">
           Escolha a combinação de cores do NutriMed. Vale para toda a conta, em qualquer dispositivo.
         </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {THEMES.map((theme) => {
             const info = THEME_INFO[theme];
             const active = user.theme === theme;

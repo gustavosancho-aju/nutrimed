@@ -53,7 +53,7 @@ function SummaryStat({
   testId?: string;
 }) {
   return (
-    <div className="rounded-[10px] border border-ink/10 bg-white p-4" data-testid={testId}>
+    <div className="rounded-[10px] border border-ink/10 bg-surface-raised p-4" data-testid={testId}>
       <p className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">{label}</p>
       <p className={`mt-1 font-display text-2xl font-semibold ${tone === 'brand' ? 'text-brand' : 'text-ink'}`}>
         {value}
@@ -212,7 +212,7 @@ export function MonthlyHistory({
                 data-testid="day-cell"
                 data-status={status}
                 className={`rounded-[8px] border px-2 py-1.5 ${
-                  hasData ? 'border-ink/12 bg-white' : 'border-dashed border-ink/10 bg-surface'
+                  hasData ? 'border-ink/12 bg-surface-raised' : 'border-dashed border-ink/10 bg-surface'
                 }`}
                 title={
                   hasData

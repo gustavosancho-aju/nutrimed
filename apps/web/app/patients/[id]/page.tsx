@@ -89,7 +89,7 @@ export default async function PatientPage({
             <input type="hidden" name="patientId" value={patient.id} />
             <button
               type="submit"
-              className="rounded-[10px] bg-brand px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+              className="rounded-[10px] bg-brand px-3.5 py-1.5 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
             >
               + Nova consulta
             </button>
@@ -139,7 +139,7 @@ export default async function PatientPage({
         <div className="mt-5">
           <Link
             href={`/patients/${patient.id}/dashboard`}
-            className="inline-flex items-center gap-2 rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 xl:px-5 xl:py-2.5 xl:text-base"
+            className="inline-flex items-center gap-2 rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90 xl:px-5 xl:py-2.5 xl:text-base"
           >
             📊 Dashboard de evolução
           </Link>
@@ -226,7 +226,7 @@ export default async function PatientPage({
               </label>
               <button
                 type="submit"
-                className="rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+                className="rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
               >
                 Salvar metas
               </button>

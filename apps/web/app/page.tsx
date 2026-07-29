@@ -74,7 +74,7 @@ export default async function DashboardPage({
         </div>
         <Link
           href="/patients/new"
-          className="shrink-0 rounded-[10px] bg-brand px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+          className="shrink-0 rounded-[10px] bg-brand px-5 py-2.5 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
         >
           + Novo paciente
         </Link>
@@ -89,7 +89,7 @@ export default async function DashboardPage({
           </p>
           <Link
             href="/patients/new"
-            className="mt-5 inline-block rounded-[10px] bg-brand px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+            className="mt-5 inline-block rounded-[10px] bg-brand px-5 py-2.5 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
           >
             Cadastrar primeiro paciente
           </Link>

@@ -133,7 +133,7 @@ export function ConsultationLobby({
         type="button"
         onClick={start}
         disabled={!ready}
-        className="w-full rounded-[10px] bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity enabled:hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        className="w-full rounded-[10px] bg-brand px-4 py-2.5 text-sm font-semibold text-on-brand shadow-sm transition-opacity enabled:hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
       >
         Iniciar consulta
       </button>

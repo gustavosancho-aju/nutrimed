@@ -162,7 +162,7 @@ export default async function ConsultationPage({
             <input type="hidden" name="consultationId" value={id} />
             <button
               type="submit"
-              className="w-full rounded-[10px] bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+              className="w-full rounded-[10px] bg-brand px-4 py-2.5 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
             >
               Registrar consentimento de gravação
             </button>
@@ -300,7 +300,7 @@ export default async function ConsultationPage({
                   readOnly={isClosed}
                   aria-label="Transcrição da consulta"
                   className={`w-full rounded-[10px] border border-ink/15 p-4 text-sm leading-relaxed text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 ${
-                    isClosed ? 'bg-surface' : 'bg-white'
+                    isClosed ? 'bg-surface' : 'bg-surface-raised'
                   }`}
                 />
                 <div className="flex items-center justify-between gap-3">
@@ -314,7 +314,7 @@ export default async function ConsultationPage({
                   {!isClosed && (
                     <button
                       type="submit"
-                      className="shrink-0 rounded-[10px] bg-brand px-4 py-2 text-xs font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+                      className="shrink-0 rounded-[10px] bg-brand px-4 py-2 text-xs font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
                     >
                       💾 Salvar transcrição corrigida
                     </button>
@@ -361,7 +361,7 @@ export default async function ConsultationPage({
                   defaultValue={note.content}
                   rows={14}
                   aria-label="Conteúdo da nota clínica"
-                  className="font-mono-data w-full rounded-[10px] border border-ink/15 bg-white p-4 text-sm leading-relaxed text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                  className="font-mono-data w-full rounded-[10px] border border-ink/15 bg-surface-raised p-4 text-sm leading-relaxed text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                 />
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-ink-muted">
@@ -369,7 +369,7 @@ export default async function ConsultationPage({
                   </p>
                   <button
                     type="submit"
-                    className="rounded-[10px] bg-brand px-4 py-2 text-xs font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+                    className="rounded-[10px] bg-brand px-4 py-2 text-xs font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
                   >
                     💾 Salvar nota
                   </button>
@@ -498,7 +498,7 @@ export default async function ConsultationPage({
                     readOnly={isClosed}
                     aria-label="Conteúdo do relatório nutricional"
                     className={`font-mono-data w-full rounded-[10px] border border-ink/15 p-4 text-sm leading-relaxed text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 ${
-                      isClosed ? 'bg-surface' : 'bg-white'
+                      isClosed ? 'bg-surface' : 'bg-surface-raised'
                     }`}
                   />
                   <div className="flex items-center justify-between">
@@ -509,7 +509,7 @@ export default async function ConsultationPage({
                     {!isClosed && (
                       <button
                         type="submit"
-                        className="rounded-[10px] bg-brand px-4 py-2 text-xs font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+                        className="rounded-[10px] bg-brand px-4 py-2 text-xs font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
                       >
                         💾 Salvar relatório
                       </button>

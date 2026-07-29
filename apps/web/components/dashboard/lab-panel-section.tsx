@@ -203,7 +203,7 @@ export function LabPanelSection({
             onChange={(e) => setBusca(e.target.value)}
             placeholder="Buscar exame…"
             aria-label="Buscar exame"
-            className="w-56 rounded-[10px] border border-ink/15 bg-white px-3 py-1.5 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+            className="w-56 rounded-[10px] border border-ink/15 bg-surface-raised px-3 py-1.5 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
           />
         </div>
 
@@ -304,7 +304,7 @@ export function LabPanelSection({
             type="submit"
             disabled={!pendente}
             onClick={() => setSalvo(selecionados)}
-            className="rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
+            className="rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
           >
             Salvar seleção
           </button>

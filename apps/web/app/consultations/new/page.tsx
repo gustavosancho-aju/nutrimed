@@ -51,7 +51,7 @@ export default async function NewConsultationPage() {
                 id="patientId"
                 name="patientId"
                 defaultValue=""
-                className="w-full rounded-[10px] border border-ink/15 bg-white px-3.5 py-2.5 text-sm text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                className="w-full rounded-[10px] border border-ink/15 bg-surface-raised px-3.5 py-2.5 text-sm text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               >
                 <option value="">— Cadastrar novo paciente —</option>
                 {patients.map((p) => {
@@ -74,7 +74,7 @@ export default async function NewConsultationPage() {
               type="text"
               placeholder="Nome completo"
               autoComplete="off"
-              className="w-full rounded-[10px] border border-ink/15 bg-white px-3.5 py-2.5 text-sm text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+              className="w-full rounded-[10px] border border-ink/15 bg-surface-raised px-3.5 py-2.5 text-sm text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
             />
             <div className="flex flex-col gap-3 sm:flex-row">
               <label className="flex-1 space-y-1">
@@ -82,7 +82,7 @@ export default async function NewConsultationPage() {
                 <input
                   name="patientBirthDate"
                   type="date"
-                  className="w-full rounded-[10px] border border-ink/15 bg-white px-3.5 py-2.5 text-sm text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                  className="w-full rounded-[10px] border border-ink/15 bg-surface-raised px-3.5 py-2.5 text-sm text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                 />
               </label>
               <label className="flex-1 space-y-1">
@@ -91,7 +91,7 @@ export default async function NewConsultationPage() {
                   name="patientPhone"
                   type="tel"
                   placeholder="(11) 99999-0000"
-                  className="w-full rounded-[10px] border border-ink/15 bg-white px-3.5 py-2.5 text-sm text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                  className="w-full rounded-[10px] border border-ink/15 bg-surface-raised px-3.5 py-2.5 text-sm text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                 />
               </label>
             </div>
@@ -99,19 +99,19 @@ export default async function NewConsultationPage() {
               name="patientGoal"
               type="text"
               placeholder="Principal objetivo (opcional)"
-              className="w-full rounded-[10px] border border-ink/15 bg-white px-3.5 py-2.5 text-sm text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+              className="w-full rounded-[10px] border border-ink/15 bg-surface-raised px-3.5 py-2.5 text-sm text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
             />
             <input
               name="patientProfession"
               type="text"
               placeholder="Profissão (opcional)"
-              className="w-full rounded-[10px] border border-ink/15 bg-white px-3.5 py-2.5 text-sm text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+              className="w-full rounded-[10px] border border-ink/15 bg-surface-raised px-3.5 py-2.5 text-sm text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
             />
           </fieldset>
 
           <button
             type="submit"
-            className="rounded-[10px] bg-brand px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+            className="rounded-[10px] bg-brand px-5 py-2.5 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
           >
             Iniciar consulta
           </button>

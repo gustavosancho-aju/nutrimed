@@ -206,7 +206,7 @@ export default async function DashboardPage({
         <div className="flex shrink-0 items-center gap-2">
           <Link
             href={`/patients/${id}/apresentacao`}
-            className="rounded-[10px] bg-brand px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+            className="rounded-[10px] bg-brand px-3.5 py-1.5 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
           >
             ✨ Apresentação
           </Link>
@@ -457,7 +457,7 @@ export default async function DashboardPage({
                 </p>
                 <Link
                   href={`/patients/${id}/import`}
-                  className="mt-4 inline-block rounded-[10px] bg-brand px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+                  className="mt-4 inline-block rounded-[10px] bg-brand px-5 py-2.5 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
                 >
                   Importar laudo
                 </Link>
@@ -513,7 +513,7 @@ export default async function DashboardPage({
               </p>
               <Link
                 href={`/patients/${id}`}
-                className="shrink-0 rounded-[10px] border border-ink/15 bg-white px-3.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-surface-muted"
+                className="shrink-0 rounded-[10px] border border-ink/15 bg-surface-raised px-3.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-surface-muted"
               >
                 ⚙️ Editar metas
               </Link>

@@ -23,7 +23,7 @@ const LAB_FIELDS: MeasurementField[] = [
 ];
 
 const INPUT =
-  'w-full rounded-[10px] border border-ink/15 bg-white px-3.5 py-2.5 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20';
+  'w-full rounded-[10px] border border-ink/15 bg-surface-raised px-3.5 py-2.5 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20';
 
 /**
  * Importação de laudo (E11/11.10): upload → extração (rascunho) → confirmação.
@@ -58,7 +58,7 @@ export function ImportLaudoPanel({ patientId, today }: { patientId: string; toda
         <button
           type="submit"
           disabled={pending}
-          className="rounded-[10px] bg-brand px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60"
+          className="rounded-[10px] bg-brand px-5 py-2.5 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60"
         >
           {pending ? 'Lendo o laudo…' : 'Enviar e extrair'}
         </button>

@@ -31,7 +31,7 @@ export default function Error({
           <button
             type="button"
             onClick={reset}
-            className="rounded-[10px] bg-brand px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+            className="rounded-[10px] bg-brand px-5 py-2.5 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
           >
             Tentar novamente
           </button>

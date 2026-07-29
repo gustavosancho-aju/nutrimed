@@ -82,7 +82,7 @@ export function MonthlyJourney({
             {previous ? (
               <Link
                 href={link(previous.month)}
-                className="rounded-[10px] border border-ink/15 bg-white px-3 py-1.5 capitalize text-ink transition-colors hover:bg-surface-muted"
+                className="rounded-[10px] border border-ink/15 bg-surface-raised px-3 py-1.5 capitalize text-ink transition-colors hover:bg-surface-muted"
               >
                 ◀ {monthOnly(previous.month)}
               </Link>
@@ -90,7 +90,7 @@ export function MonthlyJourney({
             {next ? (
               <Link
                 href={link(next.month)}
-                className="rounded-[10px] border border-ink/15 bg-white px-3 py-1.5 capitalize text-ink transition-colors hover:bg-surface-muted"
+                className="rounded-[10px] border border-ink/15 bg-surface-raised px-3 py-1.5 capitalize text-ink transition-colors hover:bg-surface-muted"
               >
                 {monthOnly(next.month)} ▶
               </Link>
@@ -141,7 +141,7 @@ export function MonthlyJourney({
                 data-testid="journey-day"
                 data-status={status}
                 className={`flex flex-col items-center rounded-[8px] border px-1 py-1.5 ${
-                  hasData ? 'border-ink/12 bg-white' : 'border-dashed border-ink/10 bg-transparent'
+                  hasData ? 'border-ink/12 bg-surface-raised' : 'border-dashed border-ink/10 bg-transparent'
                 }`}
                 title={
                   hasData

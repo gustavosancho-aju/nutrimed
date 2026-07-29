@@ -50,7 +50,7 @@ export function MeasurementForm({
             name="measuredAt"
             type="date"
             defaultValue={defaultDate}
-            className="w-full rounded-[10px] border border-ink/15 bg-white px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+            className="w-full rounded-[10px] border border-ink/15 bg-surface-raised px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
           />
         </label>
         {fields.map((f) => (
@@ -65,14 +65,14 @@ export function MeasurementForm({
               inputMode="decimal"
               placeholder="—"
               defaultValue={defaults?.[f.name] ?? ''}
-              className="w-full rounded-[10px] border border-ink/15 bg-white px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+              className="w-full rounded-[10px] border border-ink/15 bg-surface-raised px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
             />
           </label>
         ))}
       </div>
       <button
         type="submit"
-        className="mt-4 rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+        className="mt-4 rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
       >
         {measurementId ? 'Salvar alterações' : 'Adicionar medição'}
       </button>

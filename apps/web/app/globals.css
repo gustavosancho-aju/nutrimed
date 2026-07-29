@@ -33,6 +33,18 @@
   --doctor-paulo: 10 52% 46%;
   --doctor-yara: 318 22% 46%;
   --radius: 14px;
+  /* Superfície ELEVADA (cards, inputs, popovers) — o antigo `bg-white` fixo.
+     Sem este token nenhum tema escuro é possível: um branco puro no meio de
+     uma tela preta não é "detalhe", é a tela inteira errada. */
+  --surface-raised: 0 0% 100%;
+  /* Tinta SOBRE o dourado da marca (botões primários). No tema claro o `--brand`
+     é dourado profundo ⇒ branco (5:1). Em tema escuro o dourado é LUMINOSO e
+     branco sobre ele daria ~2:1 — por isso a tinta é token, não constante. */
+  --on-brand: 0 0% 100%;
+  /* Espessura visual do chrome (borda fantasma e sombra do .card-premium).
+     Em fundo claro a sombra faz o trabalho; em fundo escuro, a borda. */
+  --hairline-alpha: 0.07;
+  --shadow-alpha: 0.05;
 }
 
 /* Tema "Autoridade" — escuro, alto contraste (opção do médico/cliente). */
@@ -54,6 +66,46 @@
   --synthesis: 72 10% 62%;
   --success: 140 45% 52%;
   --focus-ring: 42 72% 58%;
+  --surface-raised: 222 18% 15%;
+  --on-brand: 224 30% 8%;
+  --hairline-alpha: 0.14;
+  --shadow-alpha: 0.5;
+}
+
+/* Tema "UNIC Noir" — ouro sobre preto (referência do cliente 2026-07-28).
+   Preto QUENTE (não azulado: matiz 40°, o mesmo eixo do dourado) para o ouro
+   ler como metal e não como amarelo fluorescente sobre grafite. O dourado é o
+   ÚNICO acento cromático — a referência não tem verde nem teal, e trocar a
+   secundária por bronze mantém a sobriedade em vez de virar semáforo.
+   Contraste: dourado #D6A63C sobre o preto da superfície ≈ 9:1 (AAA), e a
+   mesma tinta escura sobre o dourado ≈ 9:1 — passa nos dois sentidos. */
+:root[data-theme='noir'] {
+  --brand: 41 66% 54%;
+  --brand-tint: 42 74% 68%;
+  --secondary: 38 38% 42%;
+  --surface: 42 16% 7%;
+  --surface-muted: 40 16% 12%;
+  --surface-deep: 40 20% 3%;
+  --accent-gold: 43 78% 66%;
+  --text: 43 40% 93%;
+  --text-muted: 40 13% 68%;
+  --attn: 33 92% 60%;
+  --attn-critical: 6 82% 62%;
+  --attn-bg: 30 40% 14%;
+  --suggest: 200 55% 62%;
+  --hypothesis: 318 38% 68%;
+  --synthesis: 42 8% 60%;
+  --success: 140 42% 52%;
+  --focus-ring: 43 80% 62%;
+  /* Personas: mesmos papéis do tema claro, reacendidos para fundo preto —
+     a identidade de cada médico não pode depender do tema escolhido. */
+  --doctor-aurelio: 84 30% 55%;
+  --doctor-paulo: 12 62% 62%;
+  --doctor-yara: 318 34% 66%;
+  --surface-raised: 40 15% 10%;
+  --on-brand: 40 30% 6%;
+  --hairline-alpha: 0.16;
+  --shadow-alpha: 0.55;
 }
 
 /* Tema "Clássico clínico" — azul-marinho, sóbrio (opção do médico/cliente). */
@@ -75,6 +127,10 @@
   --synthesis: 210 8% 48%;
   --success: 152 42% 32%;
   --focus-ring: 214 55% 38%;
+  --surface-raised: 0 0% 100%;
+  --on-brand: 0 0% 100%;
+  --hairline-alpha: 0.07;
+  --shadow-alpha: 0.05;
 }
 
 @theme inline {
@@ -84,6 +140,8 @@
   --color-surface: hsl(var(--surface));
   --color-surface-muted: hsl(var(--surface-muted));
   --color-surface-deep: hsl(var(--surface-deep));
+  --color-surface-raised: hsl(var(--surface-raised));
+  --color-on-brand: hsl(var(--on-brand));
   --color-accent-gold: hsl(var(--accent-gold));
   --font-display: var(--font-display), ui-serif, Georgia, serif;
   --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
@@ -124,15 +182,34 @@ body::before {
   background: url('/bg-cells.svg') center / cover no-repeat hsl(var(--surface));
 }
 
+/* No Noir a arte de células (marfim + véus sálvia) não pode aparecer: ela É um
+   fundo claro. Trocada por halos dourados — mesma função de "presença sem
+   competir", vocabulário da referência (luz de metal saindo do canto). */
+:root[data-theme='noir'] body::before {
+  background:
+    radial-gradient(58% 62% at 88% 18%, hsl(var(--accent-gold) / 0.1), transparent 62%),
+    radial-gradient(52% 55% at 6% 92%, hsl(var(--brand) / 0.07), transparent 60%),
+    hsl(var(--surface));
+}
+
+/* Chrome escuro no Noir: o gradiente padrão puxa verde-oliva (véu sálvia em
+   84°), que sobre preto vira uma mancha esverdeada. Aqui só ouro sobre preto. */
+:root[data-theme='noir'] .surface-deep-gradient {
+  background:
+    radial-gradient(72% 95% at 84% -28%, hsl(var(--accent-gold) / 0.2), transparent 58%),
+    radial-gradient(85% 120% at 12% -20%, hsl(var(--brand) / 0.1), transparent 62%),
+    hsl(var(--surface-deep));
+}
+
 /* Materialidade premium: superfície + borda fantasma + sombra dupla
    (profundidade sem peso). Aplicar a todo container de primeiro nível. */
 .card-premium {
   background-color: hsl(var(--surface));
-  border: 1px solid hsl(var(--text) / 0.07);
+  border: 1px solid hsl(var(--text) / var(--hairline-alpha));
   border-radius: var(--radius);
   box-shadow:
-    0 1px 2px hsl(var(--text) / 0.04),
-    0 8px 24px hsl(var(--text) / 0.05);
+    0 1px 2px hsl(0 0% 0% / calc(var(--shadow-alpha) * 0.8)),
+    0 8px 24px hsl(0 0% 0% / var(--shadow-alpha));
 }
 
 /* Filete dourado UNIC — assinatura em divisor de 1px, do centro para fora. */

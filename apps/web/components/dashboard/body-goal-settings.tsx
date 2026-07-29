@@ -2,7 +2,7 @@ import { setBodyGoalAction } from '@/lib/patient-settings-actions';
 import type { BodyGoal } from '@nutrimed/patients';
 
 const INPUT_CLASS =
-  'w-full rounded-[10px] border border-ink/15 bg-white px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20';
+  'w-full rounded-[10px] border border-ink/15 bg-surface-raised px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20';
 
 const FIELDS: { name: keyof BodyGoal['values']; label: string; unit?: string }[] = [
   { name: 'peso', label: 'Peso', unit: 'kg' },
@@ -71,7 +71,7 @@ export function BodyGoalSettings({
         </div>
         <button
           type="submit"
-          className="mt-4 rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+          className="mt-4 rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
         >
           Salvar metas corporais
         </button>

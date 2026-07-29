@@ -67,7 +67,7 @@ export function SuggestionFeed() {
       ) : null}
 
       {undoVisible && lastDismissed ? (
-        <div className="sticky bottom-0 flex items-center justify-between rounded-[10px] bg-white px-3 py-2 text-xs font-medium text-ink shadow-lg">
+        <div className="sticky bottom-0 flex items-center justify-between rounded-[10px] bg-surface-raised px-3 py-2 text-xs font-medium text-ink shadow-lg">
           Sugestão dispensada.
           <button
             type="button"

@@ -16,7 +16,7 @@ export function ConsultationRecordSection({
   record: ConsultationRecord | null;
 }) {
   const textareaClass =
-    'mt-2 w-full rounded-[10px] border border-ink/15 bg-white px-3.5 py-2.5 text-sm leading-relaxed text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20';
+    'mt-2 w-full rounded-[10px] border border-ink/15 bg-surface-raised px-3.5 py-2.5 text-sm leading-relaxed text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20';
   return (
     <section className="card-premium gold-hairline mt-8 p-7">
       <h2 className="font-display text-base font-semibold text-ink">🩺 Conduta e anotações</h2>
@@ -57,7 +57,7 @@ export function ConsultationRecordSection({
           )}
           <button
             type="submit"
-            className="rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+            className="rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
           >
             💾 Salvar conduta e anotações
           </button>

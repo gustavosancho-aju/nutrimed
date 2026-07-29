@@ -28,7 +28,7 @@ export default async function EditPatientPage({
   if (!patient || patient.userId !== user.id) notFound();
 
   const inputClass =
-    'w-full rounded-[10px] border border-ink/15 bg-white px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20';
+    'w-full rounded-[10px] border border-ink/15 bg-surface-raised px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20';
 
   return (
     <main className="mx-auto min-h-screen max-w-2xl p-8">
@@ -108,7 +108,7 @@ export default async function EditPatientPage({
         <div className="flex items-center gap-3 pt-2">
           <button
             type="submit"
-            className="rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+            className="rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
           >
             Salvar cadastro
           </button>
