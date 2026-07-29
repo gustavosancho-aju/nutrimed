@@ -656,7 +656,7 @@ describe('Patient Service (E11 — 11.2)', () => {
       });
 
       // Ainda gerando: aprovar não tem efeito — não há imagem para mostrar.
-      await expect(approveBodyProjection(exec, id, userId)).rejects.toThrow(/não encontrada/i);
+      expect(await approveBodyProjection(exec, id, userId)).toBe(false);
       expect(await listBodyProjections(exec, patientId, KEY, { onlyApproved: true })).toEqual([]);
 
       await completeBodyProjection(exec, id, IMAGEM, KEY);
@@ -677,10 +677,29 @@ describe('Patient Service (E11 — 11.2)', () => {
       });
       await completeBodyProjection(exec, id, IMAGEM, KEY);
 
-      await softDeleteBodyProjection(exec, id, userId);
+      expect(await softDeleteBodyProjection(exec, id, userId)).toBe(true);
       expect(await listBodyProjections(exec, patientId, KEY)).toEqual([]);
       const raw = await exec.query('SELECT id FROM body_projection WHERE id = $1', [id]);
       expect(raw.rows).toHaveLength(1);
+
+      // Clique duplo no "Descartar": o 2º não muda nada e NÃO é erro — o estado
+      // que o médico queria já vale. Só a 1ª remoção audita.
+      expect(await softDeleteBodyProjection(exec, id, userId)).toBe(false);
+      const trail = await getAuditTrail(exec, patientId);
+      expect(trail.filter((e) => e.triggeredBy === 'body-projection-delete')).toHaveLength(1);
+    });
+
+    it('aprovar o que já foi descartado devolve false, sem lançar', async () => {
+      const patientId = await createPatient(exec, userId, { name: 'Descartada antes' }, KEY);
+      const id = await startBodyProjection(exec, patientId, {
+        sourceWeightKg: 95,
+        targetWeightKg: 80,
+        modelVersion: 'fake-projector',
+      });
+      await completeBodyProjection(exec, id, IMAGEM, KEY);
+      await softDeleteBodyProjection(exec, id, userId);
+
+      expect(await approveBodyProjection(exec, id, userId)).toBe(false);
     });
 
     it('projeção de paciente de OUTRO médico não é aprovada nem excluída', async () => {
@@ -693,9 +712,12 @@ describe('Patient Service (E11 — 11.2)', () => {
       });
       await completeBodyProjection(exec, id, IMAGEM, KEY);
 
-      await expect(approveBodyProjection(exec, id, outroMedico)).rejects.toThrow(/não encontrada/i);
-      await expect(softDeleteBodyProjection(exec, id, outroMedico)).rejects.toThrow(/não encontrada/i);
-      expect((await listBodyProjections(exec, patientId, KEY))[0]!.approvedAt).toBeNull();
+      // Devolve false (nada mudou) — e o que importa: a linha do dono fica intacta.
+      expect(await approveBodyProjection(exec, id, outroMedico)).toBe(false);
+      expect(await softDeleteBodyProjection(exec, id, outroMedico)).toBe(false);
+      const [intacta] = await listBodyProjections(exec, patientId, KEY);
+      expect(intacta!.approvedAt).toBeNull();
+      expect(intacta!.status).toBe('ready');
     });
 
     it('foto do paciente: round-trip cifrado, sobrescrita e posse', async () => {

@@ -19,11 +19,18 @@ import { ProjectionRefresher } from '@/components/dashboard/projection-refresher
  * fluxo é upload → geração → decisão do médico, e não cabe numa aba de leitura.
  * Só o que for aprovado aqui chega ao paciente no Modo Apresentação.
  */
-export default async function ProjecaoPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProjecaoPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ erro?: string }>;
+}) {
   const user = await getCurrentUser();
   if (!user) redirect('/login');
 
   const { id } = await params;
+  const { erro } = await searchParams;
   const db = await getDb();
   const key = getEncryptionKey();
   const patient = await loadPatient(db, id, key);
@@ -56,6 +63,12 @@ export default async function ProjecaoPage({ params }: { params: Promise<{ id: s
         composição corporal: é apoio visual para a conversa sobre a meta. O resultado real depende
         de fatores individuais. Nada é mostrado ao paciente sem a sua aprovação.
       </div>
+
+      {erro && (
+        <p className="mt-6 rounded-[10px] border border-red-300/50 bg-red-500/10 p-4 text-sm text-red-700">
+          {erro}
+        </p>
+      )}
 
       <section className="mt-6">
         <BodyProjectionPanel

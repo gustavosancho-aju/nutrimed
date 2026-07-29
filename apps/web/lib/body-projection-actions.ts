@@ -174,19 +174,41 @@ async function gerarEmSegundoPlano(
   }
 }
 
-/** Gate humano: libera a projeção para o Modo Apresentação. */
+/**
+ * Gate humano: libera a projeção para o Modo Apresentação.
+ *
+ * Quando nada muda, avisa em pt-BR pela query `?erro=` (mesmo padrão de
+ * `addMeasurementAction`) em vez de lançar. Antes isto estourava uma exceção e
+ * o médico via a tela de erro genérica do Next — foi o que aconteceu em
+ * produção em 2026-07-29 às 00:16.
+ */
 export async function approveBodyProjectionAction(formData: FormData): Promise<void> {
   const user = await getCurrentUser();
   if (!user) redirect('/login');
 
   const patientId = String(formData.get('patientId') ?? '');
   const projectionId = String(formData.get('projectionId') ?? '');
-  await approveBodyProjection(await getDb(), projectionId, user.id);
-  revalidatePath(`/patients/${patientId}/dashboard`);
+  const aprovada = await approveBodyProjection(await getDb(), projectionId, user.id);
+
+  revalidatePath(`/patients/${patientId}/projecao`);
   revalidatePath(`/patients/${patientId}/apresentacao`);
+
+  // Fora do try/await acima de propósito: `redirect` sinaliza por exceção
+  // (NEXT_REDIRECT) e não pode ser engolido por um catch.
+  if (!aprovada) {
+    redirect(
+      `/patients/${patientId}/projecao?erro=${encodeURIComponent(
+        'Não foi possível aprovar essa projeção — ela pode ter sido descartada ou ainda estar sendo gerada.',
+      )}`,
+    );
+  }
 }
 
-/** Descarta a projeção (soft-delete — a linha permanece para a trilha). */
+/**
+ * Descarta a projeção (soft-delete — a linha permanece para a trilha).
+ * IDEMPOTENTE: descartar o que já estava descartado não é erro, é o estado que
+ * o médico queria. Clique duplo não vira tela de erro.
+ */
 export async function deleteBodyProjectionAction(formData: FormData): Promise<void> {
   const user = await getCurrentUser();
   if (!user) redirect('/login');
@@ -194,6 +216,6 @@ export async function deleteBodyProjectionAction(formData: FormData): Promise<vo
   const patientId = String(formData.get('patientId') ?? '');
   const projectionId = String(formData.get('projectionId') ?? '');
   await softDeleteBodyProjection(await getDb(), projectionId, user.id);
-  revalidatePath(`/patients/${patientId}/dashboard`);
+  revalidatePath(`/patients/${patientId}/projecao`);
   revalidatePath(`/patients/${patientId}/apresentacao`);
 }

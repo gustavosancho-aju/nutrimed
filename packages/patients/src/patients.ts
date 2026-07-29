@@ -1733,13 +1733,18 @@ export async function listBodyProjections(
 /**
  * Gate humano: o médico aprova a projeção para exibir ao paciente. O WHERE
  * amarra o paciente ao médico dono — projeção de outro médico nunca é tocada.
+ *
+ * Devolve `false` — em vez de lançar — quando nada foi alterado: já descartada,
+ * ainda gerando, ou de outro médico. Nenhum desses casos é excepcional (clicar
+ * duas vezes acontece), e lançar virava tela de erro genérica do Next para o
+ * médico, sem explicação. Quem chama decide o que dizer.
  */
 export async function approveBodyProjection(
   db: SqlExecutor,
   projectionId: string,
   userId: string,
   origin: WriteOrigin = { action: 'body-projection-approve' },
-): Promise<void> {
+): Promise<boolean> {
   const res = await db.query<{ patient_id: string }>(
     `UPDATE body_projection SET approved_at = now()
      WHERE id = $1 AND deleted_at IS NULL AND status = 'ready'
@@ -1748,21 +1753,26 @@ export async function approveBodyProjection(
     [projectionId, userId],
   );
   const patientId = res.rows[0]?.patient_id;
-  if (!patientId) throw new Error('Projeção não encontrada para este médico.');
+  if (!patientId) return false;
   await writeAudit(db, patientId, {
     triggeredBy: origin.action,
     kbSources: [],
     modelVersion: origin.modelVersion ?? 'human-edit',
   });
+  return true;
 }
 
-/** SOFT-delete: some das listagens, a linha permanece para trilha (CJ-2). */
+/**
+ * SOFT-delete: some das listagens, a linha permanece para trilha (CJ-2).
+ * `false` quando nada mudou (já descartada ou de outro médico) — ver a nota em
+ * {@link approveBodyProjection}. Só audita quando de fato descartou.
+ */
 export async function softDeleteBodyProjection(
   db: SqlExecutor,
   projectionId: string,
   userId: string,
   origin: WriteOrigin = { action: 'body-projection-delete' },
-): Promise<void> {
+): Promise<boolean> {
   const res = await db.query<{ patient_id: string }>(
     `UPDATE body_projection SET deleted_at = now()
      WHERE id = $1 AND deleted_at IS NULL
@@ -1771,10 +1781,11 @@ export async function softDeleteBodyProjection(
     [projectionId, userId],
   );
   const patientId = res.rows[0]?.patient_id;
-  if (!patientId) throw new Error('Projeção não encontrada para este médico.');
+  if (!patientId) return false;
   await writeAudit(db, patientId, {
     triggeredBy: origin.action,
     kbSources: [],
     modelVersion: origin.modelVersion ?? 'human-edit',
   });
+  return true;
 }
