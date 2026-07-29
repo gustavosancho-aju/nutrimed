@@ -149,13 +149,43 @@ a aceitar conexões depois que alguém abre uma consulta. Isso afeta:
 
 ## Fase 4 — Primeiro deploy e verificação
 
-10. **Deploy** (a partir da raiz):
+10. **Deploy — SEMPRE de árvore limpa, nunca da raiz de trabalho.**
+
+    ⚠️ `flyctl deploy` empacota a **árvore de trabalho**, não o commit. Qualquer arquivo
+    modificado e não commitado vai para produção junto — inclusive trabalho de outra sessão
+    ou de outro agente rodando no mesmo repositório. Isso já aconteceu: em 2026-07-29 dois
+    deploys levaram, sem ninguém perceber, um refactor de tema PELA METADE que estava na
+    árvore, deixando telas com blocos brancos em produção.
+
+    Por isso o deploy sai de um **worktree descartável** fixado no commit que se quer publicar:
+
     ```bash
-    flyctl deploy --remote-only
+    # 1. o que vai ao ar é este commit, e só ele
+    COMMIT=$(git rev-parse --short HEAD)
+    WT="$TEMP/nutrimed-deploy-$COMMIT"
+
+    # 2. worktree limpo FORA do repositório (não perturba quem estiver editando)
+    git worktree add --detach "$WT" "$COMMIT"
+    git -C "$WT" status --short          # DEVE sair vazio
+
+    # 3. deploy a partir dele
+    (cd "$WT" && flyctl deploy --remote-only -a nutrimed)
+
+    # 4. remover a referência (senão fica pendurada em `git worktree list`)
+    git worktree remove --force "$WT"
     ```
+
+    Dois cuidados ao rodar o comando:
+    - **NÃO** encadeie `| tail`: o código de saída do pipeline é o do `tail`, que sempre
+      dá 0. Um deploy que falhou (o `flyctl` já quebrou com panic aqui) é reportado como
+      sucesso. Redirecione para arquivo (`> deploy.log 2>&1`) e leia depois.
+    - Confirme o resultado pela API, não pela saída do comando: `flyctl status` deve mostrar
+      a máquina na versão nova com os checks passando.
+
     Ou, via GitHub Actions: crie o secret de repositório `FLY_API_TOKEN`
     (`flyctl tokens create deploy`) e dispare o workflow **Deploy (Fly.io · GRU)** manualmente
-    (aba Actions → Run workflow) ou empurrando uma tag `vX.Y.Z`.
+    (aba Actions → Run workflow) ou empurrando uma tag `vX.Y.Z`. O CI já deploya do commit
+    limpo por construção — é o caminho mais seguro quando disponível.
 11. **Verificar saúde:**
     - `flyctl status` → máquina `started`, healthcheck HTTP `passing`.
     - `flyctl logs` → procure o boot do Next sem erros de `DATABASE_URL`/`DATA_ENCRYPTION_KEY`
