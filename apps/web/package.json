@@ -37,7 +37,7 @@
     "@nutrimed/telegram-bot": "workspace:*",
     "@nutrimed/telegram-link": "workspace:*",
     "@nutrimed/telemetry": "workspace:*",
-    "next": "^16.2.0",
+    "next": "^16.2.11",
     "pg": "^8.21.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
