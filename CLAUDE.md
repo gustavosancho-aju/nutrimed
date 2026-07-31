@@ -10,7 +10,7 @@ deploy e roadmap — a referência única do estado atual).
 **📋 Registro histórico do MVP (E1–E10): [`docs/IMPLEMENTATION-RECORD.md`](docs/IMPLEMENTATION-RECORD.md)**
 (rastreabilidade FR/NFR/ADR e evidências ao vivo do snapshot de 2026-06-11).
 
-## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-07-29, main @ 5840d7b, Fly v52 — projeção com gpt-image-2)
+## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-07-30, main @ 74a4691, Fly v57 — Next 16.2.11 + tema Noir)
 
 **9 de 10 épicos com núcleo implementado e verificado ao vivo** (falta E8 — vídeos).
 **E11 (Pacientes & Dashboard) COMPLETO** (4 fases + extras: faixa ideal/meta nos gráficos e
@@ -135,8 +135,16 @@ apareceu 3× nesta sessão, nos 3 lugares corrigido.
 **Painel e ficha só de alimentação (2026-07-28):** saíram os cartões de Água e Sono, as 2 colunas do
 relatório diário e as metas `waterMl`/`sleepMinHours`/`sleepMaxHours` da ficha. Schema, serviços,
 campos opcionais no tipo e dados coletados FICARAM (metas antigas seguem no blob cifrado).
-Suíte: **784 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
-CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) verde. Migrations 0001–0024.
+Suíte: **785 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
+CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) **verde de novo desde
+2026-07-30** — ficou VERMELHO de 22 a 30/07 (~20 commits) sem ninguém notar, e ninguém notou
+porque esta linha dizia "verde": o job de código sempre passou, quem reprovava era o
+`pnpm audit --prod` (next/sharp/postcss vulneráveis). Correção: next 16.2.11 + `pnpm.overrides`
+no raiz (`sharp>=0.35.0`, `postcss>=8.5.18` — o Next os FIXA, subir o Next não os arrasta).
+**Vulns de DEV ficam como dívida** (undici via vitest>jsdom, brace-expansion/js-yaml via eslint):
+a tentativa de zerá-las por override QUEBROU as ferramentas — jsdom faz deep-import de internals
+do undici e o minimatch@3 do eslint não entende o export do brace-expansion@5. Não alcançam o
+usuário e o gate `--prod` não as conta; saem quando jsdom/eslint atualizarem. Migrations 0001–0024.
 Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 · RUNBOOK Fase 5 = canal Telegram.
 
 | Épico | Status | Épico | Status |
@@ -208,7 +216,14 @@ reprova AA; com o token dá 8,4:1). Os `text-white` sobre `.surface-deep-gradien
 chrome é escuro em qualquer tema. `--hairline-alpha`/`--shadow-alpha` porque em fundo claro quem
 separa o card é a sombra e em fundo escuro é a borda. Verificado no navegador nos 2 temas
 (claro: body marfim + input branco + botão 6,4:1; noir: 0 superfícies brancas, corpo 16,3:1,
-secundário 8,7:1), console e servidor limpos.
+secundário 8,7:1), console e servidor limpos. **EM PRODUÇÃO desde 2026-07-29 (v55)** — o deploy
+também fechou um par quebrado: 5840d7b tinha levado 3 arquivos usando `bg-surface-raised`/
+`text-on-brand` SEM o globals.css que os define (classes inexistentes ao vivo, inclusive na
+Apresentação). Ajustes da mesma rodada: saudação da home virou "Olá, {nome}" (era "Bem-vinda"
+fixo no feminino — apareceu "Bem-vinda, Rafael Bastos" em prod; o cadastro não guarda gênero,
+nenhuma flexão é acertável) e o comentário do bloco Noir foi corrigido pelo code review — dizia
+"dourado é o ÚNICO acento" mas a regra vale só para o CHROME; as cores semânticas e das personas
+seguem o tema claro reacendidas, senão dourar o que informa apagaria a informação.
 
 **Fluxo vivo:** login (`demo@nutrimed.test`/`nutrimed123`) → consulta → consentimento (default NEGA)
 → `/consultations/[id]`: transcrição AO VIVO + board (3 personas com retratos, feed com hierarquia
@@ -274,20 +289,26 @@ Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build`
 4. 🔐 **Rotação das keys** — Gustavo optou por NÃO rotacionar em 2026-07-04 ("confio no chat").
    Reavaliar antes de qualquer ambiente compartilhado/comercialização; trocar o token do bot no
    `apps/web/.env.local` por um bot de TESTE segue recomendado (incidente do webhook 2026-07-02).
-3. **Dívidas do code review do PR #1** (não bloqueiam): stopLiveBoardAction com retorno ignorado no
+5. **Fallback Kimi→Claude no 429** — em 2026-07-30 ~20:38Z um `generateNoteAction` REAL falhou em
+   prod com 429 do Kimi ("engine overloaded"); o erro chegou tratado ao usuário, mas a nota não
+   saiu. Hoje o Kimi assume nota+relatório sempre que `KIMI_API_KEY` existe, sem plano B — se o
+   429 recorrer, cair para o Claude na hora vale mais que a economia.
+6. **Vulns de DEV do audit** (undici/jsdom · brace-expansion+js-yaml/eslint) — sem fix possível
+   por override (quebra as ferramentas, ver Estado); reavaliar a cada atualização de vitest/eslint.
+7. **Dívidas do code review do PR #1** (não bloqueiam): stopLiveBoardAction com retorno ignorado no
    stop(); case review cego a seenTopics/divergência FR7; threshold 0.5 do dedup e knobs
    (caseReviewMs etc.) sem config/env; helper único p/ strip de cercas ```json (5 cópias) e
    fromPglite de teste (16 cópias); concurrency do fly (200/250) a calibrar na POC 3.4;
    `isStaleDeployError` por string do Next; remover dual-listen da 3001 após a transição.
-4. **E8** — clipes ouvindo/pensando/sinalizando a partir de `apps/web/public/personas/*.png`
+8. **E8** — clipes ouvindo/pensando/sinalizando a partir de `apps/web/public/personas/*.png`
    (regenerar retratos: `node --env-file=.env scripts/gen-personas.mjs`).
-5. **POCs formais** 2.5 (STT) e 3.4 (LLM/carga) — keys já no `.env`; e **3.5/ADR-010** (runtime).
-6. **QA gates formais** E2–E10 (E1 ✅ em `docs/qa/gates/`).
-7. `AskDoctorInput` (FR14 completo) · CodeRabbit pre-PR (limite de 150 arquivos por PR).
-8. **Consultoria jurídica** CJ-1..CJ-6 (+**CJ-12** Telegram; +**CJ-2** retenção do transcript
-   persistido pela migration 0008)
-   (`docs/architecture/project-decisions/checklist-consultoria-juridica.md`) — bloqueia o piloto com
-   pacientes reais, não o dev.
+9. **POCs formais** 2.5 (STT) e 3.4 (LLM/carga) — keys já no `.env`; e **3.5/ADR-010** (runtime).
+10. **QA gates formais** E2–E10 (E1 ✅ em `docs/qa/gates/`).
+11. `AskDoctorInput` (FR14 completo) · CodeRabbit pre-PR (limite de 150 arquivos por PR).
+12. **Consultoria jurídica** CJ-1..CJ-6 (+**CJ-12** Telegram; +**CJ-2** retenção do transcript
+    persistido pela migration 0008)
+    (`docs/architecture/project-decisions/checklist-consultoria-juridica.md`) — bloqueia o piloto com
+    pacientes reais, não o dev.
 
 ## Avisos operacionais (lições pagas)
 
@@ -331,8 +352,14 @@ Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build`
 - **Mudou gateway/runtime/migrations? REINICIE o `npm run dev`** — singletons globais ignoram HMR;
   PGlite só aplica migration nova no boot.
 - **Nunca usar heredoc bash com backticks/template literals** — escrever script `.cjs` e executar.
-- `api.github.com` é **bloqueado nesta rede** → `gh` CLI não funciona; push via SSH porta 443
-  (`~/.ssh/config` → `ssh.github.com:443`). PRs só pela web UI.
+- `api.github.com` **voltou a funcionar (verificado 2026-07-29/30)** — `gh` listou PRs, runs e
+  logs de CI a sessão inteira. O bloqueio antigo pode voltar (rede instável): se o `gh` pendurar,
+  o fallback segue valendo — push via SSH porta 443 (`~/.ssh/config` → `ssh.github.com:443`) e
+  PRs pela web UI. Confirme com um `gh pr list` rápido antes de assumir qualquer dos dois estados.
+- **`apps/web/next-env.d.ts` é gerado e ALTERNA sozinho**: `next dev` grava o import de
+  `.next/dev/types/`, `next build` o de `.next/types/`. Ele vai aparecer modificado após todo
+  `npm run dev` — NÃO commitar a variante de dev (o typecheck do CI roda pós-build e quebraria);
+  `git checkout -- apps/web/next-env.d.ts` antes de commitar.
 - Push exige `AIOX_ACTIVE_AGENT=github-devops git push` (hook de fronteira).
 
 ## Regras de fronteira (resumo)
