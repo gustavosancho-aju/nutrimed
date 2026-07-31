@@ -141,10 +141,17 @@ CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) **verde d
 porque esta linha dizia "verde": o job de código sempre passou, quem reprovava era o
 `pnpm audit --prod` (next/sharp/postcss vulneráveis). Correção: next 16.2.11 + `pnpm.overrides`
 no raiz (`sharp>=0.35.0`, `postcss>=8.5.18` — o Next os FIXA, subir o Next não os arrasta).
-**Vulns de DEV ficam como dívida** (undici via vitest>jsdom, brace-expansion/js-yaml via eslint):
-a tentativa de zerá-las por override QUEBROU as ferramentas — jsdom faz deep-import de internals
-do undici e o minimatch@3 do eslint não entende o export do brace-expansion@5. Não alcançam o
-usuário e o gate `--prod` não as conta; saem quando jsdom/eslint atualizarem. Migrations 0001–0024.
+**Audit COMPLETO (sem `--prod`) hoje: 2 achados, 1 high** — medido em 2026-07-31, na main e na
+branch do PR #10 (vitest 4), idênticos. `undici` e `js-yaml`, que eu havia registrado como dívida,
+JÁ SUMIRAM: o `pnpm install` da rodada dos overrides re-resolveu ambos DENTRO dos ranges que já
+existiam (`undici@7.29.0`, `js-yaml@4.3.0`, acima do patch) — ninguém precisou agir, e a lição é
+que "dívida de dependência transitiva" envelhece rápido, então MEÇA antes de repetir a afirmação.
+Resta **só `brace-expansion`**, e é insolúvel hoje: a advisory cobre `<=5.0.7` e o fix está na
+5.0.8 (outra major); o eslint chega nele por `@eslint/config-array > minimatch@3.1.5 >
+brace-expansion@1.1.18`, e a linha 1.x não tem patch. Forçar a 5.x por override quebra o eslint
+("expand is not a function" — o minimatch@3 não entende o export novo). Quem pode resolver é o
+**PR #11 (eslint 9→10)**, se largar o minimatch@3. Não alcança usuário e o gate `--prod` não conta.
+Migrations 0001–0024.
 Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 · RUNBOOK Fase 5 = canal Telegram.
 
 | Épico | Status | Épico | Status |
@@ -293,8 +300,13 @@ Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build`
    prod com 429 do Kimi ("engine overloaded"); o erro chegou tratado ao usuário, mas a nota não
    saiu. Hoje o Kimi assume nota+relatório sempre que `KIMI_API_KEY` existe, sem plano B — se o
    429 recorrer, cair para o Claude na hora vale mais que a economia.
-6. **Vulns de DEV do audit** (undici/jsdom · brace-expansion+js-yaml/eslint) — sem fix possível
-   por override (quebra as ferramentas, ver Estado); reavaliar a cada atualização de vitest/eslint.
+6. **PRs do Dependabot abertos** (avaliados 2026-07-31): **#10 vitest 3→4.1.10** — 5 checks verdes,
+   785 testes passando na major nova, é devDependency; mergeável pelo mérito de sair de major
+   defasada, mas ganho de segurança ZERO (audit idêntico ao da main). **#11 eslint 9→10** é o que
+   interessa: pode largar o `minimatch@3` e matar o último high (`brace-expansion`). **#3/#4/#5**
+   (checkout 4→7, setup-node 4→6, pnpm/action-setup 4→6) tiram o aviso de **Node 20 deprecado**
+   que já aparece em todo run do CI — as actions rodam forçadas em Node 24 e quebram quando o
+   GitHub remover o fallback. Também abertos: #14 (grupo minor/patch), #8 typescript 6, #9 types/node.
 7. **Dívidas do code review do PR #1** (não bloqueiam): stopLiveBoardAction com retorno ignorado no
    stop(); case review cego a seenTopics/divergência FR7; threshold 0.5 do dedup e knobs
    (caseReviewMs etc.) sem config/env; helper único p/ strip de cercas ```json (5 cópias) e
