@@ -10,7 +10,7 @@ deploy e roadmap — a referência única do estado atual).
 **📋 Registro histórico do MVP (E1–E10): [`docs/IMPLEMENTATION-RECORD.md`](docs/IMPLEMENTATION-RECORD.md)**
 (rastreabilidade FR/NFR/ADR e evidências ao vivo do snapshot de 2026-06-11).
 
-## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-07-30, main @ 74a4691, Fly v57 — Next 16.2.11 + tema Noir)
+## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-07-31, main @ fa37e7a, Fly v58 — Ficha de Consulta)
 
 **9 de 10 épicos com núcleo implementado e verificado ao vivo** (falta E8 — vídeos).
 **E11 (Pacientes & Dashboard) COMPLETO** (4 fases + extras: faixa ideal/meta nos gráficos e
@@ -213,7 +213,7 @@ em especial o polling e o fluxo assíncrono só têm cobertura de teste, nunca d
 `OPENAI_API_KEY` + `BODY_PROJECTOR=openai` nos secrets do Fly antes do deploy; e a imagem tem ~1,6 MB,
 bem acima dos 200–600 KB estimados, o que engorda a coluna cifrada.
 
-**Ficha de Consulta (2026-07-31, local — não deployada).** A anamnese que o Dr. Rafael preenchia em
+**Ficha de Consulta (2026-07-31, EM PRODUÇÃO — Fly v58, CI e CodeQL verdes em fa37e7a).** A anamnese que o Dr. Rafael preenchia em
 papel (`ficha paciente.docx`, 12 blocos: identificação → objetivo → antropometria → doenças →
 história familiar → estilo de vida → medicações → exame físico → estratificação PREVENT → objetivos
 terapêuticos → conduta → retorno) passa a ser gerada A CADA CONSULTA. Divisão de trabalho igual à do
