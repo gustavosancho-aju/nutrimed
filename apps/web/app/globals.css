@@ -205,19 +205,23 @@ body::before {
   background: url('/bg-cells.svg') center / cover no-repeat hsl(var(--surface));
 }
 
-/* No Noir a arte de células (marfim + véus sálvia) não pode aparecer: ela É um
-   fundo claro. Trocada por halos dourados — mesma função de "presença sem
-   competir", vocabulário da referência (luz de metal saindo do canto). */
-:root[data-theme='noir'] body::before {
+/* Nos temas ESCUROS a arte de células (marfim + véus sálvia) não pode aparecer:
+   ela É um fundo claro — no Autoridade ela pintava a página de marfim e o texto
+   claro do header sumia. Trocada por halos do próprio tema — mesma função de
+   "presença sem competir", vocabulário da referência (luz saindo do canto). */
+:root[data-theme='noir'] body::before,
+:root[data-theme='authority'] body::before {
   background:
     radial-gradient(58% 62% at 88% 18%, hsl(var(--accent-gold) / 0.1), transparent 62%),
     radial-gradient(52% 55% at 6% 92%, hsl(var(--brand) / 0.07), transparent 60%),
     hsl(var(--surface));
 }
 
-/* Chrome escuro no Noir: o gradiente padrão puxa verde-oliva (véu sálvia em
-   84°), que sobre preto vira uma mancha esverdeada. Aqui só ouro sobre preto. */
-:root[data-theme='noir'] .surface-deep-gradient {
+/* Chrome escuro no Noir/Autoridade: o gradiente padrão puxa verde-oliva (véu
+   sálvia em 84°), que sobre preto/grafite vira mancha esverdeada. Aqui só a
+   luz do próprio tema (tokens) sobre a superfície profunda. */
+:root[data-theme='noir'] .surface-deep-gradient,
+:root[data-theme='authority'] .surface-deep-gradient {
   background:
     radial-gradient(72% 95% at 84% -28%, hsl(var(--accent-gold) / 0.2), transparent 58%),
     radial-gradient(85% 120% at 12% -20%, hsl(var(--brand) / 0.1), transparent 62%),
