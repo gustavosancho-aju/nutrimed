@@ -167,9 +167,18 @@ export default async function DashboardPage({
   // Nota "ponto atual marcado…" das seções de cartões: dispara quando ALGUMA
   // série tem exatamente 1 ponto — não quando há 1 medição no total (um campo
   // medido uma única vez em meio a 3 medições também mostra ponto solto).
-  const anySinglePointSeries = (
-    ['peso', 'imc', 'pgc', 'massaMuscular', 'cintura', 'massaGordura', 'aguaCorporal', 'gorduraVisceral', 'tmb'] as const
-  ).some((k) => seriesOf(body, k).length === 1);
+  // Cada seção checa SÓ as métricas que renderiza (CodeRabbit PR #15): TMB com
+  // 1 ponto não pode acender a nota na Geral, que nem mostra TMB.
+  const GERAL_METRICS = ['peso', 'imc', 'pgc', 'massaMuscular', 'cintura'] as const;
+  const BIO_METRICS = [
+    ...GERAL_METRICS,
+    'massaGordura',
+    'aguaCorporal',
+    'gorduraVisceral',
+    'tmb',
+  ] as const;
+  const singlePointGeral = GERAL_METRICS.some((k) => seriesOf(body, k).length === 1);
+  const singlePointBio = BIO_METRICS.some((k) => seriesOf(body, k).length === 1);
 
   // Modo edição (?editar=<id>): pré-preenche o form da aba com a medição
   const editingBody = aba === 'bioimpedancia' && editar ? body.find((m) => m.id === editar) : undefined;
@@ -370,7 +379,7 @@ export default async function DashboardPage({
               </p>
             )}
             {/* Nota ÚNICA da seção — antes cada cartão repetia a mesma frase 5×. */}
-            {anySinglePointSeries && (
+            {singlePointGeral && (
               <p className="text-[11px] text-ink-muted">
                 Ponto atual marcado nos cartões — a linha de evolução se forma a partir da 2ª
                 medição.
@@ -446,7 +455,7 @@ export default async function DashboardPage({
                 targetLabel={goal?.tmb !== undefined ? doctorLabel : undefined}
               />
             </div>
-            {anySinglePointSeries && (
+            {singlePointBio && (
               <p className="mt-4 text-[11px] text-ink-muted">
                 Ponto atual marcado nos cartões — a linha de evolução se forma a partir da 2ª
                 medição.

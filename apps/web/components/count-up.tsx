@@ -26,17 +26,25 @@ export function CountUp({
 }) {
   const [shown, setShown] = useState(value);
   const raf = useRef<number | null>(null);
+  // Ponto de partida da PRÓXIMA animação: 0 na montagem (teatro de entrada);
+  // depois, o valor já exibido — um `value` novo (refresh) transiciona do
+  // número atual em vez de despencar a 0 (CodeRabbit PR #15).
+  const shownRef = useRef(0);
 
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      shownRef.current = value;
       setShown(value);
       return;
     }
+    const from = shownRef.current;
     const start = performance.now();
     const tick = (now: number) => {
       const t = Math.min(1, (now - start) / durationMs);
       const eased = 1 - (1 - t) ** 3; // ease-out cúbico
-      setShown(value * eased);
+      const v = from + (value - from) * eased;
+      shownRef.current = v;
+      setShown(v);
       if (t < 1) raf.current = requestAnimationFrame(tick);
     };
     raf.current = requestAnimationFrame(tick);

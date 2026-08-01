@@ -46,7 +46,9 @@ export function ImcGauge({ imc }: { imc: number }) {
   const needleB = polar(R + 12, needleDeg);
 
   return (
-    <div aria-label={`IMC ${imc.toFixed(1)} — ${current.label}`}>
+    // role="group": aria-label em div genérica não vira nome acessível
+    // confiável — com o role, leitor de tela anuncia "IMC 41.2 — Obesidade…".
+    <div role="group" aria-label={`IMC ${imc.toFixed(1)} — ${current.label}`}>
       <div className="relative mx-auto max-w-[420px]">
         <svg viewBox="0 0 260 150" role="img" aria-hidden className="w-full">
           {/* segmentos das faixas OMS — o do paciente aceso, os demais em espera */}
