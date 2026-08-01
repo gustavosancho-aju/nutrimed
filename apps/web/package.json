@@ -16,6 +16,7 @@
     "@nutrimed/board-gateway": "workspace:^",
     "@nutrimed/body-projection": "workspace:*",
     "@nutrimed/clinical-notes": "workspace:^",
+    "@nutrimed/consultation-form": "workspace:^",
     "@nutrimed/consent": "workspace:*",
     "@nutrimed/crypto": "workspace:*",
     "@nutrimed/db": "workspace:*",

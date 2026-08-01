@@ -10,6 +10,8 @@ import { startDemoBoardAction, requestSynthesisAction } from '@/lib/board-action
 import { saveNoteAction } from '@/lib/note-actions';
 import { saveNutritionReportAction } from '@/lib/nutrition-report-actions';
 import { NoteGeneratorForm } from '@/components/note-generator-form';
+import { ConsultationFormGenerator } from '@/components/consultation-form-generator';
+import { loadConsultationForm } from '@nutrimed/consultation-form';
 import { NutritionReportForm } from '@/components/nutrition-report-form';
 import { loadNutritionReport } from '@nutrimed/nutrition-report';
 import { DiagnosticsPanel } from '@/components/diagnostics-panel';
@@ -70,6 +72,7 @@ export default async function ConsultationPage({
       : (process.env.NEXT_PUBLIC_BOARD_WS_URL ?? `ws://localhost:${BOARD_WS_PORT}`);
   const note = authorized ? await loadNote(db, id, getEncryptionKey()) : null;
   const nutritionReport = authorized ? await loadNutritionReport(db, id, getEncryptionKey()) : null;
+  const consultationForm = authorized ? await loadConsultationForm(db, id, getEncryptionKey()) : null;
   // Leitura durável NUNCA derruba a página: chave rotacionada / linha corrompida
   // degrada para "sem transcrição" (mesma postura de getNoteInputs), em vez de
   // estourar toda a consulta.
@@ -380,6 +383,44 @@ export default async function ConsultationPage({
                 Nenhuma nota ainda — rode a consulta e clique em “Gerar nota da consulta”.
               </p>
             )}
+          </section>
+
+          {/* Ficha de consulta (modelo do Dr. Rafael Bastos): anamnese estruturada.
+              O cartão é só o atalho — os ~50 campos moram na página própria, que
+              é também a versão impressa; embutir o formulário inteiro aqui
+              enterraria o board e o restante da consulta. */}
+          <section aria-label="Ficha de consulta" className="card-premium mt-6 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="font-display text-base font-semibold text-ink">Ficha de consulta</h2>
+                <p className="text-xs text-ink-muted">
+                  Anamnese estruturada preenchida da transcrição + cadastro do paciente — revise
+                  campo a campo, edite e imprima.
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <Link
+                  href={`/consultations/${id}/ficha`}
+                  className="rounded-[10px] border border-ink/15 px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-surface-muted"
+                >
+                  📋 {consultationForm ? 'Abrir ficha' : 'Preencher à mão'}
+                </Link>
+                <ConsultationFormGenerator
+                  consultationId={id}
+                  hasForm={Boolean(consultationForm)}
+                />
+              </div>
+            </div>
+
+            <p className="mt-4 rounded-[10px] border border-dashed border-ink/15 p-4 text-sm text-ink-muted">
+              {consultationForm
+                ? `Ficha ${
+                    consultationForm.modelVersion === 'human-edit'
+                      ? 'revisada pelo médico'
+                      : 'em rascunho (ainda não revisada)'
+                  } · atualizada em ${consultationForm.updatedAt.toLocaleString('pt-BR')}.`
+                : 'Nenhuma ficha ainda — gere o rascunho a partir da consulta ou abra em branco para preencher à mão.'}
+            </p>
           </section>
 
           {/* Ciclo 2 — prontuário manual: Conduta + Anotações do médico (nos 2 modos) */}

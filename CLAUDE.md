@@ -135,7 +135,7 @@ apareceu 3× nesta sessão, nos 3 lugares corrigido.
 **Painel e ficha só de alimentação (2026-07-28):** saíram os cartões de Água e Sono, as 2 colunas do
 relatório diário e as metas `waterMl`/`sleepMinHours`/`sleepMaxHours` da ficha. Schema, serviços,
 campos opcionais no tipo e dados coletados FICARAM (metas antigas seguem no blob cifrado).
-Suíte: **785 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
+Suíte: **800 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
 CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) **verde de novo desde
 2026-07-30** — ficou VERMELHO de 22 a 30/07 (~20 commits) sem ninguém notar, e ninguém notou
 porque esta linha dizia "verde": o job de código sempre passou, quem reprovava era o
@@ -151,7 +151,7 @@ Resta **só `brace-expansion`**, e é insolúvel hoje: a advisory cobre `<=5.0.7
 brace-expansion@1.1.18`, e a linha 1.x não tem patch. Forçar a 5.x por override quebra o eslint
 ("expand is not a function" — o minimatch@3 não entende o export novo). Quem pode resolver é o
 **PR #11 (eslint 9→10)**, se largar o minimatch@3. Não alcança usuário e o gate `--prod` não conta.
-Migrations 0001–0024.
+Migrations 0001–0025.
 Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 · RUNBOOK Fase 5 = canal Telegram.
 
 | Épico | Status | Épico | Status |
@@ -213,6 +213,39 @@ em especial o polling e o fluxo assíncrono só têm cobertura de teste, nunca d
 `OPENAI_API_KEY` + `BODY_PROJECTOR=openai` nos secrets do Fly antes do deploy; e a imagem tem ~1,6 MB,
 bem acima dos 200–600 KB estimados, o que engorda a coluna cifrada.
 
+**Ficha de Consulta (2026-07-31, local — não deployada).** A anamnese que o Dr. Rafael preenchia em
+papel (`ficha paciente.docx`, 12 blocos: identificação → objetivo → antropometria → doenças →
+história familiar → estilo de vida → medicações → exame físico → estratificação PREVENT → objetivos
+terapêuticos → conduta → retorno) passa a ser gerada A CADA CONSULTA. Divisão de trabalho igual à do
+E13: a **IA cuida do que só existe na CONVERSA** (queixas, hábitos, história familiar, conduta dita)
+e o **código cuida do que já está estruturado** (nome/idade/profissão/telefone do cadastro,
+peso/altura/IMC da última bioimpedância) — `applyKnownFields` sobrepõe o medido ao ouvido, porque
+peso dito de cabeça não substitui a balança; onde o sistema não tem (peso máximo da vida), preserva
+o extraído. **Regra dura do prompt: silêncio ⇒ branco.** Ficha preenchida por dedução ("obeso, logo
+esteatose") é pior que ficha vazia — a vazia o médico completa, a inventada ele precisa primeiro
+descobrir que está errada. `sanitizeForm` DESCARTA opção fora do catálogo (a IA às vezes devolve o
+rótulo em vez do value — isso é aceito; o que não casa some, em vez de virar checkbox que a tela não
+desenha) e nunca lança: JSON quebrado vira erro em pt-BR, não crash. Migration 0025: a ficha inteira
+é **um blob JSON cifrado**, não ~50 colunas — é documento que se lê inteiro, e "todos os pacientes
+com apneia" é pergunta do dashboard (E11/E14), não daqui; em colunas, cada campo novo custaria uma
+migration sem habilitar consulta nenhuma (tudo cifrado). O formulário é **servidor puro**
+(`<form action={serverAction}>` + defaultValue, zero estado no cliente): 50 campos e nenhum reage a
+outro. A ficha é regravada INTEIRA a cada save — checkbox só chega no FormData quando marcado, então
+merge parcial ressuscitaria um achado que o médico acabou de tirar (verificado no navegador:
+desmarcar hipertensão a removeu e preservou o resto). Sai em `/consultations/[id]/ficha`: tela cheia
+editável + impressão pelo diálogo nativo (mesmo padrão da nota), com os checkboxes virando `( )`/`(X)`
+no papel — checkbox nativo desbotado não se lê em fotocópia. Abre em branco mesmo sem geração (a
+consulta sem áudio se preenche à mão; a IA é o atalho, não o caminho único). **Verificado no
+navegador**: os 12 blocos na ordem do papel, round-trip completo (texto + checkbox + radio),
+"revisada pelo médico" no rodapé, console e servidor limpos. **Extração REAL exercitada
+(2026-07-31, consulta simulada + Kimi):** dos 5 turnos do roteiro saíram motivo, recordatório em
+observações da alimentação, "considera iniciar semaglutida" na conduta e objetivo=emagrecimento —
+e, o que mais importa, a IA **não marcou doença nenhuma** (nada foi diagnosticado na conversa; a
+palpitação foi para observações) nem marcou "sono ruim" porque o médico só disse que iria *revisar*
+o sono. O silêncio virou branco, como o prompt manda. Identificação e antropometria vieram do banco
+no mesmo passo (nome, idade 41, peso 90 kg, IMC 28,8; altura em branco porque o cadastro não tem).
+Falta screenshot (a pane do navegador não compôs frames em nenhuma das sessões).
+
 **Tema escuro "UNIC Noir" (2026-07-28)** — 4º tema em `/seguranca` (claro `unic` segue o default e
 NÃO mudou): ouro sobre preto QUENTE (matiz 40°, mesmo eixo do dourado — em grafite azulado o ouro
 lê como amarelo fluorescente), dourado como único acento (a referência do cliente não tem verde/teal).
@@ -247,7 +280,7 @@ sinalizados, delta vs meta do paciente (E11) quando vinculado — rascunho edit�
 com fontes TACO em kbSources → painel 🩺 Diagnóstico → telemetria (custo/gate/
 latência/ruído/autonomia).
 
-## Monorepo (29 pacotes)
+## Monorepo (30 pacotes)
 
 ```
 apps/web                 Tela de consulta + ficha/dashboard + gateway WS + webhook do bot Telegram
@@ -279,6 +312,7 @@ packages/taco            E13: tabela TACO 4ª ed. embarcada (591 alimentos) + bu
 packages/nutrition-report E13: recordatório (LLM) → mapeamento TACO → cálculo determinístico → relatório cifrado+auditado
 packages/lab-catalog     E14: catálogo canônico de exames (slug+sinônimos) + leitura da faixa de referência DO LAUDO — puro, sem faixa clínica própria
 packages/body-projection Projeção corporal por foto (IBodyProjector: Gemini imagem+texto→imagem + fake) — nunca persiste
+packages/consultation-form Ficha de consulta (anamnese de nutrologia): schema dos 12 blocos + extração por IA + persistência cifrada
 ```
 
 Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build` · `npm run dev`.

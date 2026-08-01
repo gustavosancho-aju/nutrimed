@@ -559,4 +559,29 @@ ALTER TABLE body_projection ADD COLUMN IF NOT EXISTS error_message text;
 ALTER TABLE body_projection ALTER COLUMN result_enc DROP NOT NULL;
 `,
   },
+  {
+    name: '0025_consultation_form',
+    sql: `
+-- Ficha de consulta (modelo do Dr. Rafael Bastos): a anamnese estruturada que
+-- ele preenchia em papel, agora gerada como RASCUNHO a partir da transcrição e
+-- revisada pelo médico antes de valer. Uma por consulta — UNIQUE em
+-- consultation_id, como clinical_note.
+--
+-- content_enc guarda a ficha INTEIRA como blob JSON cifrado (NFR9), não uma
+-- coluna por campo. A ficha é um documento que se lê inteiro; ninguém consulta
+-- "todos os pacientes com apneia" por aqui (isso é o dashboard, que tem os
+-- dados estruturados do E11/E14). Em colunas, cada campo novo da ficha viraria
+-- uma migration — e como tudo seria cifrado, nada disso seria consultável
+-- mesmo. model_version distingue o rascunho da IA ('human-edit' após revisão),
+-- espelhando a proveniência que a trilha de auditoria registra.
+CREATE TABLE IF NOT EXISTS consultation_form (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  consultation_id uuid NOT NULL UNIQUE REFERENCES consultation(id),
+  content_enc     text NOT NULL,
+  model_version   text,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now()
+);
+`,
+  },
 ];
