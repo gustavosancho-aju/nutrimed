@@ -31,7 +31,7 @@ export function TelegramLinkPanel({ patientId, active }: { patientId: string; ac
         <span className="text-sm text-ink">
           Status:{' '}
           {active ? (
-            <span className="font-medium text-brand">Canal ativo ✅</span>
+            <span className="font-medium text-brand">Canal ativo ✓</span>
           ) : (
             <span className="text-ink-muted">Não vinculado</span>
           )}

@@ -32,13 +32,21 @@ export function MetricCard({
 }) {
   const trend = computeTrend(points);
 
+  // Sem medição: card COMPACTO (slot vazio, borda tracejada) — antes ocupava o
+  // mesmo peso visual dos cards com dado, e o vazio roubava protagonismo.
+  if (trend === null) {
+    return (
+      <div className="self-start rounded-[var(--radius)] border border-dashed border-ink/15 p-4">
+        <p className="text-xs uppercase tracking-wide text-ink-muted xl:text-sm">{label}</p>
+        <p className="mt-1 text-xs text-ink-muted xl:text-sm">Sem medições.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="card-premium p-5 xl:p-6">
       <p className="text-xs uppercase tracking-wide text-ink-muted xl:text-sm">{label}</p>
-      {trend === null ? (
-        <p className="mt-2 text-sm text-ink-muted xl:text-base">Sem medições.</p>
-      ) : (
-        <>
+      <>
           <p className="mt-1 flex flex-wrap items-baseline gap-x-2">
             <span className="font-display text-3xl font-bold text-ink xl:text-5xl">
               {fmt(trend.current)}
@@ -91,13 +99,9 @@ export function MetricCard({
               />
             </div>
           )}
-          {points.length === 1 && (
-            <p className="mt-2 text-[11px] text-ink-muted xl:text-xs">
-              Ponto atual marcado. A linha de evolução se forma a partir da 2ª medição.
-            </p>
-          )}
-        </>
-      )}
+          {/* A nota "ponto atual marcado…" é dita UMA vez pela seção (dashboard) —
+              repetida em 5 cards virava ruído que rebaixava a tela. */}
+      </>
     </div>
   );
 }

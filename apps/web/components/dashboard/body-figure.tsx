@@ -1,10 +1,18 @@
-import { classifyImc, type ImcTone } from '@/lib/dashboard';
+import { classifyImc } from '@/lib/dashboard';
+import { IMC_TONE_HEX } from '@/lib/imc-colors';
 
 /**
  * Figura corporal paramétrica (modo apresentação). Silhueta humana em SVG cuja
  * morfologia (ombros/tórax/cintura/quadril/membros) varia com o IMC — a cintura
  * e o quadril crescem mais que os ombros, aproximando a mudança real de
- * composição. Gradientes + brilho + sombra dão volume (pseudo-3D) sem lib 3D.
+ * composição.
+ *
+ * Tratamento v2 (rodada premium 2026-07-31): a silhueta é uma "estátua" na
+ * tinta do tema (escura no claro, marfim no Noir) com rim light dourado —
+ * NÃO é mais pintada com a cor da categoria: um corpo inteiro vermelho na
+ * frente do paciente lia como acusação, não como informação (mesma régua do
+ * E15: nunca linguagem de culpa). A categoria continua informada 3×: aura
+ * suave atrás da figura, chip textual e medidor OMS — cor nunca sozinha.
  *
  * `ghostImc` desenha por cima um CONTORNO tracejado (verde meta, mesmo código
  * visual da linha de meta do TrendChart) do tronco na silhueta-alvo — o "para
@@ -14,14 +22,6 @@ import { classifyImc, type ImcTone } from '@/lib/dashboard';
  * Estático (seguro p/ prefers-reduced-motion); cor sempre acompanhada de rótulo
  * textual no componente pai.
  */
-
-const TONE_GRADIENT: Record<ImcTone, { from: string; to: string }> = {
-  low: { from: '#38bdf8', to: '#0369a1' },
-  ok: { from: '#34d399', to: '#047857' },
-  warn: { from: '#fbbf24', to: '#b45309' },
-  high: { from: '#fb923c', to: '#c2410c' },
-  severe: { from: '#f87171', to: '#b91c1c' },
-};
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
 const cx = 100; // eixo central do viewBox
@@ -81,7 +81,7 @@ export function BodyFigure({
   className?: string;
 }) {
   const tone = classifyImc(imc).tone;
-  const { from, to } = TONE_GRADIENT[tone];
+  const aura = IMC_TONE_HEX[tone];
   const d = bodyDims(imc);
   const torso = torsoPath(d);
 
@@ -98,20 +98,31 @@ export function BodyFigure({
       }`}
     >
       <defs>
-        <linearGradient id="bf-body" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor={from} />
-          <stop offset="100%" stopColor={to} />
+        {/* estátua na tinta do tema: volume por queda vertical de opacidade */}
+        <linearGradient id="bf-body" x1="0" y1="0" x2="0.85" y2="1">
+          <stop offset="0%" stopColor="hsl(var(--text))" stopOpacity="0.95" />
+          <stop offset="100%" stopColor="hsl(var(--text))" stopOpacity="0.72" />
         </linearGradient>
+        {/* aura da categoria — luz de museu atrás da estátua, nunca na "pele" */}
+        <radialGradient id="bf-aura" cx="0.5" cy="0.45" r="0.55">
+          <stop offset="0%" stopColor={aura} stopOpacity="0.2" />
+          <stop offset="100%" stopColor={aura} stopOpacity="0" />
+        </radialGradient>
+        {/* brilho de superfície (volume) */}
         <radialGradient id="bf-sheen" cx="0.35" cy="0.25" r="0.8">
-          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.35" />
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.28" />
           <stop offset="55%" stopColor="#ffffff" stopOpacity="0" />
         </radialGradient>
       </defs>
 
-      {/* sombra de chão */}
-      <ellipse cx={cx} cy={414} rx={52 + 14 * d.t} ry={9} fill="#1c1917" opacity="0.14" />
+      {/* aura da categoria (informativa; acompanha o chip e o medidor) */}
+      <ellipse cx={cx} cy={210} rx={92} ry={175} fill="url(#bf-aura)" />
 
-      <g fill="url(#bf-body)" stroke={to} strokeOpacity="0.25" strokeWidth="1">
+      {/* sombra de chão */}
+      <ellipse cx={cx} cy={414} rx={52 + 14 * d.t} ry={9} fill="#000000" opacity="0.2" />
+
+      {/* rim light dourado: o traço que faz a estátua "pegar luz" no Noir */}
+      <g fill="url(#bf-body)" stroke="hsl(var(--accent-gold) / 0.55)" strokeWidth="1.25">
         {/* cabeça + pescoço (não escalam com o IMC) */}
         <circle cx={cx} cy={40} r={24} />
         <rect x={cx - 9} y={60} width={18} height={16} rx={7} />
@@ -136,26 +147,41 @@ export function BodyFigure({
       <ellipse cx={cx - 12} cy={130} rx={d.chest} ry={54} fill="url(#bf-sheen)" />
 
       {/* contorno-alvo (meta): tronco tracejado por CIMA — visível quando a
-          silhueta atual é maior ou menor que a meta. Verde da linha de meta. */}
+          silhueta atual é maior ou menor que a meta. Verde da linha de meta
+          (vocabulário semântico do TrendChart), com halo suave para leitura
+          sobre a estátua escura E a clara. */}
       {ghostImc !== undefined && (
-        <path
-          d={torsoPath(bodyDims(ghostImc))}
-          fill="none"
-          stroke="#059669"
-          strokeWidth="2.5"
-          strokeDasharray="7 5"
-          strokeLinejoin="round"
-          opacity="0.9"
-        />
+        <>
+          {/* halo claro dá leitura sobre a estátua escura; o TRAÇO fica no
+              verde profundo (#059669, ≥3:1 sobre marfim) — o claro #10b981
+              reprovaria contraste não-textual nos temas claros. */}
+          <path
+            d={torsoPath(bodyDims(ghostImc))}
+            fill="none"
+            stroke="#10b981"
+            strokeWidth="6"
+            strokeLinejoin="round"
+            opacity="0.22"
+          />
+          <path
+            d={torsoPath(bodyDims(ghostImc))}
+            fill="none"
+            stroke="#059669"
+            strokeWidth="2.5"
+            strokeDasharray="7 5"
+            strokeLinejoin="round"
+            opacity="0.95"
+          />
+        </>
       )}
 
       {/* pontos de referência: guia horizontal no nível anatômico + rótulo à
-          direita — onde cada medida (tórax/cintura/quadril) é tomada. */}
+          direita — tokens do tema (o cinza fixo sumia no Noir). */}
       {showLandmarks &&
         LANDMARKS.map(({ label, y, dim }) => {
           const half = d[dim];
           return (
-            <g key={label} stroke="#44403c" opacity="0.75">
+            <g key={label} stroke="hsl(var(--text-muted))" opacity="0.8">
               <line
                 x1={cx - half - 10}
                 y1={y}
@@ -164,13 +190,13 @@ export function BodyFigure({
                 strokeWidth="1.25"
                 strokeDasharray="3 3"
               />
-              <circle cx={cx - half - 10} cy={y} r="2.5" fill="#44403c" strokeWidth="0" />
-              <circle cx={cx + half + 10} cy={y} r="2.5" fill="#44403c" strokeWidth="0" />
+              <circle cx={cx - half - 10} cy={y} r="2.5" fill="hsl(var(--text-muted))" strokeWidth="0" />
+              <circle cx={cx + half + 10} cy={y} r="2.5" fill="hsl(var(--text-muted))" strokeWidth="0" />
               <text
                 x={cx + half + 16}
                 y={y + 3.5}
                 stroke="none"
-                fill="#44403c"
+                fill="hsl(var(--text-muted))"
                 fontSize="11"
                 fontWeight="600"
               >

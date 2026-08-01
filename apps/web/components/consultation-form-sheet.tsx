@@ -11,6 +11,7 @@ import {
   type FormOption,
 } from '@nutrimed/consultation-form';
 import { saveConsultationFormAction } from '@/lib/consultation-form-actions';
+import { IconSave } from '@/components/icons';
 
 /**
  * Ficha de consulta editável (modelo do Dr. Rafael Bastos) — formulário
@@ -332,9 +333,9 @@ export function ConsultationFormSheet({
         </p>
         <button
           type="submit"
-          className="shrink-0 rounded-[10px] bg-brand px-4 py-2 text-xs font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
+          className="flex shrink-0 items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2 text-xs font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
         >
-          💾 Salvar ficha
+          <IconSave className="h-3.5 w-3.5" /> Salvar ficha
         </button>
       </div>
     </form>

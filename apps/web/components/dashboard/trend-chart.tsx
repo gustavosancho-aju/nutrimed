@@ -175,7 +175,16 @@ export function TrendChart({
         {sorted.map((p, i) => (
           <circle key={i} cx={x(i)} cy={y(p.value)} r="3.5" fill="currentColor" />
         ))}
-        {/* último ponto em destaque (onde o paciente está agora) */}
+        {/* último ponto em destaque (onde o paciente está agora) — com halo
+            suave: o "glow no dado ativo" da rodada premium, na cor da própria
+            série (funciona nos 2 temas; SVG estático, sem animação) */}
+        <circle
+          cx={x(sorted.length - 1)}
+          cy={y(last.value)}
+          r="10"
+          fill="currentColor"
+          opacity="0.15"
+        />
         <circle cx={x(sorted.length - 1)} cy={y(last.value)} r="5.5" fill="currentColor" />
       </svg>
         {/*

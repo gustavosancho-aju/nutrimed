@@ -1,5 +1,6 @@
 import type { ConsultationRecord } from '@nutrimed/clinical-notes';
 import { saveConsultationRecordAction } from '@/lib/record-actions';
+import { IconSave, IconStethoscope } from '@/components/icons';
 
 const updatedFmt = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'medium' });
 
@@ -19,7 +20,9 @@ export function ConsultationRecordSection({
     'mt-2 w-full rounded-[10px] border border-ink/15 bg-surface-raised px-3.5 py-2.5 text-sm leading-relaxed text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20';
   return (
     <section className="card-premium gold-hairline mt-8 p-7">
-      <h2 className="font-display text-base font-semibold text-ink">🩺 Conduta e anotações</h2>
+      <h2 className="flex items-center gap-2 font-display text-base font-semibold text-ink">
+        <IconStethoscope className="h-5 w-5 text-brand" /> Conduta e anotações
+      </h2>
       <p className="mt-1 text-sm text-ink-muted">
         Campos manuais do médico — cifrados em repouso e auditados. Nada aqui é gerado por IA.
       </p>
@@ -57,9 +60,9 @@ export function ConsultationRecordSection({
           )}
           <button
             type="submit"
-            className="rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
+            className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
           >
-            💾 Salvar conduta e anotações
+            <IconSave className="h-4 w-4" /> Salvar conduta e anotações
           </button>
         </div>
       </form>

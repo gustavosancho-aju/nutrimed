@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { generateNutritionReportAction } from '@/lib/nutrition-report-actions';
 import { ACTION_ERROR_MESSAGES, type ActionErrorCode } from '@/lib/action-result';
+import { IconSparkle } from '@/components/icons';
 
 /** Mensagens no CONTEXTO do relatório nutricional. */
 const REPORT_ERROR_MESSAGES: Record<ActionErrorCode, string> = {
@@ -33,9 +34,10 @@ export function NutritionReportForm({
         <button
           type="submit"
           disabled={pending}
-          className="rounded-[10px] border border-ink/15 px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-surface-muted disabled:opacity-50"
+          className="flex items-center gap-1.5 rounded-[10px] border border-ink/15 px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-surface-muted disabled:opacity-50"
         >
-          ✨ {pending ? 'Gerando…' : hasReport ? 'Regenerar relatório' : 'Gerar relatório nutricional'}
+          <IconSparkle className="h-3.5 w-3.5" />{' '}
+          {pending ? 'Gerando…' : hasReport ? 'Regenerar relatório' : 'Gerar relatório nutricional'}
         </button>
       </form>
       {result && !result.ok ? (

@@ -12,6 +12,7 @@ import { AlertVignette } from './alert-vignette';
 import { LiveMicButton } from './live-mic-button';
 import { PipelineStatusBadge } from './pipeline-status-badge';
 import { IdleConsultationBanner } from './idle-consultation-banner';
+import { IconInfo, IconVolumeOff } from '@/components/icons';
 
 /**
  * Tela de Consulta (E7 — frontend-spec §4): grid 2 colunas — área principal
@@ -92,9 +93,9 @@ export function ConsultationRoom({
           <PipelineStatusBadge />
           <span
             title="⚠️ atenção · 💡 sugestão · 🔍 hipótese · 📋 síntese"
-            className="cursor-help text-xs text-white/50"
+            className="flex cursor-help items-center gap-1.5 text-xs text-white/50"
           >
-            ⓘ 4 tipos
+            <IconInfo className="h-3.5 w-3.5" /> 4 tipos
           </span>
         </div>
       </div>
@@ -118,13 +119,14 @@ export function ConsultationRoom({
           type="button"
           aria-pressed={focusMode}
           onClick={toggleFocusMode}
-          className={`rounded-md px-3 py-2 text-xs font-semibold transition-colors ${
+          className={`flex items-center gap-1.5 rounded-md px-3 py-2 text-xs font-semibold transition-colors ${
             focusMode
               ? 'bg-white text-surface-deep'
               : 'border border-white/25 text-white hover:bg-white/10'
           }`}
         >
-          🔇 Modo Foco <kbd className="ml-1 rounded bg-black/20 px-1">F</kbd>
+          <IconVolumeOff className="h-3.5 w-3.5" /> Modo Foco{' '}
+          <kbd className="ml-1 rounded bg-black/20 px-1">F</kbd>
         </button>
         <div className="relative flex items-start gap-2">
           {advancedPanel}

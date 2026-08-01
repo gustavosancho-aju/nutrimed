@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import { useEffect, useReducer } from 'react';
 import { useBoardStore, type BoardContributionItem } from '@/lib/board-store';
+import { IconVolumeOff } from '@/components/icons';
 
 /**
  * Faixa HERO dos doutores (Sala de Board — E7/FR9/FR13): três quadros grandes
@@ -103,7 +104,7 @@ export function DoctorStrip() {
             data-state={
               isSilenced ? 'silenciado' : signaling ? 'sinalizando' : speaking ? 'falando' : 'ouvindo'
             }
-            className={`group relative h-56 overflow-hidden rounded-2xl border border-white/10 bg-white/5 ring-2 transition-shadow xl:h-64 ${
+            className={`group tilt-hover relative h-56 overflow-hidden rounded-2xl border border-white/10 bg-white/5 ring-2 transition-shadow xl:h-64 ${
               signaling
                 ? 'ring-attn shadow-[0_0_32px_hsl(var(--attn)/0.5)]'
                 : speaking
@@ -148,7 +149,9 @@ export function DoctorStrip() {
                 <p className="text-[10px] leading-tight text-white/70">{doctor.specialty}</p>
                 <p className="mt-0.5 text-[10px] font-medium">
                   {isSilenced ? (
-                    <span className="text-white/60">🔇 silenciado</span>
+                    <span className="flex items-center gap-1 text-white/60">
+                      <IconVolumeOff className="h-3 w-3" /> silenciado
+                    </span>
                   ) : signaling ? (
                     <span className="text-attn">▲ sinalizando</span>
                   ) : speaking ? (

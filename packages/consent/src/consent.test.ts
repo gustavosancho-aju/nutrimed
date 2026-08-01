@@ -12,6 +12,7 @@ import {
   isCaptureAuthorized,
   assertCaptureAuthorized,
   listConsultationsByPatient,
+  latestConsultationByPatients,
   setConsultationStatus,
   getConsultationMeta,
   setConsultationBoardMode,
@@ -160,6 +161,32 @@ describe('Consent Service — gate de gravação (FR20)', () => {
       // ordenação mais-recente-primeiro (sem depender de tie-break por id)
       expect(hist[0]!.createdAt.getTime()).toBeGreaterThanOrEqual(hist[1]!.createdAt.getTime());
       expect(hist[0]!.status).toBe('open');
+    });
+
+    it('latestConsultationByPatients agrega em UMA consulta (home sem N+1)', async () => {
+      const mk = async (label: string) => {
+        const p = await exec.query<{ id: string }>(
+          'INSERT INTO patient (user_id, name_enc) VALUES ($1, $2) RETURNING id',
+          [userId, label],
+        );
+        return p.rows[0]!.id;
+      };
+      const comDuas = await mk('agg-2');
+      const comUma = await mk('agg-1');
+      const semNenhuma = await mk('agg-0');
+      await createConsultation(exec, userId, 'antiga', KEY, comDuas);
+      const recente = await createConsultation(exec, userId, 'recente', KEY, comDuas);
+      await createConsultation(exec, userId, 'única', KEY, comUma);
+
+      const map = await latestConsultationByPatients(exec, [comDuas, comUma, semNenhuma]);
+      expect(map.size).toBe(2);
+      // a data agregada é a da consulta MAIS RECENTE do paciente
+      const hist = await listConsultationsByPatient(exec, comDuas);
+      const recenteAt = hist.find((h) => h.id === recente)!.createdAt.getTime();
+      expect(map.get(comDuas)!.getTime()).toBe(recenteAt);
+      expect(map.has(semNenhuma)).toBe(false); // sem consulta ⇒ fora do mapa
+      // lista vazia não vai ao banco e devolve mapa vazio
+      expect((await latestConsultationByPatients(exec, [])).size).toBe(0);
     });
   });
 
