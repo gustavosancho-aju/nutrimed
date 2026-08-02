@@ -74,16 +74,68 @@ function Mannequin({ imc, sex, color }: { imc: number; sex: BodySex; color: stri
     { from: [19, Y(318), 0], to: [17, Y(402), 0], r: d.calfW },
   ];
 
+  // Detalhes de "figura de artista" (boneco de atelier): junções esféricas
+  // (deltoides/quadril/joelhos), mãos e PÉS — os pés apontam para +z e são o
+  // que dá orientação frente/costas instantânea ao corpo girando.
+  const handY = Y(252);
+  const footY = Y(410);
+
   return (
     <group>
       {/* tronco esculpido — a profundidade já vem por seção, sem scale */}
       <mesh geometry={torsoGeo}>{material}</mesh>
-      <mesh position={[0, Y(40), 0]}>
+      {/* cabeça: elipsoide craniano (não uma bola) */}
+      <mesh position={[0, Y(40), 0]} scale={[0.92, 1.12, 1]}>
         <sphereGeometry args={[24, 28, 20]} />
         {material}
       </mesh>
       <mesh position={[0, Y(68), 0]}>
         <cylinderGeometry args={[9, 10.5, 20, 16]} />
+        {material}
+      </mesh>
+      {/* deltoides: integram os braços ao tronco (sem "cápsula solta") */}
+      <mesh position={[-armXTop, Y(102), 0]}>
+        <sphereGeometry args={[d.armW * 1.18, 18, 14]} />
+        {material}
+      </mesh>
+      <mesh position={[armXTop, Y(102), 0]}>
+        <sphereGeometry args={[d.armW * 1.18, 18, 14]} />
+        {material}
+      </mesh>
+      {/* mãos */}
+      <mesh position={[-armXBottom - 3, handY, 2]} scale={[0.8, 1.25, 0.55]}>
+        <sphereGeometry args={[d.armW * 0.95, 16, 12]} />
+        {material}
+      </mesh>
+      <mesh position={[armXBottom + 3, handY, 2]} scale={[0.8, 1.25, 0.55]}>
+        <sphereGeometry args={[d.armW * 0.95, 16, 12]} />
+        {material}
+      </mesh>
+      {/* junção do quadril: emenda tronco → coxas */}
+      <mesh position={[-d.hip / 2 - 2, Y(246), 0]}>
+        <sphereGeometry args={[d.thighW * 1.05, 18, 14]} />
+        {material}
+      </mesh>
+      <mesh position={[d.hip / 2 + 2, Y(246), 0]}>
+        <sphereGeometry args={[d.thighW * 1.05, 18, 14]} />
+        {material}
+      </mesh>
+      {/* joelhos */}
+      <mesh position={[-19, Y(321), 0]}>
+        <sphereGeometry args={[d.calfW * 1.08, 16, 12]} />
+        {material}
+      </mesh>
+      <mesh position={[19, Y(321), 0]}>
+        <sphereGeometry args={[d.calfW * 1.08, 16, 12]} />
+        {material}
+      </mesh>
+      {/* pés: elipsoides apontando para a FRENTE (+z) */}
+      <mesh position={[-17, footY, 9]} scale={[1, 0.55, 1.9]}>
+        <sphereGeometry args={[9, 18, 14]} />
+        {material}
+      </mesh>
+      <mesh position={[17, footY, 9]} scale={[1, 0.55, 1.9]}>
+        <sphereGeometry args={[9, 18, 14]} />
         {material}
       </mesh>
       <group>
