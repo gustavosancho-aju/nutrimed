@@ -74,7 +74,7 @@ export function BodySimulator({
         aria-label="Corpo do manequim"
         className="mt-2 flex overflow-hidden rounded-full border border-ink/15 text-[11px]"
       >
-        {SEX_OPTIONS.map((opt) => {
+        {SEX_OPTIONS.map((opt, i) => {
           const active = sexo === opt.value;
           return (
             <button
@@ -82,6 +82,21 @@ export function BodySimulator({
               type="button"
               role="radio"
               aria-checked={active}
+              // Padrão ARIA de radiogroup: UM só ponto de tabulação (o item
+              // selecionado) e navegação por setas dentro do grupo — com
+              // tabIndex 0 em todos, o teclado percorreria 3 paradas e as
+              // setas não fariam nada.
+              tabIndex={active ? 0 : -1}
+              onKeyDown={(e) => {
+                const passo = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+                if (!passo) return;
+                e.preventDefault();
+                const alvo = SEX_OPTIONS[(i + passo + SEX_OPTIONS.length) % SEX_OPTIONS.length]!;
+                setSexo(alvo.value);
+                (e.currentTarget.parentElement?.children[
+                  (i + passo + SEX_OPTIONS.length) % SEX_OPTIONS.length
+                ] as HTMLElement | undefined)?.focus();
+              }}
               onClick={() => setSexo(opt.value)}
               className={`px-3 py-1 transition-colors ${
                 active

@@ -73,13 +73,19 @@ function Body({
   imc,
   sex,
   color,
-  onGeometry,
+  onHipRadius,
 }: {
   mesh: BodyMeshData;
   imc: number;
   sex: BodySex;
   color: string;
-  onGeometry: (positions: Float32Array) => void;
+  /**
+   * Meia-largura do quadril já MEDIDA (número, não o buffer): reportar o
+   * Float32Array reusado não mudava a identidade, o setState do pai virava
+   * no-op e a sombra congelava no primeiro peso — além de forçar um novo
+   * varrimento dos 13k vértices a cada render do pai.
+   */
+  onHipRadius: (r: number) => void;
 }) {
   const invalidate = useThree((s) => s.invalidate);
 
@@ -103,9 +109,9 @@ function Body({
     attr.needsUpdate = true;
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
-    onGeometry(arr);
+    onHipRadius(radiusAt(arr, LEVELS.hip));
     invalidate();
-  }, [geometry, mesh, imc, sex, onGeometry, invalidate]);
+  }, [geometry, mesh, imc, sex, onHipRadius, invalidate]);
 
   return (
     <mesh geometry={geometry} position={[0, 0, 0]}>
@@ -193,7 +199,7 @@ function Stage({
   onReady?: () => void;
 }) {
   const [mesh, setMesh] = useState<BodyMeshData | null>(null);
-  const [positions, setPositions] = useState<Float32Array | null>(null);
+  const [hipRadius, setHipRadius] = useState<number | null>(null);
 
   useEffect(() => {
     let vivo = true;
@@ -209,15 +215,15 @@ function Stage({
 
   // "pronto" só quando o corpo está na tela — até lá o Stage segura o SVG
   useEffect(() => {
-    if (positions) onReady?.();
-  }, [positions, onReady]);
+    if (hipRadius !== null) onReady?.();
+  }, [hipRadius, onReady]);
 
   if (!mesh) return null;
 
   return (
     <Turntable spin={animate} manualAngle={manualAngle}>
-      <Body mesh={mesh} imc={imc} sex={sex} color={bodyColor} onGeometry={setPositions} />
-      <GroundShadow scale={positions ? radiusAt(positions, LEVELS.hip) / 30 : 1} />
+      <Body mesh={mesh} imc={imc} sex={sex} color={bodyColor} onHipRadius={setHipRadius} />
+      <GroundShadow scale={(hipRadius ?? 30) / 30} />
     </Turntable>
   );
 }

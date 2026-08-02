@@ -25,6 +25,9 @@ O que entra no binário:
 node scripts/build-body-mesh.mjs <dir>
 ```
 
-onde `<dir>` contém `base.obj` e a pasta `t/` com os `.target` (baixados do
-repositório do MakeHuman; não são versionados aqui). O script imprime a
-contagem de vértices, triângulos e vértices afetados por morph.
+onde `<dir>` contém `base.obj` e a pasta `t/` com os `.target`. **Os `.target`
+ficam PLANOS dentro de `t/`** — sem as subpastas de origem (`measure/`,
+`stomach/`, `macrodetails/`…), porque o script resolve `<dir>/t/<nome>.target`
+direto. Eles são baixados do repositório do MakeHuman e não são versionados
+aqui. O script imprime a contagem de vértices, triângulos e vértices afetados
+por morph, e falha se algum `.target` tiver linha malformada.

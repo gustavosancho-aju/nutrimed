@@ -41,6 +41,21 @@ export function parseBodyMesh(buffer: ArrayBuffer): BodyMeshData {
     throw new Error('body.bin: formato desconhecido');
   }
 
+  // Download truncado precisa FALHAR aqui: ArrayBuffer.slice clampa em vez de
+  // lançar, então um binário incompleto viraria um corpo com vértices zerados
+  // (uma mancha no palco) em vez de cair no fallback SVG.
+  const esperado =
+    4 +
+    headerLen +
+    header.vertexCount * 12 +
+    header.indexCount * 4 +
+    header.morphs.reduce((soma, m) => soma + m.count * 16, 0);
+  if (buffer.byteLength < esperado) {
+    throw new Error(
+      `body.bin: truncado (${buffer.byteLength} bytes, esperado ${esperado})`,
+    );
+  }
+
   let off = 4 + headerLen;
   const positions = new Float32Array(buffer.slice(off, off + header.vertexCount * 12));
   off += header.vertexCount * 12;

@@ -115,9 +115,18 @@ bodyIdx.forEach((orig, novo) => {
 function readTarget(nome) {
   const txt = readFileSync(join(SRC, 't', `${nome}.target`), 'utf8');
   const out = new Map();
-  for (const line of txt.split('\n')) {
+  for (const raw of txt.split('\n')) {
+    const line = raw.trim();
     if (!line || line.startsWith('#')) continue;
-    const [i, dx, dy, dz] = line.trim().split(/\s+/).map(Number);
+    const campos = line.split(/\s+/);
+    // Linha malformada (ou com menos de 4 campos) viraria NaN nos deltas, e
+    // NaN numa posição apaga o triângulo inteiro no WebGL — o corpo sairia
+    // com buracos. Melhor recusar o build do que servir um asset furado.
+    if (campos.length < 4) throw new Error(`${nome}.target: linha inválida "${line}"`);
+    const [i, dx, dy, dz] = campos.map(Number);
+    if (![i, dx, dy, dz].every(Number.isFinite)) {
+      throw new Error(`${nome}.target: número inválido em "${line}"`);
+    }
     const novo = remap.get(i);
     if (novo === undefined) continue; // delta em helper/joint — fora do corpo
     out.set(novo, [dx * scale, dy * scale, dz * scale]);

@@ -41,6 +41,12 @@ describe('parseBodyMesh — leitura do corpo compilado', () => {
     expect([...m.morphs.ganho!.deltas]).toEqual([5, 0, 0]);
   });
 
+  it('recusa binário TRUNCADO (slice clampa em silêncio e viraria corpo furado)', () => {
+    const cheio = fakeBin();
+    const cortado = cheio.slice(0, cheio.byteLength - 8);
+    expect(() => parseBodyMesh(cortado)).toThrow(/truncado/i);
+  });
+
   it('recusa binário de formato desconhecido em vez de renderizar lixo', () => {
     const hb = new TextEncoder().encode(JSON.stringify({ format: 'outro', vertexCount: 0, indexCount: 0, morphs: [] }));
     const buf = new ArrayBuffer(4 + hb.length);
