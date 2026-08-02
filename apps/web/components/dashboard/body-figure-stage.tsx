@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { classifyImc } from '@/lib/dashboard';
 import { IMC_TONE_HEX } from '@/lib/imc-colors';
 import { BodyFigure } from './body-figure';
+import { IconRotate } from '@/components/icons';
 
 /**
  * Palco da figura corporal: decide entre o manequim 3D (WebGL2) e a silhueta
@@ -45,6 +46,13 @@ export function BodyFigureStage({
   const [reduced, setReduced] = useState(false);
   const [visible, setVisible] = useState(true);
   const [colors, setColors] = useState<{ body: string; gold: string } | null>(null);
+  // Controle do médico sobre o giro: arrastar/teclar gira o corpo e PAUSA o
+  // giro automático (retomar sozinho seria tirar o controle de volta); o botão
+  // sob o palco religa. Ângulo manual como STATE: cada mudança re-renderiza e,
+  // em frameloop demand, o próprio re-render agenda o frame.
+  const [autoSpin, setAutoSpin] = useState(true);
+  const [manualAngle, setManualAngle] = useState(0);
+  const drag = useRef<{ startX: number; startAngle: number } | null>(null);
 
   useEffect(() => {
     try {
@@ -101,14 +109,38 @@ export function BodyFigureStage({
       <div
         ref={containerRef}
         role="img"
+        tabIndex={0}
         aria-label={`Manequim corporal ilustrativo para IMC ${imc.toFixed(1)}${
           ghostImc !== undefined
             ? `; anel verde na cintura = circunferência na meta (IMC ${ghostImc.toFixed(1)})`
             : ''
-        }`}
-        className={`relative ${className}`}
+        }. Arraste ou use as setas para girar.`}
+        className={`relative cursor-grab select-none active:cursor-grabbing ${className}`}
         style={{
           background: `radial-gradient(48% 42% at 50% 46%, ${aura}2b, transparent 72%)`,
+          // arrasto horizontal gira; o vertical continua rolando a página
+          touchAction: 'pan-y',
+        }}
+        onPointerDown={(e) => {
+          drag.current = { startX: e.clientX, startAngle: manualAngle };
+          e.currentTarget.setPointerCapture(e.pointerId);
+          setAutoSpin(false);
+        }}
+        onPointerMove={(e) => {
+          if (!drag.current) return;
+          setManualAngle(drag.current.startAngle + (e.clientX - drag.current.startX) * 0.011);
+        }}
+        onPointerUp={() => {
+          drag.current = null;
+        }}
+        onPointerCancel={() => {
+          drag.current = null;
+        }}
+        onKeyDown={(e) => {
+          if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+          e.preventDefault();
+          setAutoSpin(false);
+          setManualAngle((a) => a + (e.key === 'ArrowRight' ? 0.26 : -0.26));
         }}
       >
         {/* rede lenta nunca vê palco vazio: a silhueta fica até o 1º frame 3D */}
@@ -125,7 +157,8 @@ export function BodyFigureStage({
             metaImc={ghostImc}
             bodyColor={colors.body}
             goldColor={colors.gold}
-            animate={visible && !reduced}
+            animate={visible && !reduced && autoSpin}
+            manualAngle={manualAngle}
             onReady={() => setReady(true)}
             onContextLost={() => setWebgl(false)}
           />
@@ -134,9 +167,20 @@ export function BodyFigureStage({
       {/* os rótulos anatômicos que o SVG dá de graça (showLandmarks) o 3D
           entrega como microlegenda — anel sem nome não informa */}
       {ready && (
-        <p className="mt-1.5 text-center text-[10px] text-ink-muted">
-          Anéis dourados: tórax · cintura · quadril
-        </p>
+        <div className="mt-1.5 flex items-center justify-center gap-2.5">
+          <p className="text-[10px] text-ink-muted">
+            Arraste para girar · anéis: tórax, cintura e quadril
+          </p>
+          <button
+            type="button"
+            aria-pressed={autoSpin}
+            onClick={() => setAutoSpin((s) => !s)}
+            className="inline-flex items-center gap-1 rounded-[8px] border border-ink/15 px-2 py-0.5 text-[10px] font-medium text-ink transition-colors hover:bg-surface-muted"
+          >
+            <IconRotate className="h-2.5 w-2.5" />
+            {autoSpin ? 'Pausar giro' : 'Retomar giro'}
+          </button>
+        </div>
       )}
     </div>
   );

@@ -169,17 +169,29 @@ function GroundShadow({ imc }: { imc: number }) {
   );
 }
 
-/** Giro lento do palco (24s/volta) — só quando `animate`. */
-function Turntable({ animate, children }: { animate: boolean; children: React.ReactNode }) {
+/**
+ * Giro do palco: automático lento (24s/volta) enquanto `spin`, SOMADO ao
+ * ângulo manual do médico (arrasto/teclado, controlado pelo Stage). O manual
+ * chega como número simples — cada mudança re-renderiza e, em frameloop
+ * demand, o próprio re-render agenda o frame (sem invalidate explícito).
+ */
+function Turntable({
+  spin,
+  manualAngle,
+  children,
+}: {
+  spin: boolean;
+  manualAngle: number;
+  children: React.ReactNode;
+}) {
   const ref = useRef<Group>(null);
+  const autoAngle = useRef(MathUtils.degToRad(-14)); // partida mostrando volume
   useFrame((_, delta) => {
-    if (animate && ref.current) {
-      ref.current.rotation.y += delta * (Math.PI / 12);
-    }
+    if (spin) autoAngle.current += delta * (Math.PI / 12);
+    if (ref.current) ref.current.rotation.y = autoAngle.current + manualAngle;
   });
-  // partida levemente rotacionada: mostra o volume já no primeiro frame
   return (
-    <group ref={ref} rotation={[0, MathUtils.degToRad(-14), 0]}>
+    <group ref={ref} rotation={[0, autoAngle.current + manualAngle, 0]}>
       {children}
     </group>
   );
@@ -191,6 +203,7 @@ export function BodyFigure3D({
   bodyColor,
   goldColor,
   animate,
+  manualAngle = 0,
   onReady,
   onContextLost,
 }: {
@@ -203,6 +216,8 @@ export function BodyFigure3D({
   goldColor: string;
   /** false sob prefers-reduced-motion ou fora do viewport: sem giro, demand. */
   animate: boolean;
+  /** Ângulo manual (rad) somado ao giro — o arrasto/teclado do médico. */
+  manualAngle?: number;
   /** Renderer pronto — o Stage solta o SVG que segurava o palco. */
   onReady?: () => void;
   /** Contexto WebGL perdido (TDR/projetor) — o Stage degrada para o SVG. */
@@ -227,7 +242,7 @@ export function BodyFigure3D({
       <ambientLight intensity={0.55} />
       <directionalLight position={[220, 420, 340]} intensity={1.15} />
       <directionalLight position={[-260, 320, -380]} color={goldColor} intensity={2.4} />
-      <Turntable animate={animate}>
+      <Turntable spin={animate} manualAngle={manualAngle}>
         <Mannequin imc={imc} color={bodyColor} />
         {metaImc !== undefined && <MetaRing metaImc={metaImc} />}
         <ScanRings imc={imc} gold={goldColor} />
