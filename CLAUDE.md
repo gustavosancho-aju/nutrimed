@@ -10,7 +10,7 @@ deploy e roadmap — a referência única do estado atual).
 **📋 Registro histórico do MVP (E1–E10): [`docs/IMPLEMENTATION-RECORD.md`](docs/IMPLEMENTATION-RECORD.md)**
 (rastreabilidade FR/NFR/ADR e evidências ao vivo do snapshot de 2026-06-11).
 
-## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (prod = Fly v58 @ fa37e7a; main @ 5f2c9f4 com Rodada Premium + Corpo 3D mergeados, AINDA NÃO deployados)
+## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-08-02, main @ ddbe073, Fly v59 — Rodada Visual Premium + Corpo 3D)
 
 **9 de 10 épicos com núcleo implementado e verificado ao vivo** (falta E8 — vídeos).
 **E11 (Pacientes & Dashboard) COMPLETO** (4 fases + extras: faixa ideal/meta nos gráficos e
@@ -246,7 +246,7 @@ o sono. O silêncio virou branco, como o prompt manda. Identificação e antropo
 no mesmo passo (nome, idade 41, peso 90 kg, IMC 28,8; altura em branco porque o cadastro não tem).
 Falta screenshot (a pane do navegador não compôs frames em nenhuma das sessões).
 
-**Rodada Visual Premium (2026-08-01, PR #15 MERGEADO na main — aguarda deploy).** Nasceu da
+**Rodada Visual Premium (2026-08-01, PR #15 — EM PRODUÇÃO desde a v59, 2026-08-02).** Nasceu da
 crítica de design com referências pesquisadas (WHOOP/Oura/Superpower + FUI Territory/Westworld);
 princípio-guia: **3D no palco (Apresentação), nunca no cockpit (telas de trabalho)**; glow raro é
 assinatura, espalhado é ruído. (1) **27 ícones stroke próprios** (`components/icons.tsx`, zero
@@ -266,7 +266,8 @@ Telegram corrigida (só alimentação), MetricCard vazio compacto, fonte única 
 halos dos próprios tokens. Review adversarial (14 achados → 12 corrigidos) + CodeRabbit (3/3).
 Dívida consciente: emojis do painel interno de telemetria.
 
-**Corpo 3D no Modo Apresentação (2026-08-02, PR #16 MERGEADO na main — aguarda deploy).**
+**Corpo 3D no Modo Apresentação (2026-08-02, PR #16 — EM PRODUÇÃO desde a v59; verificado ao
+vivo: /icon.svg da rodada servindo, login 200).**
 Manequim corporal 3D **PROCEDURAL** (three + @react-three/fiber v9, chunk lazy SÓ da
 Apresentação): estátua de alfaiate girando sob rim light dourado — deliberadamente ABSTRATA
 (manequim, não humano realista: realismo compraria uncanny valley e exigiria asset/licença).
