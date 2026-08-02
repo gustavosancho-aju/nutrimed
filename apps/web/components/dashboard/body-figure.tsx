@@ -1,6 +1,6 @@
 import { classifyImc } from '@/lib/dashboard';
 import { IMC_TONE_HEX } from '@/lib/imc-colors';
-import { bodyDims } from '@/lib/body-profile';
+import { bodyDims, type BodySex } from '@/lib/body-profile';
 
 /**
  * Figura corporal paramétrica (modo apresentação). Silhueta humana em SVG cuja
@@ -55,11 +55,14 @@ const LANDMARKS = [
 
 export function BodyFigure({
   imc,
+  sex = 'neutro',
   ghostImc,
   showLandmarks = false,
   className = '',
 }: {
   imc: number;
+  /** Dimorfismo nas larguras (ombro/cintura/quadril) — 2D não mostra frente/costas. */
+  sex?: BodySex;
   /** IMC da silhueta-alvo (meta) — desenhada como contorno tracejado por cima. */
   ghostImc?: number;
   /** Marca os pontos de referência (tórax/cintura/quadril) com guia + rótulo. */
@@ -68,7 +71,7 @@ export function BodyFigure({
 }) {
   const tone = classifyImc(imc).tone;
   const aura = IMC_TONE_HEX[tone];
-  const d = bodyDims(imc);
+  const d = bodyDims(imc, sex);
   const torso = torsoPath(d);
 
   const armXTop = d.shoulder + d.armW * 0.4;
@@ -142,7 +145,7 @@ export function BodyFigure({
               verde profundo (#059669, ≥3:1 sobre marfim) — o claro #10b981
               reprovaria contraste não-textual nos temas claros. */}
           <path
-            d={torsoPath(bodyDims(ghostImc))}
+            d={torsoPath(bodyDims(ghostImc, sex))}
             fill="none"
             stroke="#10b981"
             strokeWidth="6"
@@ -150,7 +153,7 @@ export function BodyFigure({
             opacity="0.22"
           />
           <path
-            d={torsoPath(bodyDims(ghostImc))}
+            d={torsoPath(bodyDims(ghostImc, sex))}
             fill="none"
             stroke="#059669"
             strokeWidth="2.5"

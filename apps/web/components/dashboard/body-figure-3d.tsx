@@ -1,16 +1,18 @@
 'use client';
 
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import {
+  BufferGeometry,
   CanvasTexture,
+  Float32BufferAttribute,
   Group,
   MathUtils,
   Quaternion,
-  Vector2,
   Vector3,
 } from 'three';
-import { bodyDims, torsoProfile, bodyRings, BODY_VIEW_H } from '@/lib/body-profile';
+import { bodyDims, buildTorsoGeometry, bodyRings, type BodySex } from '@/lib/body-profile';
+import { BODY_VIEW_H } from '@/lib/body-profile';
 
 /**
  * Manequim corporal 3D (Modo Apresentação — o "momento CarePod"): estátua de
@@ -32,17 +34,26 @@ import { bodyDims, torsoProfile, bodyRings, BODY_VIEW_H } from '@/lib/body-profi
  */
 
 const CENTER_Y = 215;
-/** O corte do corpo humano é elíptico, não circular — achatamento frente/trás. */
-const DEPTH_SCALE = 0.72;
+/** Achatamento dos ANÉIS decorativos (o tronco agora modela a própria
+    profundidade por seção — frente ≠ costas; anel elíptico só acompanha). */
+const DEPTH_SCALE = 0.78;
 
-/** Corpo completo (cabeça + tronco lathe + membros) num material só. */
-function Mannequin({ imc, color }: { imc: number; color: string }) {
-  const d = bodyDims(imc);
-  const lathePoints = useMemo(
-    () => torsoProfile(imc).map((p) => new Vector2(p.radius, p.y)),
-    [imc],
-  );
-  const latheSegments = 40;
+/** Corpo completo (cabeça + tronco esculpido + membros) num material só. */
+function Mannequin({ imc, sex, color }: { imc: number; sex: BodySex; color: string }) {
+  const d = bodyDims(imc, sex);
+
+  // Tronco por seções ASSIMÉTRICAS (peitoral/busto, costas, barriga, glúteo,
+  // lordose) — dados puros da lib; normais computadas aqui. Geometria criada
+  // manualmente ⇒ dispose manual quando imc/sex trocam (slider/toggle).
+  const torsoGeo = useMemo(() => {
+    const { positions, indices } = buildTorsoGeometry(imc, sex);
+    const geo = new BufferGeometry();
+    geo.setAttribute('position', new Float32BufferAttribute(positions, 3));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    return geo;
+  }, [imc, sex]);
+  useEffect(() => () => torsoGeo.dispose(), [torsoGeo]);
 
   const armXTop = d.shoulder + d.armW * 0.4;
   const armXBottom = d.shoulder + 14 + 6 * d.t;
@@ -65,13 +76,8 @@ function Mannequin({ imc, color }: { imc: number; color: string }) {
 
   return (
     <group>
-      {/* achatamento frente/trás do TRONCO; membros ficam redondos */}
-      <group scale={[1, 1, DEPTH_SCALE]}>
-        <mesh>
-          <latheGeometry args={[lathePoints, latheSegments]} />
-          {material}
-        </mesh>
-      </group>
+      {/* tronco esculpido — a profundidade já vem por seção, sem scale */}
+      <mesh geometry={torsoGeo}>{material}</mesh>
       <mesh position={[0, Y(40), 0]}>
         <sphereGeometry args={[24, 28, 20]} />
         {material}
@@ -113,8 +119,8 @@ function Mannequin({ imc, color }: { imc: number; color: string }) {
 }
 
 /** Anéis de escaneamento (tórax/cintura/quadril) — vocabulário FUI, dourado. */
-function ScanRings({ imc, gold }: { imc: number; gold: string }) {
-  const rings = bodyRings(imc);
+function ScanRings({ imc, sex, gold }: { imc: number; sex: BodySex; gold: string }) {
+  const rings = bodyRings(imc, sex);
   return (
     <group>
       {rings.map((r) => (
@@ -133,8 +139,8 @@ function ScanRings({ imc, gold }: { imc: number; gold: string }) {
  * que uma casca-corpo inteira sofria (a meta menor ficava DENTRO da estátua).
  * Cintura porque é O marcador clínico (circunferência abdominal).
  */
-function MetaRing({ metaImc }: { metaImc: number }) {
-  const waist = bodyRings(metaImc)[1]!;
+function MetaRing({ metaImc, sex }: { metaImc: number; sex: BodySex }) {
+  const waist = bodyRings(metaImc, sex)[1]!;
   return (
     <mesh position={[0, waist.y, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[1, DEPTH_SCALE, 1]}>
       <torusGeometry args={[waist.radius + 11, 1.3, 8, 64]} />
@@ -199,6 +205,7 @@ function Turntable({
 
 export function BodyFigure3D({
   imc,
+  sex = 'neutro',
   metaImc,
   bodyColor,
   goldColor,
@@ -208,6 +215,8 @@ export function BodyFigure3D({
   onContextLost,
 }: {
   imc: number;
+  /** Corpo do manequim — opção do médico no palco (default preserva o neutro). */
+  sex?: BodySex;
   /** IMC da meta — vira o anel verde na cintura do manequim. */
   metaImc?: number;
   /** Cor da estátua (tinta do tema, lida dos tokens pelo Stage). */
@@ -243,9 +252,9 @@ export function BodyFigure3D({
       <directionalLight position={[220, 420, 340]} intensity={1.15} />
       <directionalLight position={[-260, 320, -380]} color={goldColor} intensity={2.4} />
       <Turntable spin={animate} manualAngle={manualAngle}>
-        <Mannequin imc={imc} color={bodyColor} />
-        {metaImc !== undefined && <MetaRing metaImc={metaImc} />}
-        <ScanRings imc={imc} gold={goldColor} />
+        <Mannequin imc={imc} sex={sex} color={bodyColor} />
+        {metaImc !== undefined && <MetaRing metaImc={metaImc} sex={sex} />}
+        <ScanRings imc={imc} sex={sex} gold={goldColor} />
         <GroundShadow imc={imc} />
       </Turntable>
     </Canvas>
