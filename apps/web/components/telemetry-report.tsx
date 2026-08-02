@@ -1,4 +1,5 @@
 import type { ConsultationReport, InstanceSummary } from '@nutrimed/telemetry';
+import { IconChart } from '@/components/icons';
 
 /**
  * Relatório de telemetria da consulta (E10 — visível p/ o piloto): custo NFR7,
@@ -15,7 +16,9 @@ export function TelemetryReport({
   const usd = (v: number) => `US$ ${v.toFixed(4)}`;
   return (
     <section aria-label="Telemetria da consulta" className="card-premium mt-6 p-6">
-      <h2 className="font-display text-base font-semibold text-ink">📊 Telemetria (piloto)</h2>
+      <h2 className="flex items-center gap-2 font-display text-base font-semibold text-ink">
+        <IconChart className="h-5 w-5 text-brand" /> Telemetria (piloto)
+      </h2>
 
       <div className="mt-3 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-6">
         <div data-testid="tm-cost">

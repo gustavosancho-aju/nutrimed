@@ -8,6 +8,7 @@ import { checkMicrophone, createAudioSource, pickRecorderMime, type AudioSource 
 import { useBoardStore } from '@/lib/board-store';
 import { isTranscriptSilent } from '@/lib/pipeline-watchdog';
 import { resolveWsBase } from '@/lib/ws-url';
+import { IconMic, IconRotate, IconStop } from '@/components/icons';
 
 /**
  * Consulta AO VIVO com microfone real (E3 final / Story 2.2 REUSE).
@@ -200,7 +201,9 @@ export function LiveMicButton({
           onClick={() => void stop()}
           className="rounded-md bg-attn-critical px-3 py-2 text-xs font-semibold text-white hover:opacity-90"
         >
-          ⏹ Encerrar (ao vivo)
+          <span className="flex items-center gap-1.5">
+            <IconStop className="h-3.5 w-3.5" /> Encerrar (ao vivo)
+          </span>
         </button>
       ) : (
         <>
@@ -221,7 +224,13 @@ export function LiveMicButton({
             disabled={state === 'starting'}
             className="rounded-md border border-white/25 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/10 disabled:opacity-50"
           >
-            {state === 'starting' ? '… preparando' : '🎙️ Consulta ao vivo'}
+            {state === 'starting' ? (
+              '… preparando'
+            ) : (
+              <span className="flex items-center gap-1.5">
+                <IconMic className="h-3.5 w-3.5" /> Consulta ao vivo
+              </span>
+            )}
           </button>
         </>
       )}
@@ -235,7 +244,9 @@ export function LiveMicButton({
           onClick={() => location.reload()}
           className="rounded-md border border-white/25 px-2 py-1 text-[10px] font-semibold text-white hover:bg-white/10"
         >
-          ↻ Recarregar página
+          <span className="flex items-center gap-1">
+            <IconRotate className="h-3 w-3" /> Recarregar página
+          </span>
         </button>
       ) : null}
     </div>

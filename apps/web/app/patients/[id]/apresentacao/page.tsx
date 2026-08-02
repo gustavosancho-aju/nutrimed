@@ -32,10 +32,16 @@ import {
   type TrendPoint,
   type TargetBand,
 } from '@/lib/dashboard';
+import type { CSSProperties } from 'react';
 import { MonthlyJourney } from '@/components/dashboard/monthly-journey';
 import { BodySimulator } from '@/components/dashboard/body-simulator';
-import { ImcScale } from '@/components/dashboard/imc-scale';
+import { ImcGauge } from '@/components/dashboard/imc-gauge';
 import { TrendChart } from '@/components/dashboard/trend-chart';
+
+/** Posição na cascata de entrada (`.reveal` — só no palco da Apresentação). */
+function revealAt(i: number): CSSProperties {
+  return { '--reveal-i': i } as CSSProperties;
+}
 
 /**
  * Modo APRESENTAÇÃO (tela paralela à dashboard): visual premium para o médico
@@ -245,7 +251,7 @@ export default async function ApresentacaoPage({
         <section className="card-premium gold-hairline mt-4 overflow-hidden">
           <div className="grid gap-8 p-8 md:grid-cols-[280px_1fr] md:p-10">
             {/* Figura corporal (atual + contorno da meta + simulação por peso) */}
-            <div className="flex flex-col items-center justify-center">
+            <div className="reveal flex flex-col items-center justify-center" style={revealAt(0)}>
               {imc !== null ? (
                 <BodySimulator
                   imcAtual={imc}
@@ -264,15 +270,12 @@ export default async function ApresentacaoPage({
             {/* Números de apresentação */}
             <div className="min-w-0">
               {imc !== null && (
-                <div className="flex items-end gap-4">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-ink-muted">IMC atual</p>
-                    <p className="font-display text-6xl font-semibold leading-none text-ink">
-                      {fmt(imc)}
-                    </p>
-                  </div>
+                <div className="reveal" style={revealAt(1)}>
+                  {/* Medidor radial OMS com o número-herói no centro (arco = o
+                      vocabulário FUI domesticado; régua linear aposentada aqui) */}
+                  <ImcGauge imc={imc} />
                   {deltaPeso !== null && (
-                    <p className="mb-1 text-sm text-ink-muted">
+                    <p className="mt-3 text-center text-sm text-ink-muted">
                       <span aria-hidden>{deltaPeso > 0 ? '▲' : deltaPeso < 0 ? '▼' : '–'}</span>{' '}
                       {fmt(Math.abs(deltaPeso))} kg desde a 1ª avaliação
                     </p>
@@ -280,15 +283,13 @@ export default async function ApresentacaoPage({
                 </div>
               )}
 
-              {imc !== null && (
-                <div className="mt-6">
-                  <ImcScale imc={imc} />
-                </div>
-              )}
-
               <dl className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3">
-                {stats.map((s) => (
-                  <div key={s.label} className="rounded-[12px] border border-ink/10 bg-surface p-4">
+                {stats.map((s, i) => (
+                  <div
+                    key={s.label}
+                    className="reveal rounded-[12px] border border-ink/10 bg-surface p-4"
+                    style={revealAt(i + 2)}
+                  >
                     <dt className="text-[11px] uppercase tracking-wide text-ink-muted">{s.label}</dt>
                     <dd className="mt-1 font-display text-xl font-semibold text-ink">{s.value}</dd>
                     {s.hint && <dd className="mt-0.5 text-[11px] text-ink-muted">{s.hint}</dd>}

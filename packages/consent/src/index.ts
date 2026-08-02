@@ -6,6 +6,7 @@ export {
   isCaptureAuthorized,
   assertCaptureAuthorized,
   listConsultationsByPatient,
+  latestConsultationByPatients,
   setConsultationStatus,
   getConsultationMeta,
   setConsultationBoardMode,

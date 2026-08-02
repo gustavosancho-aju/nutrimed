@@ -40,6 +40,14 @@ import { BodyGoalSettings } from '@/components/dashboard/body-goal-settings';
 import { GoalHitBadge } from '@/components/dashboard/goal-hit-badge';
 import { MonthlyHistory } from '@/components/dashboard/monthly-history';
 import { deleteFoodLogAction } from '@/lib/measurement-actions';
+import {
+  IconCamera,
+  IconFileText,
+  IconImage,
+  IconPencil,
+  IconSliders,
+  IconSparkle,
+} from '@/components/icons';
 
 type Aba = 'geral' | 'bioimpedancia' | 'exames' | 'bem-estar';
 const ABAS: { key: Aba; label: string }[] = [
@@ -156,6 +164,22 @@ export default async function DashboardPage({
     ...customDefs.map((d) => ({ name: `custom${d.slot}`, label: d.name, unit: d.unit })),
   ];
 
+  // Nota "ponto atual marcado…" das seções de cartões: dispara quando ALGUMA
+  // série tem exatamente 1 ponto — não quando há 1 medição no total (um campo
+  // medido uma única vez em meio a 3 medições também mostra ponto solto).
+  // Cada seção checa SÓ as métricas que renderiza (CodeRabbit PR #15): TMB com
+  // 1 ponto não pode acender a nota na Geral, que nem mostra TMB.
+  const GERAL_METRICS = ['peso', 'imc', 'pgc', 'massaMuscular', 'cintura'] as const;
+  const BIO_METRICS = [
+    ...GERAL_METRICS,
+    'massaGordura',
+    'aguaCorporal',
+    'gorduraVisceral',
+    'tmb',
+  ] as const;
+  const singlePointGeral = GERAL_METRICS.some((k) => seriesOf(body, k).length === 1);
+  const singlePointBio = BIO_METRICS.some((k) => seriesOf(body, k).length === 1);
+
   // Modo edição (?editar=<id>): pré-preenche o form da aba com a medição
   const editingBody = aba === 'bioimpedancia' && editar ? body.find((m) => m.id === editar) : undefined;
   const editingLab = aba === 'exames' && editar ? labs.find((m) => m.id === editar) : undefined;
@@ -206,21 +230,21 @@ export default async function DashboardPage({
         <div className="flex shrink-0 items-center gap-2">
           <Link
             href={`/patients/${id}/apresentacao`}
-            className="rounded-[10px] bg-brand px-3.5 py-1.5 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
+            className="inline-flex items-center gap-1.5 rounded-[10px] bg-brand px-3.5 py-1.5 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
           >
-            ✨ Apresentação
+            <IconSparkle className="h-4 w-4" /> Apresentação
           </Link>
           <Link
             href={`/patients/${id}/import`}
-            className="rounded-[10px] border border-ink/15 px-3.5 py-1.5 text-sm text-ink transition-colors hover:bg-surface-muted"
+            className="inline-flex items-center gap-1.5 rounded-[10px] border border-ink/15 px-3.5 py-1.5 text-sm text-ink transition-colors hover:bg-surface-muted"
           >
-            📄 Importar laudo (PDF)
+            <IconFileText className="h-4 w-4" /> Importar laudo (PDF)
           </Link>
           <Link
             href={`/patients/${id}/projecao`}
-            className="rounded-[10px] border border-ink/15 px-3.5 py-1.5 text-sm text-ink transition-colors hover:bg-surface-muted"
+            className="inline-flex items-center gap-1.5 rounded-[10px] border border-ink/15 px-3.5 py-1.5 text-sm text-ink transition-colors hover:bg-surface-muted"
           >
-            🖼️ Projeção corporal
+            <IconImage className="h-4 w-4" /> Projeção corporal
           </Link>
         </div>
       </header>
@@ -354,6 +378,13 @@ export default async function DashboardPage({
                 Ainda não há medições. Lance a primeira na aba Bioimpedância.
               </p>
             )}
+            {/* Nota ÚNICA da seção — antes cada cartão repetia a mesma frase 5×. */}
+            {singlePointGeral && (
+              <p className="text-[11px] text-ink-muted">
+                Ponto atual marcado nos cartões — a linha de evolução se forma a partir da 2ª
+                medição.
+              </p>
+            )}
           </div>
         )}
 
@@ -424,6 +455,12 @@ export default async function DashboardPage({
                 targetLabel={goal?.tmb !== undefined ? doctorLabel : undefined}
               />
             </div>
+            {singlePointBio && (
+              <p className="mt-4 text-[11px] text-ink-muted">
+                Ponto atual marcado nos cartões — a linha de evolução se forma a partir da 2ª
+                medição.
+              </p>
+            )}
             <MeasurementForm
               patientId={id}
               kind="body"
@@ -513,9 +550,9 @@ export default async function DashboardPage({
               </p>
               <Link
                 href={`/patients/${id}`}
-                className="shrink-0 rounded-[10px] border border-ink/15 bg-surface-raised px-3.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-surface-muted"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-[10px] border border-ink/15 bg-surface-raised px-3.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-surface-muted"
               >
-                ⚙️ Editar metas
+                <IconSliders className="h-3.5 w-3.5" /> Editar metas
               </Link>
             </div>
 
@@ -626,8 +663,22 @@ export default async function DashboardPage({
                                         </span>
                                         {/* Origem: o médico precisa saber se o número veio da visão
                                             (chuta alimento E porção) ou do texto com quantidades. */}
-                                        <span title={entry.source === 'telegram-texto' ? 'Digitado pelo paciente (cálculo pela tabela TACO)' : 'Estimado a partir da foto'}>
-                                          {entry.source === 'telegram-texto' ? '✍️' : '📷'}
+                                        <span
+                                          className="inline-flex text-ink-muted"
+                                          title={entry.source === 'telegram-texto' ? 'Digitado pelo paciente (cálculo pela tabela TACO)' : 'Estimado a partir da foto'}
+                                        >
+                                          {entry.source === 'telegram-texto' ? (
+                                            <IconPencil className="h-3.5 w-3.5" />
+                                          ) : (
+                                            <IconCamera className="h-3.5 w-3.5" />
+                                          )}
+                                          {/* o emoji era anunciado pelo leitor de tela; o ícone
+                                              aria-hidden não é — o texto oculto preserva a origem */}
+                                          <span className="sr-only">
+                                            {entry.source === 'telegram-texto'
+                                              ? 'registro por texto'
+                                              : 'registro por foto'}
+                                          </span>
                                         </span>
                                         <span>· {entry.values.itemsLabel ?? 'sem descrição'}</span>
                                         <span>· ~{Math.round(entry.values.kcal)} kcal</span>
@@ -641,7 +692,7 @@ export default async function DashboardPage({
                                             className="text-amber-600"
                                             title={`Não encontrado na tabela TACO (fora da conta): ${entry.values.unmatchedItems.join(', ')}`}
                                           >
-                                            ❓ {entry.values.unmatchedItems.length} item(ns) fora da conta
+                                            {entry.values.unmatchedItems.length} item(ns) fora da conta
                                           </span>
                                         )}
                                         {entry.values.confidence === 'low' && (

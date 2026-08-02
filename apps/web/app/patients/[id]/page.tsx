@@ -11,6 +11,7 @@ import { startConsultationAction } from '@/lib/consent-actions';
 import { deletePatientAction } from '@/lib/patient-settings-actions';
 import { ConfirmDeleteButton } from '@/components/dashboard/confirm-delete-button';
 import { TelegramLinkPanel } from '@/components/telegram-link-panel';
+import { IconChart, IconPencil } from '@/components/icons';
 
 /** Formata uma data ISO/Date para dd/mm/aaaa (pt-BR), no servidor (estático). */
 function formatDate(value: string | Date): string {
@@ -72,16 +73,16 @@ export default async function PatientPage({
           <form action={deletePatientAction}>
             <input type="hidden" name="patientId" value={patient.id} />
             <ConfirmDeleteButton
-              label="🗑 Excluir"
+              label="Excluir"
               message={`Excluir o paciente ${patient.name}? Ele sai das listagens; o histórico permanece guardado para fins de trilha.`}
               className="rounded-[10px] border border-red-300/60 px-3.5 py-1.5 text-sm text-red-700 transition-colors hover:bg-red-400/10"
             />
           </form>
           <Link
             href={`/patients/${patient.id}/edit`}
-            className="rounded-[10px] border border-ink/15 px-3.5 py-1.5 text-sm text-ink transition-colors hover:bg-surface-muted"
+            className="inline-flex items-center gap-1.5 rounded-[10px] border border-ink/15 px-3.5 py-1.5 text-sm text-ink transition-colors hover:bg-surface-muted"
           >
-            ✏️ Editar cadastro
+            <IconPencil className="h-4 w-4" /> Editar cadastro
           </Link>
           {/* Vai DIRETO à consulta deste paciente (gate de consentimento na própria
               tela da consulta) — sem passar pela tela genérica de nova consulta. */}
@@ -141,7 +142,7 @@ export default async function PatientPage({
             href={`/patients/${patient.id}/dashboard`}
             className="inline-flex items-center gap-2 rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90 xl:px-5 xl:py-2.5 xl:text-base"
           >
-            📊 Dashboard de evolução
+            <IconChart className="h-4 w-4" /> Dashboard de evolução
           </Link>
         </div>
       </section>
@@ -177,10 +178,13 @@ export default async function PatientPage({
       {/* Assistente no Telegram + metas nutricionais (E12/12.4) */}
       <section className="card-premium gold-hairline p-7 xl:p-9">
         <h2 className="font-display text-base font-semibold text-ink xl:text-xl">Assistente no Telegram</h2>
+        {/* Copy alinhada ao bot ATUAL: só alimentação (água/sono saíram em
+            2026-07-24) — foto do prato OU /comi com as quantidades. */}
         <p className="mt-1 text-sm text-ink-muted xl:text-base">
-          Vincule o Telegram do paciente e defina as metas. Ele envia a foto do prato (/agua para
-          água, /dormi e /acordei para o sono) e recebe o progresso frente às metas. O código de
-          vínculo é o consentimento do paciente (revogável a qualquer momento).
+          Vincule o Telegram do paciente e defina as metas. Ele registra a alimentação — foto do
+          prato ou <code className="font-mono-data">/comi 100g de arroz…</code> — e recebe o
+          progresso frente às metas. O código de vínculo é o consentimento do paciente (revogável a
+          qualquer momento).
         </p>
         <div className="mt-4">
           <TelegramLinkPanel patientId={patient.id} active={link?.granted ?? false} />

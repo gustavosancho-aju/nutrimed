@@ -16,7 +16,7 @@ export function PipelineStatusBadge() {
         role="alert"
         className="rounded-md border border-red-400/40 bg-red-500/15 px-3 py-1.5 text-[11px] font-medium text-red-200"
       >
-        🔌 Conexão com o board perdida e não recuperada — verifique a rede e recarregue a página. A
+        Conexão com o board perdida e não recuperada — verifique a rede e recarregue a página. A
         transcrição já capturada está salva.
       </p>
     );

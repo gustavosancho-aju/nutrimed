@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 import { classifyImc, computeGoalGap, imcFromWeight } from '@/lib/dashboard';
+import { IMC_TONE_BG } from '@/lib/imc-colors';
 import { BodyFigure } from './body-figure';
+import { IconRotate } from '@/components/icons';
 
 /**
  * Simulador corporal interativo (modo apresentação): o médico arrasta o peso
@@ -49,7 +51,8 @@ export function BodySimulator({
     <div className="flex flex-col items-center">
       <BodyFigure imc={imc} ghostImc={metaImc ?? undefined} showLandmarks className="h-[340px] w-auto" />
 
-      <p className="mt-3 rounded-full border border-ink/10 bg-surface-muted px-4 py-1.5 text-sm font-semibold text-ink">
+      <p className="mt-3 flex items-center gap-2 rounded-full border border-ink/10 bg-surface-muted px-4 py-1.5 text-sm font-semibold text-ink">
+        <span aria-hidden className={`h-2 w-2 rounded-full ${IMC_TONE_BG[categoria.tone]}`} />
         {categoria.label}
       </p>
 
@@ -78,7 +81,7 @@ export function BodySimulator({
               step={0.5}
               value={peso!}
               onChange={(e) => setPesoSim(Number(e.target.value))}
-              className="mt-1.5 w-full accent-emerald-600"
+              className="slider-premium mt-1.5 w-full"
               aria-label={`Simular peso em quilogramas (atual ${fmt(pesoAtual)} kg)`}
             />
           </label>
@@ -93,9 +96,9 @@ export function BodySimulator({
               <button
                 type="button"
                 onClick={() => setPesoSim(null)}
-                className="mt-1.5 rounded-[8px] border border-ink/15 px-3 py-1 text-[11px] text-ink transition-colors hover:bg-surface-muted"
+                className="mt-1.5 inline-flex items-center gap-1.5 rounded-[8px] border border-ink/15 px-3 py-1 text-[11px] text-ink transition-colors hover:bg-surface-muted"
               >
-                ↺ Voltar ao peso atual
+                <IconRotate className="h-3 w-3" /> Voltar ao peso atual
               </button>
             </div>
           ) : (

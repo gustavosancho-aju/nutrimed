@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useBoardStore } from '@/lib/board-store';
 import { pickRecorderMime } from '@/lib/microphone';
 import type { PipelineStatusReport } from '@/lib/board-runtime';
+import { IconStethoscope } from '@/components/icons';
 
 /**
  * Modo diagnóstico (A5): triagem do pipeline de transcrição em 30s, sem
@@ -70,7 +71,9 @@ export function DiagnosticsPanel({ consultationId }: { consultationId: string })
       onToggle={(event) => setOpen((event.target as HTMLDetailsElement).open)}
     >
       <summary className="cursor-pointer text-sm font-semibold text-ink">
-        🩺 Diagnóstico do pipeline de transcrição
+        <span className="inline-flex items-center gap-2">
+          <IconStethoscope className="h-4 w-4 text-brand" /> Diagnóstico do pipeline de transcrição
+        </span>
       </summary>
       <div className="mt-3">
         {fetchFailed ? (

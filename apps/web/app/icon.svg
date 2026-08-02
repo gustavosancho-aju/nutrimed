@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Favicon NutriMed: monograma serifado dourado sobre preto quente (matiz 40°,
+       o mesmo eixo do ouro — vocabulário do tema Noir; legível também no claro). -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#D6A63C" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#E9C270"/>
+      <stop offset="1" stop-color="#D6A63C" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#120E07"/>
+  <rect x="12" y="9" width="40" height="1.6" rx="0.8" fill="url(#g)"/>
+  <text x="32" y="47" font-family="Georgia, 'Times New Roman', serif" font-size="38" font-weight="600" fill="#D6A63C" text-anchor="middle">N</text>
+  <rect x="12" y="55" width="40" height="1.6" rx="0.8" fill="url(#g)"/>
+</svg>

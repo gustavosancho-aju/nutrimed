@@ -1,5 +1,7 @@
 'use client';
 
+import { IconAlert } from '@/components/icons';
+
 /**
  * Error boundary global do app (Next App Router exige client component).
  * Substitui a tela genérica "This page couldn't load" por uma mensagem
@@ -17,8 +19,8 @@ export default function Error({
   return (
     <main className="mx-auto flex min-h-screen max-w-lg items-center p-8">
       <div className="card-premium gold-hairline w-full p-10 text-center">
-        <p aria-hidden className="text-3xl">
-          ⚠️
+        <p aria-hidden className="flex justify-center text-attn">
+          <IconAlert className="h-10 w-10" />
         </p>
         <h1 className="mt-3 font-display text-xl font-semibold text-ink">
           Não foi possível carregar esta página

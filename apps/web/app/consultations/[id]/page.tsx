@@ -30,6 +30,22 @@ import { ConsultationRecordSection } from '@/components/consultation-record-sect
 import { ConsultationRoom } from '@/components/consultation-room';
 import { TelemetryReport } from '@/components/telemetry-report';
 import { FinalReviewPoller } from '@/components/final-review-poller';
+import {
+  IconClipboard,
+  IconClock,
+  IconExpand,
+  IconFilePen,
+  IconFolder,
+  IconLeaf,
+  IconLock,
+  IconPlay,
+  IconRecord,
+  IconRotate,
+  IconSave,
+  IconSliders,
+  IconStethoscope,
+  IconStop,
+} from '@/components/icons';
 
 const PERSONA_LABEL: Record<string, string> = {
   aurelio: 'Dr. Aurélio Bastos (Nutrologia)',
@@ -103,17 +119,22 @@ export default async function ConsultationPage({
               <span className="ml-2 text-sm font-normal text-white/50">· Consulta</span>
             </h1>
             <span
-              className={`rounded-full border px-3 py-1 text-[11px] font-medium tracking-wide ${
+              className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium tracking-wide ${
                 authorized
                   ? 'border-emerald-300/30 bg-emerald-400/10 text-emerald-200'
                   : 'border-white/20 bg-white/5 text-white/60'
               }`}
             >
-              {authorized ? '🟢 gravação autorizada' : '🔒 gravação bloqueada'}
+              {authorized ? (
+                <IconRecord className="h-3 w-3" />
+              ) : (
+                <IconLock className="h-3 w-3" />
+              )}
+              {authorized ? 'gravação autorizada' : 'gravação bloqueada'}
             </span>
             {isClosed && (
-              <span className="rounded-full border border-white/20 bg-white/5 px-3 py-1 text-[11px] font-medium tracking-wide text-white/70">
-                ⏹ Encerrada
+              <span className="flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-3 py-1 text-[11px] font-medium tracking-wide text-white/70">
+                <IconStop className="h-3 w-3" /> Encerrada
               </span>
             )}
           </div>
@@ -121,16 +142,22 @@ export default async function ConsultationPage({
             {authorized && !isClosed ? (
               <form action={closeConsultationAction}>
                 <input type="hidden" name="consultationId" value={id} />
-                <button type="submit" className="text-xs text-white/70 hover:text-white hover:underline">
-                  ⏹ Encerrar consulta
+                <button
+                  type="submit"
+                  className="flex items-center gap-1 text-xs text-white/70 hover:text-white hover:underline"
+                >
+                  <IconStop className="h-3 w-3" /> Encerrar consulta
                 </button>
               </form>
             ) : null}
             {isClosed ? (
               <form action={reopenConsultationAction}>
                 <input type="hidden" name="consultationId" value={id} />
-                <button type="submit" className="text-xs text-white/70 hover:text-white hover:underline">
-                  ↺ Reabrir consulta
+                <button
+                  type="submit"
+                  className="flex items-center gap-1 text-xs text-white/70 hover:text-white hover:underline"
+                >
+                  <IconRotate className="h-3 w-3" /> Reabrir consulta
                 </button>
               </form>
             ) : null}
@@ -154,8 +181,8 @@ export default async function ConsultationPage({
 
       {!authorized ? (
         <section className="card-premium gold-hairline mx-auto mt-14 max-w-md p-7">
-          <h2 className="font-display text-lg font-semibold text-ink">
-            🔒 Consentimento de gravação
+          <h2 className="flex items-center gap-2 font-display text-lg font-semibold text-ink">
+            <IconLock className="h-5 w-5 text-brand" /> Consentimento de gravação
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-ink-muted">
             Sem consentimento, nenhum áudio é capturado, transmitido ou persistido (FR20/LGPD). O
@@ -176,8 +203,8 @@ export default async function ConsultationPage({
           {isClosed && (
             <section className="card-premium gold-hairline p-6">
               {meta.finalReviewStatus === 'pending' && <FinalReviewPoller />}
-              <h2 className="font-display text-lg font-semibold text-ink">
-                📁 Evolução do prontuário
+              <h2 className="flex items-center gap-2 font-display text-lg font-semibold text-ink">
+                <IconFolder className="h-5 w-5 text-brand" /> Evolução do prontuário
               </h2>
               <p className="mt-1 text-sm text-ink-muted">
                 Consulta em {meta.createdAt.toLocaleString('pt-BR', { dateStyle: 'long', timeStyle: 'short' })}
@@ -193,26 +220,26 @@ export default async function ConsultationPage({
             wsBaseUrl={wsBaseUrl}
             advancedPanel={
               <details className="group">
-                <summary className="cursor-pointer list-none rounded-[10px] border border-white/25 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/10">
-                  ⚙ Painel avançado
+                <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-[10px] border border-white/25 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/10">
+                  <IconSliders className="h-3.5 w-3.5" /> Painel avançado
                 </summary>
                 <div className="absolute right-6 z-20 mt-2 flex flex-col gap-2 rounded-[10px] border border-white/15 bg-surface-deep p-2 shadow-lg">
                   <form action={startDemoBoardAction}>
                     <input type="hidden" name="consultationId" value={id} />
                     <button
                       type="submit"
-                      className="w-full rounded-[10px] bg-white px-3 py-2 text-xs font-semibold text-surface-deep shadow-sm transition-colors hover:bg-white/90"
+                      className="flex w-full items-center justify-center gap-1.5 rounded-[10px] bg-white px-3 py-2 text-xs font-semibold text-surface-deep shadow-sm transition-colors hover:bg-white/90"
                     >
-                      ▶ Consulta simulada
+                      <IconPlay className="h-3.5 w-3.5" /> Consulta simulada
                     </button>
                   </form>
                   <form action={requestSynthesisAction}>
                     <input type="hidden" name="consultationId" value={id} />
                     <button
                       type="submit"
-                      className="w-full rounded-[10px] border border-white/25 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/10"
+                      className="flex w-full items-center justify-center gap-1.5 rounded-[10px] border border-white/25 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/10"
                     >
-                      📋 Síntese
+                      <IconClipboard className="h-3.5 w-3.5" /> Síntese
                     </button>
                   </form>
                 </div>
@@ -226,8 +253,8 @@ export default async function ConsultationPage({
               exames a considerar e condutas a considerar — só na consulta encerrada. */}
           {isClosed && (
             <section aria-label="Parecer do board" className="card-premium mt-6 p-6">
-              <h2 className="font-display text-base font-semibold text-ink">
-                🩺 Parecer do board
+              <h2 className="flex items-center gap-2 font-display text-base font-semibold text-ink">
+                <IconStethoscope className="h-5 w-5 text-brand" /> Parecer do board
               </h2>
               <p className="text-xs text-ink-muted">
                 Cada especialista revisou a consulta inteira e devolveu o parecer abaixo — sugestão,
@@ -235,7 +262,7 @@ export default async function ConsultationPage({
               </p>
               {meta.finalReviewStatus === 'pending' ? (
                 <p className="mt-4 flex items-center gap-2 text-sm text-ink-muted">
-                  <span aria-hidden>⏳</span> Gerando o parecer das 3 personas…
+                  <IconClock className="h-4 w-4" /> Gerando o parecer das 3 personas…
                 </p>
               ) : finalReview.length === 0 ? (
                 <p className="mt-4 rounded-[10px] border border-dashed border-ink/15 p-4 text-sm text-ink-muted">
@@ -284,8 +311,8 @@ export default async function ConsultationPage({
           {hasTranscript && (
             <details className="card-premium mt-6 p-6" open={!isClosed}>
               <summary className={isClosed ? 'cursor-pointer' : 'cursor-default'}>
-                <h2 className="inline font-display text-base font-semibold text-ink">
-                  📝 Transcrição da consulta
+                <h2 className="inline-flex items-center gap-2 font-display text-base font-semibold text-ink">
+                  <IconFilePen className="h-5 w-5 text-brand" /> Transcrição da consulta
                 </h2>
               </summary>
               <p className="mt-1 text-xs text-ink-muted">
@@ -317,9 +344,9 @@ export default async function ConsultationPage({
                   {!isClosed && (
                     <button
                       type="submit"
-                      className="shrink-0 rounded-[10px] bg-brand px-4 py-2 text-xs font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
+                      className="flex shrink-0 items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2 text-xs font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
                     >
-                      💾 Salvar transcrição corrigida
+                      <IconSave className="h-3.5 w-3.5" /> Salvar transcrição corrigida
                     </button>
                   )}
                 </div>
@@ -346,9 +373,9 @@ export default async function ConsultationPage({
                 {note && (
                   <Link
                     href={`/consultations/${id}/note`}
-                    className="rounded-[10px] border border-ink/15 px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-surface-muted"
+                    className="inline-flex items-center gap-1.5 rounded-[10px] border border-ink/15 px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-surface-muted"
                   >
-                    ⛶ Expandir
+                    <IconExpand className="h-3.5 w-3.5" /> Expandir
                   </Link>
                 )}
                 <NoteGeneratorForm consultationId={id} hasNote={Boolean(note)} />
@@ -372,9 +399,9 @@ export default async function ConsultationPage({
                   </p>
                   <button
                     type="submit"
-                    className="rounded-[10px] bg-brand px-4 py-2 text-xs font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
+                    className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2 text-xs font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
                   >
-                    💾 Salvar nota
+                    <IconSave className="h-3.5 w-3.5" /> Salvar nota
                   </button>
                 </div>
               </form>
@@ -401,9 +428,10 @@ export default async function ConsultationPage({
               <div className="flex shrink-0 items-center gap-2">
                 <Link
                   href={`/consultations/${id}/ficha`}
-                  className="rounded-[10px] border border-ink/15 px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-surface-muted"
+                  className="inline-flex items-center gap-1.5 rounded-[10px] border border-ink/15 px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-surface-muted"
                 >
-                  📋 {consultationForm ? 'Abrir ficha' : 'Preencher à mão'}
+                  <IconClipboard className="h-3.5 w-3.5" />{' '}
+                  {consultationForm ? 'Abrir ficha' : 'Preencher à mão'}
                 </Link>
                 <ConsultationFormGenerator
                   consultationId={id}
@@ -431,8 +459,8 @@ export default async function ConsultationPage({
           <section aria-label="Relatório nutricional" className="card-premium mt-6 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="font-display text-base font-semibold text-ink">
-                  🥗 Relatório nutricional
+                <h2 className="flex items-center gap-2 font-display text-base font-semibold text-ink">
+                  <IconLeaf className="h-5 w-5 text-brand" /> Relatório nutricional
                 </h2>
                 <p className="text-xs text-ink-muted">
                   Recordatório extraído da transcrição e quantificado pela tabela TACO
@@ -550,9 +578,9 @@ export default async function ConsultationPage({
                     {!isClosed && (
                       <button
                         type="submit"
-                        className="rounded-[10px] bg-brand px-4 py-2 text-xs font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
+                        className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2 text-xs font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90"
                       >
-                        💾 Salvar relatório
+                        <IconSave className="h-3.5 w-3.5" /> Salvar relatório
                       </button>
                     )}
                   </div>

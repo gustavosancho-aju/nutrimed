@@ -72,7 +72,12 @@ export function TranscriptPanel({ source }: { source: TranscriptSource }) {
   const state = panelState(snapshot);
 
   return (
-    <section aria-label="Transcrição da consulta" className="card-premium flex h-full flex-col">
+    <section
+      aria-label="Transcrição da consulta"
+      // "Documento iluminado" sobre a sala escura: o anel de luz + sombra funda
+      // fazem a folha FLUTUAR na mesa, sem tocar na legibilidade do texto denso.
+      className="card-premium flex h-full flex-col ring-1 ring-white/10 shadow-[0_18px_50px_rgba(0,0,0,0.4)]"
+    >
       <header className="flex items-center justify-between rounded-t-(--radius) border-b border-ink/10 bg-surface-muted/60 px-5 py-3">
         <h2 className="font-display text-base font-semibold text-ink">Transcrição</h2>
         <span

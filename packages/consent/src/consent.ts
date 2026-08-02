@@ -84,6 +84,24 @@ export async function listConsultationsByPatient(
 }
 
 /**
+ * Data da consulta mais recente de CADA paciente, numa única consulta agregada.
+ * A home lista N pacientes — chamar listConsultationsByPatient por linha viraria
+ * N+1 (o mesmo laço que o E15 matou no diário). Paciente sem consulta não
+ * aparece no mapa. Só metadado não sensível (data).
+ */
+export async function latestConsultationByPatients(
+  db: SqlExecutor,
+  patientIds: readonly string[],
+): Promise<Map<string, Date>> {
+  if (patientIds.length === 0) return new Map();
+  const res = await db.query<{ patient_id: string; last_at: Date }>(
+    'SELECT patient_id, MAX(created_at) AS last_at FROM consultation WHERE patient_id = ANY($1) GROUP BY patient_id',
+    [[...patientIds]],
+  );
+  return new Map(res.rows.map((r) => [r.patient_id, new Date(r.last_at)]));
+}
+
+/**
  * Muda o status da consulta e AUDITA a transição (NFR10). Criado no ciclo 2:
  * até então toda consulta ficava 'open' para sempre — 'closed' habilita o modo
  * releitura do registro da consulta.

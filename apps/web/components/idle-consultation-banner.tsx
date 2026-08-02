@@ -45,10 +45,16 @@ export function IdleConsultationBanner() {
     <p
       role="status"
       data-testid="idle-consultation-banner"
-      className="rounded-md border border-amber-300/40 bg-amber-400/15 px-3 py-1.5 text-[11px] font-medium text-amber-200"
+      className="flex items-center gap-1.5 rounded-md border border-amber-300/40 bg-amber-400/15 px-3 py-1.5 text-[11px] font-medium text-amber-200"
     >
-      🔴 Consulta ativa, sem fala há {Math.floor(idleMs / 60_000)} min. Se já terminou, use “⏹ Encerrar
-      consulta” — salvar a nota clínica também encerra a sessão.
+      <span
+        aria-hidden
+        className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-attn-critical motion-reduce:animate-none"
+      />
+      <span>
+        Consulta ativa, sem fala há {Math.floor(idleMs / 60_000)} min. Se já terminou, use
+        “Encerrar consulta” — salvar a nota clínica também encerra a sessão.
+      </span>
     </p>
   );
 }

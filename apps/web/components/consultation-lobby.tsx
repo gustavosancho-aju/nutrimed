@@ -9,6 +9,7 @@ import {
   type MicrophoneStatus,
   type RecorderFactory,
 } from '@/lib/microphone';
+import { IconLock, IconMic, IconRecord } from '@/components/icons';
 
 /**
  * Lobby de consulta (Story 2.2 — frontend-spec §3.1): GATING DUPLO antes de
@@ -94,7 +95,9 @@ export function ConsultationLobby({
         {micStatus === 'checking' ? (
           <p className="text-sm text-ink-muted">Verificando microfone…</p>
         ) : micStatus === 'ok' ? (
-          <p className="text-sm font-medium text-success">🎙️ Microfone pronto.</p>
+          <p className="flex items-center gap-1.5 text-sm font-medium text-success">
+            <IconMic className="h-4 w-4" /> Microfone pronto.
+          </p>
         ) : (
           <div className="space-y-2">
             <p className="text-sm text-attn">
@@ -118,11 +121,16 @@ export function ConsultationLobby({
         {gate === 'checking' ? (
           <p className="text-sm text-ink-muted">Verificando autorização de gravação…</p>
         ) : gate === 'authorized' ? (
-          <p className="text-sm font-medium text-success">🟢 Gravação autorizada pelo servidor.</p>
+          <p className="flex items-center gap-1.5 text-sm font-medium text-success">
+            <IconRecord className="h-4 w-4" /> Gravação autorizada pelo servidor.
+          </p>
         ) : gate === 'blocked' ? (
-          <p className="text-sm text-attn">
-            🔒 Sem consentimento de gravação registrado. Registre o consentimento na página da
-            consulta antes de iniciar.
+          <p className="flex items-start gap-1.5 text-sm text-attn">
+            <IconLock className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              Sem consentimento de gravação registrado. Registre o consentimento na página da
+              consulta antes de iniciar.
+            </span>
           </p>
         ) : (
           <p className="text-sm text-attn-critical">Falha ao consultar a autorização. Recarregue a página.</p>

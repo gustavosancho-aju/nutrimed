@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useBoardStore, feedOrder } from '@/lib/board-store';
 import { SuggestionCard } from './suggestion-card';
+import { IconVolumeOff } from '@/components/icons';
 
 /**
  * `<SuggestionFeed>` (E7 — FR9, frontend-spec §9): feed cronológico INVERSO
@@ -39,10 +40,13 @@ export function SuggestionFeed() {
       {focusMode ? (
         <div
           data-testid="focus-banner"
-          className="rounded-[10px] border border-white/15 bg-white/5 px-3 py-2 text-xs text-white/70"
+          className="glass-dark flex items-center gap-1.5 rounded-[10px] px-3 py-2 text-xs text-white/70"
         >
-          🔇 Modo Foco ativo — só pontos de atenção aparecem.
-          {heldByFocus > 0 ? ` ${heldByFocus} sugestão(ões) aguardando.` : ''}
+          <IconVolumeOff className="h-3.5 w-3.5 shrink-0" />
+          <span>
+            Modo Foco ativo — só pontos de atenção aparecem.
+            {heldByFocus > 0 ? ` ${heldByFocus} sugestão(ões) aguardando.` : ''}
+          </span>
         </div>
       ) : null}
 
@@ -61,7 +65,7 @@ export function SuggestionFeed() {
       </div>
 
       {critical.length === 0 && regular.length === 0 && !focusMode ? (
-        <p className="rounded-[10px] border border-dashed border-white/20 p-4 text-sm text-white/60">
+        <p className="glass-dark rounded-[10px] p-4 text-sm text-white/60">
           Os especialistas estão ouvindo… nada urgente agora.
         </p>
       ) : null}

@@ -45,6 +45,17 @@
      Em fundo claro a sombra faz o trabalho; em fundo escuro, a borda. */
   --hairline-alpha: 0.07;
   --shadow-alpha: 0.05;
+  /* Materialidade premium (rodada 2026-07-31):
+     --edge-alpha  = "light catcher": aresta superior do card pegando luz dourada
+                     (1px). Em fundo escuro é o que faz o card ler como metal.
+     --grain-alpha = grão fino sobre o fundo — só nos temas escuros (sobre o
+                     marfim claro viraria sujeira; sobre preto tira o "plástico").
+     --glow-alpha  = brilho dourado do DADO ATIVO (número-herói, thumb do
+                     slider). Regra: glow raro é assinatura, espalhado é ruído —
+                     e no claro é 0 (halo sobre marfim borra em vez de brilhar). */
+  --edge-alpha: 0.18;
+  --grain-alpha: 0;
+  --glow-alpha: 0;
 }
 
 /* Tema "Autoridade" — escuro, alto contraste (opção do médico/cliente). */
@@ -70,6 +81,9 @@
   --on-brand: 224 30% 8%;
   --hairline-alpha: 0.14;
   --shadow-alpha: 0.5;
+  --edge-alpha: 0.38;
+  --grain-alpha: 0.04;
+  --glow-alpha: 0.32;
 }
 
 /* Tema "UNIC Noir" — ouro sobre preto (referência do cliente 2026-07-28).
@@ -109,6 +123,9 @@
   --on-brand: 40 30% 6%;
   --hairline-alpha: 0.16;
   --shadow-alpha: 0.55;
+  --edge-alpha: 0.5;
+  --grain-alpha: 0.05;
+  --glow-alpha: 0.38;
 }
 
 /* Tema "Clássico clínico" — azul-marinho, sóbrio (opção do médico/cliente). */
@@ -134,6 +151,9 @@
   --on-brand: 0 0% 100%;
   --hairline-alpha: 0.07;
   --shadow-alpha: 0.05;
+  --edge-alpha: 0.14;
+  --grain-alpha: 0;
+  --glow-alpha: 0;
 }
 
 @theme inline {
@@ -185,34 +205,71 @@ body::before {
   background: url('/bg-cells.svg') center / cover no-repeat hsl(var(--surface));
 }
 
-/* No Noir a arte de células (marfim + véus sálvia) não pode aparecer: ela É um
-   fundo claro. Trocada por halos dourados — mesma função de "presença sem
-   competir", vocabulário da referência (luz de metal saindo do canto). */
-:root[data-theme='noir'] body::before {
+/* Nos temas ESCUROS a arte de células (marfim + véus sálvia) não pode aparecer:
+   ela É um fundo claro — no Autoridade ela pintava a página de marfim e o texto
+   claro do header sumia. Trocada por halos do próprio tema — mesma função de
+   "presença sem competir", vocabulário da referência (luz saindo do canto). */
+:root[data-theme='noir'] body::before,
+:root[data-theme='authority'] body::before {
   background:
     radial-gradient(58% 62% at 88% 18%, hsl(var(--accent-gold) / 0.1), transparent 62%),
     radial-gradient(52% 55% at 6% 92%, hsl(var(--brand) / 0.07), transparent 60%),
     hsl(var(--surface));
 }
 
-/* Chrome escuro no Noir: o gradiente padrão puxa verde-oliva (véu sálvia em
-   84°), que sobre preto vira uma mancha esverdeada. Aqui só ouro sobre preto. */
-:root[data-theme='noir'] .surface-deep-gradient {
+/* Chrome escuro no Noir/Autoridade: o gradiente padrão puxa verde-oliva (véu
+   sálvia em 84°), que sobre preto/grafite vira mancha esverdeada. Aqui só a
+   luz do próprio tema (tokens) sobre a superfície profunda. */
+:root[data-theme='noir'] .surface-deep-gradient,
+:root[data-theme='authority'] .surface-deep-gradient {
   background:
     radial-gradient(72% 95% at 84% -28%, hsl(var(--accent-gold) / 0.2), transparent 58%),
     radial-gradient(85% 120% at 12% -20%, hsl(var(--brand) / 0.1), transparent 62%),
     hsl(var(--surface-deep));
 }
 
+/* Grão fino por cima do fundo (temas escuros; --grain-alpha 0 nos claros):
+   é o que separa "preto de tela" de material físico. Ruído estático em SVG
+   inline — nenhuma animação, nenhum request. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: var(--grain-alpha);
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
 /* Materialidade premium: superfície + borda fantasma + sombra dupla
    (profundidade sem peso). Aplicar a todo container de primeiro nível. */
 .card-premium {
+  position: relative;
   background-color: hsl(var(--surface));
   border: 1px solid hsl(var(--text) / var(--hairline-alpha));
   border-radius: var(--radius);
   box-shadow:
     0 1px 2px hsl(0 0% 0% / calc(var(--shadow-alpha) * 0.8)),
     0 8px 24px hsl(0 0% 0% / var(--shadow-alpha));
+}
+
+/* "Light catcher": a aresta SUPERIOR do card pega a luz dourada — o vocabulário
+   de metal da referência, em 1px. Cards que já têm o filete-assinatura
+   (.gold-hairline) ficam de fora, senão o topo ganharia duas linhas. */
+.card-premium:not(.gold-hairline)::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsl(var(--accent-gold) / var(--edge-alpha)),
+    transparent
+  );
 }
 
 /* Filete dourado UNIC — assinatura em divisor de 1px, do centro para fora. */
@@ -308,16 +365,144 @@ body::before {
   animation: board-entry 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+/* Autofill do Chrome/WebKit: sem isto o navegador pinta o input de azul-clarinho
+   e briga com a identidade dourada (visível no login). O box-shadow interno
+   "cobre" a cor imposta pelo UA com a superfície do tema. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px hsl(var(--surface-raised)) inset;
+  -webkit-text-fill-color: hsl(var(--text));
+  caret-color: hsl(var(--text));
+}
+
+/* Ícone nativo do date picker: preto de fábrica — invisível nos temas escuros. */
+input[type='date']::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.65;
+}
+:root[data-theme='noir'] input[type='date']::-webkit-calendar-picker-indicator,
+:root[data-theme='authority'] input[type='date']::-webkit-calendar-picker-indicator {
+  filter: invert(0.85);
+  opacity: 0.8;
+}
+
+/* Slider premium (Simular peso, Apresentação): trilha neutra + polegar com anel
+   dourado. O glow do polegar segue --glow-alpha (só nos temas escuros). */
+.slider-premium {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background: hsl(var(--text) / 0.15);
+}
+/* Anel do polegar em --brand (não --accent-gold): o dourado luminoso fica
+   abaixo de 3:1 sobre marfim (WCAG 1.4.11); o --brand é profundo nos temas
+   claros e luminoso nos escuros — passa nos dois sentidos. */
+.slider-premium::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 18px;
+  width: 18px;
+  border-radius: 50%;
+  background: hsl(var(--surface-raised));
+  border: 2px solid hsl(var(--brand));
+  box-shadow:
+    0 1px 4px hsl(0 0% 0% / 0.35),
+    0 0 14px hsl(var(--accent-gold) / var(--glow-alpha));
+  cursor: grab;
+}
+.slider-premium::-moz-range-thumb {
+  height: 18px;
+  width: 18px;
+  border-radius: 50%;
+  background: hsl(var(--surface-raised));
+  border: 2px solid hsl(var(--brand));
+  box-shadow:
+    0 1px 4px hsl(0 0% 0% / 0.35),
+    0 0 14px hsl(var(--accent-gold) / var(--glow-alpha));
+  cursor: grab;
+}
+.slider-premium:focus-visible {
+  outline: 2px solid hsl(var(--focus-ring));
+  outline-offset: 4px;
+}
+
+/* Glow do número-herói (Apresentação): brilho SÓ no dado ativo, e só nos temas
+   escuros (--glow-alpha 0 no claro — halo sobre marfim borra, não brilha). */
+.hero-glow {
+  text-shadow: 0 0 32px hsl(var(--accent-gold) / var(--glow-alpha));
+}
+
+/* Vidro escuro refinado (chrome da Sala do Board: banners, dropdowns, toasts —
+   NUNCA atrás de texto clínico denso, que continua em documento iluminado). */
+.glass-dark {
+  background: hsl(0 0% 100% / 0.06);
+  border: 1px solid hsl(0 0% 100% / 0.14);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+@supports not (backdrop-filter: blur(14px)) {
+  .glass-dark {
+    background: hsl(var(--surface-deep) / 0.92);
+  }
+}
+
+/* Entrada em cascata (palco da Apresentação): cada bloco define --reveal-i.
+   Cerimônia de entrada é feature SÓ na tela que o médico projeta ao paciente. */
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.reveal {
+  animation: reveal-up 480ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(var(--reveal-i, 0) * 70ms);
+}
+
+/* Tilt sutil ao hover (retratos das personas): profundidade percebida a custo
+   zero — 2°, nunca mais que isso (sala calma do E7). box-shadow entra na lista
+   porque esta regra (sem @layer) vence o utilitário transition-shadow do
+   doctor-strip — sem ela o glow de "sinalizando" trocaria num snap seco. */
+.tilt-hover {
+  transition:
+    transform 350ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 200ms ease;
+}
+.tilt-hover:hover {
+  transform: perspective(900px) rotateX(1.4deg) rotateY(-1.8deg) translateY(-2px);
+}
+
 /* Reduced motion: zero animação, sem perda de informação (§6.4/§9) */
 @media (prefers-reduced-motion: reduce) {
   .board-decay,
   .board-pulse,
   .board-entry,
   .eq-bar,
-  .alert-vignette {
+  .alert-vignette,
+  .reveal {
     animation: none;
   }
   .alert-vignette {
+    display: none;
+  }
+  .tilt-hover,
+  .tilt-hover:hover {
+    transition: none;
+    transform: none;
+  }
+}
+
+/* Impressão (ficha/nota saem pelo diálogo nativo): fundo ambiente e grão nunca
+   vão para o papel — position:fixed repete em TODA página impressa. */
+@media print {
+  body::before,
+  body::after {
     display: none;
   }
 }

@@ -87,7 +87,7 @@ export default async function SecurityPage({
         >
           {ok === 'disabled'
             ? 'Verificação em duas etapas desativada.'
-            : 'Verificação em duas etapas ativada. 🎉'}
+            : 'Verificação em duas etapas ativada.'}
         </p>
       )}
       {erro && (

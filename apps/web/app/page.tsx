@@ -5,9 +5,18 @@ import { logoutAction } from '@/lib/auth-actions';
 import { getDb } from '@/lib/db';
 import { getEncryptionKey } from '@/lib/crypto-key';
 import { listPatients, countPatients, computeAge } from '@nutrimed/patients';
+import { latestConsultationByPatients } from '@nutrimed/consent';
 import { PatientAvatar } from '@/components/patient-avatar';
+import { IconShield } from '@/components/icons';
 
 const PAGE_SIZE = 20;
+
+/** dd/mm/aaaa (pt-BR) da última consulta — fuso do PILOTO, não do servidor:
+    em produção o Node roda em UTC e uma consulta das 21h30 viraria "amanhã". */
+const LAST_CONSULT_FMT = new Intl.DateTimeFormat('pt-BR', {
+  dateStyle: 'short',
+  timeZone: 'America/Sao_Paulo',
+});
 
 /**
  * Home (E11/11.4): lista de pacientes do médico. Cada paciente leva à sua ficha
@@ -34,6 +43,12 @@ export default async function DashboardPage({
     offset: (page - 1) * PAGE_SIZE,
   });
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  // Densidade útil no card: última consulta de cada paciente da página, em UMA
+  // consulta agregada (nunca 1 por linha — lição do E15).
+  const lastConsult = await latestConsultationByPatients(
+    db,
+    patients.map((p) => p.id),
+  );
   const now = new Date();
 
   return (
@@ -46,9 +61,9 @@ export default async function DashboardPage({
         <div className="flex items-center gap-2">
           <Link
             href="/seguranca"
-            className="rounded-[10px] border border-ink/15 px-3.5 py-1.5 text-sm text-ink transition-colors hover:bg-surface-muted"
+            className="inline-flex items-center gap-1.5 rounded-[10px] border border-ink/15 px-3.5 py-1.5 text-sm text-ink transition-colors hover:bg-surface-muted"
           >
-            🔒 Segurança
+            <IconShield className="h-4 w-4" /> Segurança
           </Link>
           <form action={logoutAction}>
             <button
@@ -116,8 +131,20 @@ export default async function DashboardPage({
                       </p>
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-3">
-                    {p.phone && <span className="text-sm text-ink-muted">{p.phone}</span>}
+                  <div className="flex shrink-0 items-center gap-5">
+                    {p.phone && (
+                      <span className="hidden text-sm text-ink-muted md:inline">{p.phone}</span>
+                    )}
+                    <div className="text-right">
+                      <p className="text-[10px] uppercase tracking-wide text-ink-muted">
+                        Última consulta
+                      </p>
+                      <p className="mt-0.5 text-sm font-medium text-ink">
+                        {lastConsult.has(p.id)
+                          ? LAST_CONSULT_FMT.format(lastConsult.get(p.id)!)
+                          : '—'}
+                      </p>
+                    </div>
                     <span aria-hidden className="text-ink-muted">→</span>
                   </div>
                 </Link>
