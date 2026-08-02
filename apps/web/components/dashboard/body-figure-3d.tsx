@@ -1,180 +1,165 @@
 'use client';
 
-import { useMemo, useRef } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import {
+  BufferGeometry,
   CanvasTexture,
+  Float32BufferAttribute,
   Group,
   MathUtils,
-  Quaternion,
-  Vector2,
-  Vector3,
+  Uint32BufferAttribute,
 } from 'three';
-import { bodyDims, torsoProfile, bodyRings, BODY_VIEW_H } from '@/lib/body-profile';
+import type { BodySex } from '@/lib/body-profile';
+import {
+  applyMorphs,
+  loadBodyMesh,
+  morphWeights,
+  type BodyMeshData,
+} from '@/lib/body-mesh';
 
 /**
- * Manequim corporal 3D (Modo Apresentação — o "momento CarePod"): estátua de
- * alfaiate PARAMÉTRICA, girando devagar sob luz de estúdio com rim dourado.
- * Deliberadamente ABSTRATO (manequim, não humano realista): a referência
- * premium abstrai o corpo (Superpower) e o realismo aqui só compraria uncanny
- * valley. A morfologia vem da MESMA matemática da silhueta 2D
- * (lib/body-profile) — o slider morfa as duas representações igual.
+ * Corpo humano 3D do Modo Apresentação (o "momento CarePod").
  *
- * A meta (quando existe) é um ANEL verde na cintura, concêntrico ao anel
- * dourado da cintura atual — "onde você está vs onde vamos chegar" (a casca
- * de corpo inteiro foi tentada e abandonada: a meta menor ficava ocluída
- * DENTRO da estátua).
+ * O mesh é escultura de artista do MakeHuman (CC0, set/2020) compilada em
+ * `public/models/body.bin`; a deformação por IMC usa os targets de
+ * circunferência do próprio MakeHuman (cintura, quadril, coxa, braço, busto)
+ * combinados na proporção clínica da adiposidade — ver
+ * `scripts/build-body-mesh.mjs`. Substituiu o manequim procedural de
+ * primitivas, que nunca passaria de "boneco".
  *
- * Sem interação de câmera (palco, não brinquedo). `animate=false`
- * (prefers-reduced-motion / fora do viewport) desliga o giro e renderiza sob
- * demanda. Nunca importar fora de next/dynamic — three só entra no chunk da
- * Apresentação.
+ * Sem interação de câmera (palco, não brinquedo) — a rotação é do médico, via
+ * arrasto/teclado no Stage. `animate=false` (reduced-motion / fora do
+ * viewport) desliga o giro e renderiza sob demanda. Nunca importar fora de
+ * next/dynamic — three + mesh só entram no chunk da Apresentação.
  */
 
+/** Altura do corpo no espaço do palco (o build normaliza para isto). */
+const BODY_H = 430;
 const CENTER_Y = 215;
-/** O corte do corpo humano é elíptico, não circular — achatamento frente/trás. */
-const DEPTH_SCALE = 0.72;
 
-/** Corpo completo (cabeça + tronco lathe + membros) num material só. */
-function Mannequin({ imc, color }: { imc: number; color: string }) {
-  const d = bodyDims(imc);
-  const lathePoints = useMemo(
-    () => torsoProfile(imc).map((p) => new Vector2(p.radius, p.y)),
-    [imc],
-  );
-  const latheSegments = 40;
-
-  const armXTop = d.shoulder + d.armW * 0.4;
-  const armXBottom = d.shoulder + 14 + 6 * d.t;
-  const Y = (ySvg: number) => BODY_VIEW_H - ySvg;
-
-  const material = <meshStandardMaterial color={color} roughness={0.38} metalness={0.18} />;
-
-  const limbs: { from: [number, number, number]; to: [number, number, number]; r: number }[] = [
-    // braços (úmero + antebraço) — mesmos traços do SVG
-    { from: [-armXTop, Y(104), 0], to: [-armXBottom, Y(176), 0], r: d.armW },
-    { from: [-armXBottom, Y(172), 0], to: [-armXBottom - 3, Y(244), 0], r: d.armW * 0.8 },
-    { from: [armXTop, Y(104), 0], to: [armXBottom, Y(176), 0], r: d.armW },
-    { from: [armXBottom, Y(172), 0], to: [armXBottom + 3, Y(244), 0], r: d.armW * 0.8 },
-    // pernas (coxa + panturrilha)
-    { from: [-d.hip / 2 - 4, Y(240), 0], to: [-19, Y(324), 0], r: d.thighW },
-    { from: [-19, Y(318), 0], to: [-17, Y(402), 0], r: d.calfW },
-    { from: [d.hip / 2 + 4, Y(240), 0], to: [19, Y(324), 0], r: d.thighW },
-    { from: [19, Y(318), 0], to: [17, Y(402), 0], r: d.calfW },
-  ];
-
-  return (
-    <group>
-      {/* achatamento frente/trás do TRONCO; membros ficam redondos */}
-      <group scale={[1, 1, DEPTH_SCALE]}>
-        <mesh>
-          <latheGeometry args={[lathePoints, latheSegments]} />
-          {material}
-        </mesh>
-      </group>
-      <mesh position={[0, Y(40), 0]}>
-        <sphereGeometry args={[24, 28, 20]} />
-        {material}
-      </mesh>
-      <mesh position={[0, Y(68), 0]}>
-        <cylinderGeometry args={[9, 10.5, 20, 16]} />
-        {material}
-      </mesh>
-      <group>
-        {limbs.map((l, i) => (
-          <group key={i}>
-            {/* Limb compartilha o material via clone estrutural: cada mesh
-                declara o próprio material — mantido simples e declarativo */}
-            <mesh
-              position={new Vector3(...l.from).add(new Vector3(...l.to)).multiplyScalar(0.5)}
-              quaternion={new Quaternion().setFromUnitVectors(
-                new Vector3(0, 1, 0),
-                new Vector3(...l.to).sub(new Vector3(...l.from)).normalize(),
-              )}
-            >
-              <capsuleGeometry
-                args={[
-                  l.r,
-                  Math.max(
-                    1,
-                    new Vector3(...l.to).distanceTo(new Vector3(...l.from)) - l.r * 0.8,
-                  ),
-                  6,
-                  14,
-                ]}
-              />
-              {material}
-            </mesh>
-          </group>
-        ))}
-      </group>
-    </group>
-  );
-}
-
-/** Anéis de escaneamento (tórax/cintura/quadril) — vocabulário FUI, dourado. */
-function ScanRings({ imc, gold }: { imc: number; gold: string }) {
-  const rings = bodyRings(imc);
-  return (
-    <group>
-      {rings.map((r) => (
-        <mesh key={r.label} position={[0, r.y, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[1, DEPTH_SCALE, 1]}>
-          <torusGeometry args={[r.radius + 11, 1.8, 8, 64]} />
-          <meshBasicMaterial color={gold} transparent opacity={0.9} />
-        </mesh>
-      ))}
-    </group>
-  );
-}
+/** Níveis anatômicos em fração da altura (medidos no mesh do MakeHuman). */
+const LEVELS = { chest: 0.72, waist: 0.62, hip: 0.52 } as const;
 
 /**
- * A META como anel VERDE na cintura — concêntrico ao anel dourado da cintura
- * atual: "onde você está (ouro) vs onde vamos chegar (verde)", sem a oclusão
- * que uma casca-corpo inteira sofria (a meta menor ficava DENTRO da estátua).
- * Cintura porque é O marcador clínico (circunferência abdominal).
+ * Meia-largura (X) do TRONCO num nível — abraça o mesh real.
+ *
+ * O corpo está em A-pose: no tórax e na cintura os braços aparecem na mesma
+ * faixa de Y, e o simples máximo devolveria a distância até o braço (anel
+ * gigante atravessando a figura). Como existe um VÃO entre tronco e braço,
+ * ordena-se |x| e corta-se no primeiro salto relevante — o que sobra é o
+ * tronco.
  */
-function MetaRing({ metaImc }: { metaImc: number }) {
-  const waist = bodyRings(metaImc)[1]!;
+function radiusAt(positions: Float32Array, frac: number): number {
+  const y = frac * BODY_H;
+  const band = BODY_H * 0.012;
+  const xs: number[] = [];
+  for (let i = 0; i < positions.length; i += 3) {
+    if (Math.abs(positions[i + 1]! - y) > band) continue;
+    xs.push(Math.abs(positions[i]!));
+  }
+  if (xs.length === 0) return 30;
+  // Percentil (não o máximo): o corpo está em A-pose e, no tórax/cintura, os
+  // braços ocupam a mesma faixa de Y — o máximo devolveria a distância até a
+  // mão e o anel viraria um bambolê. O tronco domina a contagem de vértices,
+  // então o p80 cai na borda dele.
+  xs.sort((a, b) => a - b);
+  return xs[Math.floor(xs.length * 0.8)]!;
+}
+
+/** Corpo deformado para o IMC/sexo atuais. */
+function Body({
+  mesh,
+  imc,
+  sex,
+  color,
+  onHipRadius,
+}: {
+  mesh: BodyMeshData;
+  imc: number;
+  sex: BodySex;
+  color: string;
+  /**
+   * Meia-largura do quadril já MEDIDA (número, não o buffer): reportar o
+   * Float32Array reusado não mudava a identidade, o setState do pai virava
+   * no-op e a sombra congelava no primeiro peso — além de forçar um novo
+   * varrimento dos 13k vértices a cada render do pai.
+   */
+  onHipRadius: (r: number) => void;
+}) {
+  const invalidate = useThree((s) => s.invalidate);
+
+  const geometry = useMemo(() => {
+    const g = new BufferGeometry();
+    g.setAttribute('position', new Float32BufferAttribute(new Float32Array(mesh.positions.length), 3));
+    g.setIndex(new Uint32BufferAttribute(mesh.indices, 1));
+    return g;
+  }, [mesh]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+
+  // Deformação: reusa o buffer do atributo (sem alocar a cada movimento do
+  // slider) e recomputa as normais para a luz acompanhar a nova superfície.
+  // `invalidate()` é obrigatório: a escrita acontece DEPOIS do frame, e com o
+  // giro pausado (frameloop 'demand') nada agendaria o próximo — o corpo
+  // ficava congelado no peso anterior.
+  useEffect(() => {
+    const attr = geometry.getAttribute('position') as Float32BufferAttribute;
+    const arr = attr.array as Float32Array;
+    applyMorphs(mesh, morphWeights(imc, sex), arr);
+    attr.needsUpdate = true;
+    geometry.computeVertexNormals();
+    geometry.computeBoundingSphere();
+    onHipRadius(radiusAt(arr, LEVELS.hip));
+    invalidate();
+  }, [geometry, mesh, imc, sex, onHipRadius, invalidate]);
+
   return (
-    <mesh position={[0, waist.y, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[1, DEPTH_SCALE, 1]}>
-      <torusGeometry args={[waist.radius + 11, 1.3, 8, 64]} />
-      {/* verde PROFUNDO (#059669), como o traço da meta no SVG: o #10b981
-          claro reprova contraste não-textual sobre o marfim dos temas claros
-          nas laterais em que o anel ultrapassa a estátua */}
-      <meshBasicMaterial color="#059669" transparent opacity={0.9} depthTest={false} />
+    <mesh geometry={geometry} position={[0, 0, 0]}>
+      {/* mármore, não plástico: roughness alta e zero metalness */}
+      <meshStandardMaterial color={color} roughness={0.72} metalness={0} />
     </mesh>
   );
 }
 
-/** Sombra de contato fake: gradiente radial num plano — barata e suficiente. */
-function GroundShadow({ imc }: { imc: number }) {
+/*
+ * Os 3 anéis dourados de "escaneamento" (tórax/cintura/quadril) foram
+ * REMOVIDOS quando o boneco procedural deu lugar ao corpo humano real: sobre
+ * uma figura abstrata eles davam vocabulário de scan; sobre um corpo eles
+ * atravessam a anatomia como bambolês e roubam a leitura. O único anel que
+ * sobrevive é o VERDE da meta — informação clínica, não decoração.
+ */
+
+/*
+ * A meta também deixou de ser um ANEL. Com o corpo real, a comparação forte
+ * não é um aro na cintura — é o PRÓPRIO CORPO na meta: o simulador ganhou o
+ * botão "Ver na meta", que leva o peso (e a anatomia inteira) até o alvo.
+ * Um anel a mais só atravessaria a figura.
+ */
+
+/** Sombra de contato: gradiente radial num plano — barata e suficiente. */
+function GroundShadow({ scale }: { scale: number }) {
   const texture = useMemo(() => {
     const c = document.createElement('canvas');
     c.width = 128;
     c.height = 128;
     const ctx = c.getContext('2d')!;
     const grad = ctx.createRadialGradient(64, 64, 8, 64, 64, 64);
-    grad.addColorStop(0, 'rgba(0,0,0,0.34)');
+    grad.addColorStop(0, 'rgba(0,0,0,0.4)');
     grad.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 128, 128);
     return new CanvasTexture(c);
   }, []);
-  const { t } = bodyDims(imc);
+  useEffect(() => () => texture.dispose(), [texture]);
   return (
-    <mesh position={[0, 16, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-      <planeGeometry args={[150 + 34 * t, 110 + 24 * t]} />
+    <mesh position={[0, 1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <planeGeometry args={[130 * scale, 95 * scale]} />
       <meshBasicMaterial map={texture} transparent depthWrite={false} />
     </mesh>
   );
 }
 
-/**
- * Giro do palco: automático lento (24s/volta) enquanto `spin`, SOMADO ao
- * ângulo manual do médico (arrasto/teclado, controlado pelo Stage). O manual
- * chega como número simples — cada mudança re-renderiza e, em frameloop
- * demand, o próprio re-render agenda o frame (sem invalidate explícito).
- */
+/** Giro automático (24s/volta) somado ao ângulo manual do médico. */
 function Turntable({
   spin,
   manualAngle,
@@ -185,7 +170,7 @@ function Turntable({
   children: React.ReactNode;
 }) {
   const ref = useRef<Group>(null);
-  const autoAngle = useRef(MathUtils.degToRad(-14)); // partida mostrando volume
+  const autoAngle = useRef(MathUtils.degToRad(-16));
   useFrame((_, delta) => {
     if (spin) autoAngle.current += delta * (Math.PI / 12);
     if (ref.current) ref.current.rotation.y = autoAngle.current + manualAngle;
@@ -197,9 +182,55 @@ function Turntable({
   );
 }
 
+/** Cena: carrega o corpo e monta o palco. */
+function Stage({
+  imc,
+  sex,
+  bodyColor,
+  animate,
+  manualAngle,
+  onReady,
+}: {
+  imc: number;
+  sex: BodySex;
+  bodyColor: string;
+  animate: boolean;
+  manualAngle: number;
+  onReady?: () => void;
+}) {
+  const [mesh, setMesh] = useState<BodyMeshData | null>(null);
+  const [hipRadius, setHipRadius] = useState<number | null>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    loadBodyMesh()
+      .then((m) => {
+        if (vivo) setMesh(m);
+      })
+      .catch((e) => console.error('[corpo 3D] falha ao carregar o mesh:', e));
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  // "pronto" só quando o corpo está na tela — até lá o Stage segura o SVG
+  useEffect(() => {
+    if (hipRadius !== null) onReady?.();
+  }, [hipRadius, onReady]);
+
+  if (!mesh) return null;
+
+  return (
+    <Turntable spin={animate} manualAngle={manualAngle}>
+      <Body mesh={mesh} imc={imc} sex={sex} color={bodyColor} onHipRadius={setHipRadius} />
+      <GroundShadow scale={(hipRadius ?? 30) / 30} />
+    </Turntable>
+  );
+}
+
 export function BodyFigure3D({
   imc,
-  metaImc,
+  sex = 'neutro',
   bodyColor,
   goldColor,
   animate,
@@ -208,9 +239,9 @@ export function BodyFigure3D({
   onContextLost,
 }: {
   imc: number;
-  /** IMC da meta — vira o anel verde na cintura do manequim. */
-  metaImc?: number;
-  /** Cor da estátua (tinta do tema, lida dos tokens pelo Stage). */
+  /** Corpo do manequim — opção do médico no palco. */
+  sex?: BodySex;
+  /** Cor do corpo (tinta do tema, lida dos tokens pelo Stage do app). */
   bodyColor: string;
   /** Dourado do tema para os anéis de escaneamento. */
   goldColor: string;
@@ -218,7 +249,7 @@ export function BodyFigure3D({
   animate: boolean;
   /** Ângulo manual (rad) somado ao giro — o arrasto/teclado do médico. */
   manualAngle?: number;
-  /** Renderer pronto — o Stage solta o SVG que segurava o palco. */
+  /** Corpo visível — o Stage solta o SVG que segurava o palco. */
   onReady?: () => void;
   /** Contexto WebGL perdido (TDR/projetor) — o Stage degrada para o SVG. */
   onContextLost?: () => void;
@@ -228,26 +259,26 @@ export function BodyFigure3D({
       dpr={[1, 2]}
       frameloop={animate ? 'always' : 'demand'}
       gl={{ alpha: true, antialias: true }}
-      // frustum calculado para caber o corpo INTEIRO (0..430 + margem): meia
-      // altura tan(17°)·~730 ≈ 223 — cabeça (414) e sombra (16) dentro do quadro
-      camera={{ position: [0, 250, 730], fov: 34, near: 10, far: 2000 }}
+      // frustum que cabe o corpo inteiro (0..430) com folga
+      camera={{ position: [0, 250, 720], fov: 34, near: 10, far: 2000 }}
       onCreated={({ camera, gl }) => {
         camera.lookAt(0, CENTER_Y, 0);
         gl.domElement.addEventListener('webglcontextlost', () => onContextLost?.());
-        onReady?.();
       }}
     >
-      {/* estúdio: luz ambiente + key fria suave + RIM DOURADO por trás — o
-          mesmo "light catcher" dos cards, agora como luz de verdade */}
-      <ambientLight intensity={0.55} />
-      <directionalLight position={[220, 420, 340]} intensity={1.15} />
-      <directionalLight position={[-260, 320, -380]} color={goldColor} intensity={2.4} />
-      <Turntable spin={animate} manualAngle={manualAngle}>
-        <Mannequin imc={imc} color={bodyColor} />
-        {metaImc !== undefined && <MetaRing metaImc={metaImc} />}
-        <ScanRings imc={imc} gold={goldColor} />
-        <GroundShadow imc={imc} />
-      </Turntable>
+      {/* estúdio: ambiente + key frontal + RIM DOURADO por trás (o mesmo
+          "light catcher" dos cards, agora como luz de verdade) */}
+      <ambientLight intensity={0.6} />
+      <directionalLight position={[180, 380, 420]} intensity={1.25} />
+      <directionalLight position={[-260, 300, -360]} color={goldColor} intensity={2.6} />
+      <Stage
+        imc={imc}
+        sex={sex}
+        bodyColor={bodyColor}
+        animate={animate}
+        manualAngle={manualAngle}
+        onReady={onReady}
+      />
     </Canvas>
   );
 }

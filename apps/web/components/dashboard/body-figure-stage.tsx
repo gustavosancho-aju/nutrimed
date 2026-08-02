@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { classifyImc } from '@/lib/dashboard';
 import { IMC_TONE_HEX } from '@/lib/imc-colors';
+import type { BodySex } from '@/lib/body-profile';
 import { BodyFigure } from './body-figure';
 import { IconRotate } from '@/components/icons';
 
@@ -30,10 +31,13 @@ function readToken(name: string, fallback: string): string {
 
 export function BodyFigureStage({
   imc,
+  sex = 'neutro',
   ghostImc,
   className = '',
 }: {
   imc: number;
+  /** Corpo do manequim (Neutro/Feminino/Masculino) — escolha do médico no palco. */
+  sex?: BodySex;
   /** IMC da meta — contorno tracejado no SVG, anel de cintura no manequim 3D. */
   ghostImc?: number;
   /** Dimensões do palco (aplicadas ao container das DUAS representações). */
@@ -97,7 +101,7 @@ export function BodyFigureStage({
   }, [webgl]);
 
   if (!webgl || !colors) {
-    return <BodyFigure imc={imc} ghostImc={ghostImc} showLandmarks className={className} />;
+    return <BodyFigure imc={imc} sex={sex} ghostImc={ghostImc} showLandmarks className={className} />;
   }
 
   // Aura da categoria atrás do manequim — o mesmo vocabulário informativo da
@@ -115,7 +119,7 @@ export function BodyFigureStage({
             ? `; anel verde na cintura = circunferência na meta (IMC ${ghostImc.toFixed(1)})`
             : ''
         }. Arraste ou use as setas para girar.`}
-        className={`relative cursor-grab select-none active:cursor-grabbing ${className}`}
+        className={`relative cursor-grab select-none rounded-[var(--radius)] active:cursor-grabbing ${className}`}
         style={{
           background: `radial-gradient(48% 42% at 50% 46%, ${aura}2b, transparent 72%)`,
           // arrasto horizontal gira; o vertical continua rolando a página
@@ -147,6 +151,7 @@ export function BodyFigureStage({
         {!ready && (
           <BodyFigure
             imc={imc}
+            sex={sex}
             ghostImc={ghostImc}
             className="absolute inset-0 h-full w-full"
           />
@@ -154,7 +159,7 @@ export function BodyFigureStage({
         <div className={ready ? 'h-full w-full' : 'invisible absolute inset-0'}>
           <BodyFigure3D
             imc={imc}
-            metaImc={ghostImc}
+            sex={sex}
             bodyColor={colors.body}
             goldColor={colors.gold}
             animate={visible && !reduced && autoSpin}
@@ -168,9 +173,7 @@ export function BodyFigureStage({
           entrega como microlegenda — anel sem nome não informa */}
       {ready && (
         <div className="mt-1.5 flex items-center justify-center gap-2.5">
-          <p className="text-[10px] text-ink-muted">
-            Arraste para girar · anéis: tórax, cintura e quadril
-          </p>
+          <p className="text-[10px] text-ink-muted">Arraste para girar o corpo</p>
           <button
             type="button"
             aria-pressed={autoSpin}
