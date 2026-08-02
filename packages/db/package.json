@@ -17,10 +17,10 @@
   },
   "dependencies": {
     "@nutrimed/crypto": "workspace:*",
-    "pg": "^8.21.0"
+    "pg": "^8.22.0"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.0",
+    "@electric-sql/pglite": "^0.5.4",
     "@types/node": "^22.0.0",
     "@types/pg": "^8.20.0",
     "typescript": "^5.6.0"
