@@ -10,7 +10,7 @@ deploy e roadmap — a referência única do estado atual).
 **📋 Registro histórico do MVP (E1–E10): [`docs/IMPLEMENTATION-RECORD.md`](docs/IMPLEMENTATION-RECORD.md)**
 (rastreabilidade FR/NFR/ADR e evidências ao vivo do snapshot de 2026-06-11).
 
-## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-07-31, main @ fa37e7a, Fly v58 — Ficha de Consulta)
+## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (prod = Fly v58 @ fa37e7a; main @ 5f2c9f4 com Rodada Premium + Corpo 3D mergeados, AINDA NÃO deployados)
 
 **9 de 10 épicos com núcleo implementado e verificado ao vivo** (falta E8 — vídeos).
 **E11 (Pacientes & Dashboard) COMPLETO** (4 fases + extras: faixa ideal/meta nos gráficos e
@@ -135,7 +135,7 @@ apareceu 3× nesta sessão, nos 3 lugares corrigido.
 **Painel e ficha só de alimentação (2026-07-28):** saíram os cartões de Água e Sono, as 2 colunas do
 relatório diário e as metas `waterMl`/`sleepMinHours`/`sleepMaxHours` da ficha. Schema, serviços,
 campos opcionais no tipo e dados coletados FICARAM (metas antigas seguem no blob cifrado).
-Suíte: **800 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
+Suíte: **809 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
 CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) **verde de novo desde
 2026-07-30** — ficou VERMELHO de 22 a 30/07 (~20 commits) sem ninguém notar, e ninguém notou
 porque esta linha dizia "verde": o job de código sempre passou, quem reprovava era o
@@ -245,6 +245,46 @@ palpitação foi para observações) nem marcou "sono ruim" porque o médico só
 o sono. O silêncio virou branco, como o prompt manda. Identificação e antropometria vieram do banco
 no mesmo passo (nome, idade 41, peso 90 kg, IMC 28,8; altura em branco porque o cadastro não tem).
 Falta screenshot (a pane do navegador não compôs frames em nenhuma das sessões).
+
+**Rodada Visual Premium (2026-08-01, PR #15 MERGEADO na main — aguarda deploy).** Nasceu da
+crítica de design com referências pesquisadas (WHOOP/Oura/Superpower + FUI Territory/Westworld);
+princípio-guia: **3D no palco (Apresentação), nunca no cockpit (telas de trabalho)**; glow raro é
+assinatura, espalhado é ruído. (1) **27 ícones stroke próprios** (`components/icons.tsx`, zero
+dependência) substituíram os emojis de AÇÃO em todo o app — o vocabulário semântico do board
+(⚠️💡🔍📋/📌) ficou de propósito: é hierarquia de segurança testada. (2) Tokens de materialidade
+`--edge-alpha`/`--grain-alpha`/`--glow-alpha` por tema: light-catcher dourado na aresta dos cards,
+grão fino SÓ nos temas escuros (0 no claro e na impressão — há `@media print` agora), glow apenas
+no dado ativo (halo no último ponto do TrendChart, número-herói). (3) Palco da Apresentação:
+**ImcGauge radial** (arco OMS + agulha + CountUp; `imc-scale.tsx` linear removida), **BodyFigure
+v2 "estátua"** (tinta do tema + aura da categoria — corpo inteiro vermelho lia como ACUSAÇÃO,
+régua do E15), cascata `.reveal`, slider premium, tilt 2° nos retratos. (4) Favicon
+(`app/icon.svg`), autofill sem azul, home com "última consulta" (query agregada
+`latestConsultationByPatients` no `@nutrimed/consent` — 1 consulta por página, lição E15), copy do
+Telegram corrigida (só alimentação), MetricCard vazio compacto, fonte única `lib/imc-colors.ts`.
+**Bug pré-existente corrigido de carona:** o tema Autoridade herdava o fundo CLARO de células
+(só o Noir tinha override) — a página clareava e o título sumia; os 2 temas escuros agora usam
+halos dos próprios tokens. Review adversarial (14 achados → 12 corrigidos) + CodeRabbit (3/3).
+Dívida consciente: emojis do painel interno de telemetria.
+
+**Corpo 3D no Modo Apresentação (2026-08-02, PR #16 MERGEADO na main — aguarda deploy).**
+Manequim corporal 3D **PROCEDURAL** (three + @react-three/fiber v9, chunk lazy SÓ da
+Apresentação): estátua de alfaiate girando sob rim light dourado — deliberadamente ABSTRATA
+(manequim, não humano realista: realismo compraria uncanny valley e exigiria asset/licença).
+Morfologia da MESMA matemática da silhueta 2D (`lib/body-profile.ts`, fonte única com testes —
+o slider "Simular peso" morfa SVG e 3D identicamente, em tempo real). A meta é um **anel VERDE
+na cintura** concêntrico ao anel dourado da cintura atual — a casca wireframe de corpo inteiro
+foi tentada e ABANDONADA (meta menor fica ocluída DENTRO da estátua; não reintroduzir). Anéis
+dourados de escaneamento (tórax/cintura/quadril, com microlegenda). **Contrato de degradação**
+(`body-figure-stage.tsx`): a silhueta SVG é a linha de base em TODO cenário sem 3D pronto —
+SSR/sem JS, sem WebGL2 (**three ≥ r163 é WebGL2-ONLY; nunca sondar 'webgl'1**, e liberar o
+contexto do probe com `WEBGL_lose_context`), chunk baixando (o SVG segura o palco até o 1º
+frame), contexto perdido em uso (TDR/projetor ⇒ volta ao SVG), reduced-motion AO VIVO (listener
+de change) e fora do viewport (IntersectionObserver ⇒ frameloop demand). **Médico no controle:**
+arrastar (só rotação horizontal; touch preserva scroll com `pan-y`) ou setas do teclado gira o
+corpo e PAUSA o giro automático — retomar sozinho seria tirar o controle; botão "Retomar giro"
+religa. Review adversarial: 13 achados, 11 confirmados, TODOS corrigidos. Suíte foi a **809
+testes**. **Lição operacional:** `next build` e `next dev` alternados corrompem o `.next`
+(404 em TODAS as rotas com servidor vivo) — `rm -rf apps/web/.next` ao alternar resolve.
 
 **Tema escuro "UNIC Noir" (2026-07-28)** — 4º tema em `/seguranca` (claro `unic` segue o default e
 NÃO mudou): ouro sobre preto QUENTE (matiz 40°, mesmo eixo do dourado — em grafite azulado o ouro
