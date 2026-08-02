@@ -1,5 +1,6 @@
 import { classifyImc } from '@/lib/dashboard';
 import { IMC_TONE_HEX } from '@/lib/imc-colors';
+import { bodyDims } from '@/lib/body-profile';
 
 /**
  * Figura corporal paramétrica (modo apresentação). Silhueta humana em SVG cuja
@@ -23,25 +24,10 @@ import { IMC_TONE_HEX } from '@/lib/imc-colors';
  * textual no componente pai.
  */
 
-const r1 = (n: number) => Math.round(n * 10) / 10;
 const cx = 100; // eixo central do viewBox
 
-/** Meias-larguras (px do viewBox) derivadas do IMC — cintura/quadril crescem mais. */
-function bodyDims(imc: number) {
-  // Desvio normalizado vs. o centro da faixa saudável (IMC 22):
-  // t=0 → silhueta base · t=1 → IMC 40 · negativo → abaixo do peso.
-  const t = Math.min(1.2, Math.max(-0.35, (imc - 22) / 18));
-  return {
-    t,
-    shoulder: r1(34 * (1 + 0.15 * t)),
-    chest: r1(30 * (1 + 0.35 * t)),
-    waist: r1(24 * (1 + 0.85 * t)),
-    hip: r1(30 * (1 + 0.6 * t)),
-    armW: r1(9 * (1 + 0.45 * t)),
-    thighW: r1(13 * (1 + 0.55 * t)),
-    calfW: r1(8.5 * (1 + 0.35 * t)),
-  };
-}
+// A matemática das larguras (bodyDims) vive em lib/body-profile — fonte única
+// compartilhada com o manequim 3D: o slider morfa as duas representações igual.
 
 /** Contorno do tronco (simétrico, curvas suaves): pescoço → ombro → tórax → cintura → quadril. */
 function torsoPath({ shoulder, chest, waist, hip }: ReturnType<typeof bodyDims>): string {

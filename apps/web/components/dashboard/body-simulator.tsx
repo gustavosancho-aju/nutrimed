@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { classifyImc, computeGoalGap, imcFromWeight } from '@/lib/dashboard';
 import { IMC_TONE_BG } from '@/lib/imc-colors';
-import { BodyFigure } from './body-figure';
+import { BodyFigureStage } from './body-figure-stage';
 import { IconRotate } from '@/components/icons';
 
 /**
@@ -49,7 +49,8 @@ export function BodySimulator({
 
   return (
     <div className="flex flex-col items-center">
-      <BodyFigure imc={imc} ghostImc={metaImc ?? undefined} showLandmarks className="h-[340px] w-auto" />
+      {/* Palco: manequim 3D quando há WebGL; silhueta SVG como linha de base */}
+      <BodyFigureStage imc={imc} ghostImc={metaImc ?? undefined} className="h-[340px] w-[250px]" />
 
       <p className="mt-3 flex items-center gap-2 rounded-full border border-ink/10 bg-surface-muted px-4 py-1.5 text-sm font-semibold text-ink">
         <span aria-hidden className={`h-2 w-2 rounded-full ${IMC_TONE_BG[categoria.tone]}`} />
@@ -57,9 +58,11 @@ export function BodySimulator({
       </p>
 
       {metaImc !== null && (
+        // texto neutro aos DOIS modos do palco: contorno tracejado na silhueta
+        // SVG, anel de cintura no manequim 3D — verde é a meta nos dois.
         <p className="mt-2 flex items-center gap-1.5 text-[11px] text-ink-muted">
-          <span aria-hidden className="inline-block h-0 w-4 border-t-2 border-dashed border-emerald-600/80" />
-          Contorno = silhueta na meta ({fmt(metaPeso!)} kg
+          <span aria-hidden className="inline-block h-2 w-2 rounded-full bg-emerald-600" />
+          Em verde, a meta ({fmt(metaPeso!)} kg
           {metaDefinidaPeloMedico ? ', definida pelo médico' : ', referência OMS'})
         </p>
       )}
