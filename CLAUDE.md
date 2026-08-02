@@ -208,10 +208,11 @@ o teto de verdade é o limite por chave no console (lição do vazamento de 2026
 reduzida a 1024 px no NAVEGADOR antes do upload (o re-encode em JPEG também descarta o EXIF).
 POC: `BODY_PROJECTOR=openai npx tsx --env-file=.env scripts/poc-body-projection.mjs <foto> <pesoAtual>
 <pesoDesejado> [alturaCm]` (aceita `gemini` para comparar).
-Dívidas: **não verificado no navegador** (o `npm run dev` segue vetado pelo token de prod do bot) —
-em especial o polling e o fluxo assíncrono só têm cobertura de teste, nunca de clique; falta setar
-`OPENAI_API_KEY` + `BODY_PROJECTOR=openai` nos secrets do Fly antes do deploy; e a imagem tem ~1,6 MB,
-bem acima dos 200–600 KB estimados, o que engorda a coluna cifrada.
+Dívidas: o polling e o fluxo assíncrono só têm cobertura de teste, nunca de clique; e a imagem tem
+~1,6 MB, bem acima dos 200–600 KB estimados, o que engorda a coluna cifrada.
+**Secrets SETADOS no Fly (2026-08-02, v60):** `OPENAI_API_KEY` + `BODY_PROJECTOR=openai` deployados
+(digests conferidos, app saudável) — a Projeção Corporal está LIGADA em produção; o teto de gasto é
+o limite por chave no console da OpenAI (lição do vazamento de 2026-07-24).
 
 **Ficha de Consulta (2026-07-31, EM PRODUÇÃO — Fly v58, CI e CodeQL verdes em fa37e7a).** A anamnese que o Dr. Rafael preenchia em
 papel (`ficha paciente.docx`, 12 blocos: identificação → objetivo → antropometria → doenças →
