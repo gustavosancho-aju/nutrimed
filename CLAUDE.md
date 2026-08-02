@@ -10,7 +10,7 @@ deploy e roadmap — a referência única do estado atual).
 **📋 Registro histórico do MVP (E1–E10): [`docs/IMPLEMENTATION-RECORD.md`](docs/IMPLEMENTATION-RECORD.md)**
 (rastreabilidade FR/NFR/ADR e evidências ao vivo do snapshot de 2026-06-11).
 
-## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-08-02, main @ ddbe073, Fly v59 — Rodada Visual Premium + Corpo 3D)
+## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-08-02, main @ 8b36ef0, Fly v61 — Corpo humano 3D real na Apresentação)
 
 **9 de 10 épicos com núcleo implementado e verificado ao vivo** (falta E8 — vídeos).
 **E11 (Pacientes & Dashboard) COMPLETO** (4 fases + extras: faixa ideal/meta nos gráficos e
@@ -135,7 +135,7 @@ apareceu 3× nesta sessão, nos 3 lugares corrigido.
 **Painel e ficha só de alimentação (2026-07-28):** saíram os cartões de Água e Sono, as 2 colunas do
 relatório diário e as metas `waterMl`/`sleepMinHours`/`sleepMaxHours` da ficha. Schema, serviços,
 campos opcionais no tipo e dados coletados FICARAM (metas antigas seguem no blob cifrado).
-Suíte: **809 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
+Suíte: **818 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
 CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) **verde de novo desde
 2026-07-30** — ficou VERMELHO de 22 a 30/07 (~20 commits) sem ninguém notar, e ninguém notou
 porque esta linha dizia "verde": o job de código sempre passou, quem reprovava era o
@@ -267,8 +267,28 @@ Telegram corrigida (só alimentação), MetricCard vazio compacto, fonte única 
 halos dos próprios tokens. Review adversarial (14 achados → 12 corrigidos) + CodeRabbit (3/3).
 Dívida consciente: emojis do painel interno de telemetria.
 
-**Corpo 3D no Modo Apresentação (2026-08-02, PR #16 — EM PRODUÇÃO desde a v59; verificado ao
-vivo: /icon.svg da rodada servindo, login 200).**
+**Corpo humano 3D REAL (2026-08-02, PR #17 — EM PRODUÇÃO na v61; verificado ao vivo: login 200 e
+/models/body.bin servindo 1,01 MB).** O manequim procedural virou **escultura de artista**: o
+feedback do Gustavo com referência visual ("tá péssimo, é tão difícil?") estava certo — o problema
+não era refinar primitivas, era **trocar de técnica**. Pesquisa de licença decidiu: mannequin.js é
+GPL-3.0 (contaminaria o projeto), SMPL é research-only (o SMPL-Body CC-BY exclui justamente os
+shape blendshapes), e o **MakeHuman liberou base mesh E targets como CC0 em set/2020** — corpo e
+deformações sem Blender. `scripts/build-body-mesh.mjs` compila `base.obj` (só o grupo `body`:
+13.380 vértices, 26.756 triângulos) + 18 targets em `public/models/body.bin` com morphs ESPARSOS;
+o "peso" NÃO existe como target único no MakeHuman — é a soma das circunferências que mudam com a
+adiposidade (cintura lidera) + barriga + glúteo, e ganho/perda são morphs SEPARADOS (os targets
+são direcionais). `lib/body-mesh.ts` aplica na CPU (13k vértices < 1 ms, só quando IMC/sexo mudam).
+**Decisões que o corpo real forçou:** anéis dourados de scan REMOVIDOS (sobre anatomia viram
+bambolés) e a meta deixou de ser anel — virou o botão **"Ver o corpo na meta"**, porque a
+comparação mais forte na frente do paciente é a própria anatomia mudando. A escultura procedural
+do tronco foi removida junto (virou código morto). **Bug pago:** com o giro pausado
+(`frameloop:'demand'`) o corpo NÃO redeformava no slider — a escrita no buffer é pós-frame e nada
+agendava o próximo; `invalidate()` resolve. **CodeRabbit (5 achados, todos corrigidos):** sombra
+CONGELADA porque o componente reportava o Float32Array reusado (identidade nunca muda ⇒ setState
+no-op); NaN de linha malformada apaga triângulo no WebGL; `ArrayBuffer.slice` CLAMPA (binário
+truncado viraria mancha em vez de cair no SVG); radiogroup sem setas. Suíte: **818 testes**.
+
+**Corpo 3D — 1ª geração, procedural (2026-08-02, PR #16 — v59).**
 Manequim corporal 3D **PROCEDURAL** (three + @react-three/fiber v9, chunk lazy SÓ da
 Apresentação): estátua de alfaiate girando sob rim light dourado — deliberadamente ABSTRATA
 (manequim, não humano realista: realismo compraria uncanny valley e exigiria asset/licença).
