@@ -160,7 +160,6 @@ export function BodyFigureStage({
           <BodyFigure3D
             imc={imc}
             sex={sex}
-            metaImc={ghostImc}
             bodyColor={colors.body}
             goldColor={colors.gold}
             animate={visible && !reduced && autoSpin}
@@ -174,9 +173,7 @@ export function BodyFigureStage({
           entrega como microlegenda — anel sem nome não informa */}
       {ready && (
         <div className="mt-1.5 flex items-center justify-center gap-2.5">
-          <p className="text-[10px] text-ink-muted">
-            Arraste para girar · anéis: tórax, cintura e quadril
-          </p>
+          <p className="text-[10px] text-ink-muted">Arraste para girar o corpo</p>
           <button
             type="button"
             aria-pressed={autoSpin}

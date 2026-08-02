@@ -100,14 +100,20 @@ export function BodySimulator({
         {categoria.label}
       </p>
 
-      {metaImc !== null && (
-        // texto neutro aos DOIS modos do palco: contorno tracejado na silhueta
-        // SVG, anel de cintura no manequim 3D — verde é a meta nos dois.
-        <p className="mt-2 flex items-center gap-1.5 text-[11px] text-ink-muted">
-          <span aria-hidden className="inline-block h-2 w-2 rounded-full bg-emerald-600" />
-          Em verde, a meta ({fmt(metaPeso!)} kg
-          {metaDefinidaPeloMedico ? ', definida pelo médico' : ', referência OMS'})
-        </p>
+      {metaImc !== null && metaPeso !== null && (
+        // A meta deixou de ser um aro no corpo: aqui ela é um BOTÃO que leva o
+        // corpo inteiro até o peso-alvo — a comparação mais forte que existe
+        // na frente do paciente é ver a própria anatomia mudar.
+        <button
+          type="button"
+          disabled={!interactive}
+          onClick={() => setPesoSim(metaPeso)}
+          className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-600/40 bg-emerald-600/10 px-3 py-1 text-[11px] font-medium text-emerald-700 transition-colors hover:bg-emerald-600/20 disabled:opacity-50 dark:text-emerald-400"
+        >
+          <span aria-hidden className="h-2 w-2 rounded-full bg-emerald-600" />
+          Ver o corpo na meta ({fmt(metaPeso)} kg
+          {metaDefinidaPeloMedico ? ', do médico' : ', OMS'})
+        </button>
       )}
 
       {interactive && (
