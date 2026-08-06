@@ -1346,8 +1346,21 @@ export interface DayMealCoverage {
  * exigiria ler e decifrar todas as linhas do dia de todos os pacientes a cada
  * tick, que é o erro que o E15 já pagou no `listNutritionDiary`.
  *
- * GRUPO fica de fora: lembrete de aderência num chat com nutrólogo e
- * nutricionista é divulgação a terceiros que o paciente não iniciou.
+ * GRUPO **não** é excluído aqui, e a decisão vale ser explicada porque a versão
+ * anterior o bloqueava no SQL.
+ *
+ * O argumento original era "divulgação de dado de saúde a terceiros". Ele é bom
+ * em geral e fraco no caso real: no piloto o grupo é paciente + nutrólogo +
+ * nutricionista, e essa equipe **já vê todo o registro alimentar** no dashboard.
+ * Um lembrete dizendo "não chegou o registro do jantar" não revela nada novo a
+ * quem já tem acesso ao diário inteiro.
+ *
+ * O que sobra de verdade não é proteção de dado — é **constrangimento**: ser
+ * cutucado na frente da própria equipe. Isso é real, mas é escolha do paciente e
+ * do médico, não regra que o banco deva impor. O gate virou o
+ * `reminders_enabled` (default false, com aviso explícito na ficha quando o
+ * canal é grupo) e o `/silenciar`, que o paciente aciona sozinho.
+ * Registrado no CJ-14 item 3.
  */
 export async function listMealCoverageForDay(
   db: SqlExecutor,
@@ -1374,8 +1387,6 @@ export async function listMealCoverageForDay(
      WHERE l.consent_granted = true
        AND l.revoked_at IS NULL
        AND l.reminders_enabled = true
-       AND coalesce(l.chat_type, '') NOT IN ('group', 'supergroup')
-       AND l.chat_id NOT LIKE '-%'
      GROUP BY l.patient_id, l.chat_id`,
     [start, end],
   );

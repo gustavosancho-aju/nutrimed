@@ -188,7 +188,12 @@ export default async function PatientPage({
           qualquer momento).
         </p>
         <div className="mt-4">
-          <TelegramLinkPanel patientId={patient.id} active={link?.granted ?? false} remindersEnabled={remindersOn} />
+          <TelegramLinkPanel
+            patientId={patient.id}
+            active={link?.granted ?? false}
+            remindersEnabled={remindersOn}
+            isGroup={link?.isGroup ?? false}
+          />
         </div>
 
         <div className="mt-6 border-t border-ink/10 pt-6">

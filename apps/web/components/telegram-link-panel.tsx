@@ -12,11 +12,14 @@ export function TelegramLinkPanel({
   patientId,
   active,
   remindersEnabled = false,
+  isGroup = false,
 }: {
   patientId: string;
   active: boolean;
   /** E16 Fase 3 — lembretes proativos. Nasce FALSE: é finalidade nova (CJ-14). */
   remindersEnabled?: boolean;
+  /** Canal é um grupo? Muda o aviso: o lembrete fica visível para a equipe toda. */
+  isGroup?: boolean;
 }) {
   const [code, setCode] = useState<string | null>(null);
   const [reminders, setReminders] = useState(remindersEnabled);
@@ -91,10 +94,23 @@ export function TelegramLinkPanel({
               <span className="font-medium text-ink">Enviar lembretes ao paciente</span>
               <span className="mt-1 block text-xs text-ink-muted">
                 O bot passa a INICIAR contato: à tarde, se o registro do dia estiver bem abaixo da
-                meta; à noite, se faltar alguma refeição. Isso é uma finalidade diferente da que o
-                paciente aceitou ao parear — ative só depois de combinar com ele. O paciente pode
-                desligar sozinho a qualquer momento enviando <code>/silenciar</code>.
+                meta; à noite, se faltar alguma refeição ou para reconhecer o dia completo. Isso é
+                uma finalidade diferente da que o paciente aceitou ao parear — ative só depois de
+                combinar com ele. O paciente pode desligar sozinho a qualquer momento enviando{' '}
+                <code>/silenciar</code>.
               </span>
+              {isGroup && (
+                /* O canal em grupo é o do piloto. A equipe já vê o diário inteiro no
+                   dashboard, então o lembrete não revela dado novo — o que muda é o
+                   CONSTRANGIMENTO de ser cutucado na frente dela. Quem decide isso é o
+                   médico com o paciente, não uma regra no banco (CJ-14 item 3). */
+                <span className="mt-2 block rounded-[8px] border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-ink">
+                  <strong>Este canal é um GRUPO.</strong> Os lembretes aparecerão para todos os
+                  participantes (paciente, nutrólogo e nutricionista). Eles não revelam nada que a
+                  equipe já não veja no dashboard, mas ser lembrado na frente dos outros pode
+                  constranger — combine com o paciente antes de ativar.
+                </span>
+              )}
             </span>
           </label>
         </div>

@@ -112,12 +112,21 @@ describe('Lembretes proativos (E16 Fase 3)', () => {
       expect(planos.map((p) => p.chatId)).not.toContain('lb-optout');
     });
 
-    it('GRUPO nunca recebe mensagem proativa', async () => {
-      // Aderência num chat com nutrólogo e nutricionista é divulgação a
-      // terceiros que o paciente não iniciou.
+    it('GRUPO recebe SE o médico ligou — o gate é o opt-in, não o banco', async () => {
+      // Mudou a pedido do piloto (2026-08-06), cujo canal REAL é um grupo com a
+      // equipe. O bloqueio no SQL era bem-intencionado e errado no caso concreto:
+      // a equipe já vê o diário inteiro no dashboard, então o lembrete não revela
+      // dado novo. O que resta é constrangimento — escolha do paciente e do
+      // médico, não regra do banco. A ficha avisa quando o canal é grupo.
       await novoPaciente('-100200300', { reminders: true, goalKcal: 2000, chatType: 'supergroup' });
       const planos = await planReminders(deps, localAt(16, 10));
-      expect(planos.map((p) => p.chatId)).not.toContain('-100200300');
+      expect(planos.map((p) => p.chatId)).toContain('-100200300');
+    });
+
+    it('grupo SEM opt-in continua sem receber (o default protege igual)', async () => {
+      await novoPaciente('-100200400', { goalKcal: 2000, chatType: 'group' });
+      const planos = await planReminders(deps, localAt(16, 10));
+      expect(planos.map((p) => p.chatId)).not.toContain('-100200400');
     });
 
     it('SEM meta definida não existe "abaixo da meta"', async () => {

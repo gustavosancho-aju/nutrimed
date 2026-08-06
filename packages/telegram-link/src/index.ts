@@ -7,6 +7,7 @@ export {
   getLinkStatus,
   setRemindersEnabled,
   areRemindersEnabled,
+  isGroupChat,
   type PairingCodeOptions,
   type ChannelConsent,
   type RedeemResult,
