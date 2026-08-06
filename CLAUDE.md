@@ -10,7 +10,7 @@ deploy e roadmap — a referência única do estado atual).
 **📋 Registro histórico do MVP (E1–E10): [`docs/IMPLEMENTATION-RECORD.md`](docs/IMPLEMENTATION-RECORD.md)**
 (rastreabilidade FR/NFR/ADR e evidências ao vivo do snapshot de 2026-06-11).
 
-## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-08-02, main @ 8b36ef0, Fly v61 — Corpo humano 3D real na Apresentação)
+## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-08-06, Fly v64 — E16 F1 precisão do alimento + F2 pergunta da refeição)
 
 **9 de 10 épicos com núcleo implementado e verificado ao vivo** (falta E8 — vídeos).
 **E11 (Pacientes & Dashboard) COMPLETO** (4 fases + extras: faixa ideal/meta nos gráficos e
@@ -172,7 +172,56 @@ valor de rótulo (era tudo `taco:`) e o `model_version` virou `taco-4ed+nutrimed
 `taco-taco-4ed`, prefixo duplicado). O corpus de regressão (`corpus.fixture.ts`, 99 casos, os 9 erros
 medidos marcados 🔴) é o artefato que impede tudo isso de voltar — **viu o bot errar? primeiro uma
 linha lá, depois a heurística**.
-Suíte: **935 PASS (+1 skip)** (era 818; +117 do E16 Fase 1) · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
+**E16 Fase 2 — o bot PERGUNTA a refeição (2026-08-06, EM PRODUÇÃO na v64).** O paciente manda a
+foto ou o `/comi`, o bot mostra o que entendeu e pergunta de que refeição foi (botões inline); só
+grava depois da resposta. Decisão do Gustavo, tomada contra a recomendação de inferir pelo horário:
+**perguntar SEMPRE**. O atalho existe para quando ele já disse (`/comi almoço 100g de arroz`, legenda
+`jantar: frango`) — "perguntar sempre" vale quando ele NÃO disse.
+**Três achados no transporte** que fariam a feature funcionar nos testes e NÃO em produção: (1)
+`processUpdate` chamava `handlePhoto` DIRETO, pulando o dispatcher — estado no `handleUpdate` não
+cobriria a foto; (2) `callback_query` caía no chão em silêncio, e sem `answerCallbackQuery` o botão
+fica girando no cliente até dar timeout; (3) `sendMessage` ignorava a resposta da Bot API, então um
+403 (paciente bloqueou o bot) passava despercebido. Mais `allowed_updates` explícito — **confirmado
+ao vivo em produção**: `["message","edited_message","callback_query"]`.
+**Migration 0026** (`meal`, coluna CLARA fora do `values_enc`) e **0027** (`food_log_pending`,
+cifrada). O pendente vai para o BANCO e não para memória porque a visão do Claude é cobrada ANTES de
+ele existir — um deploy rolling no meio da conversa faria o paciente pagar a estimativa de novo.
+Sem transação (Pool compartilhado em prod): a exclusão mútua vem de `UPDATE ... WHERE consumed_at IS
+NULL RETURNING`, num statement só, e `food_log_entry_id` fecha a cadeia se o processo morrer no meio.
+**Decisões:** teto de 3 pendentes (no 4º NÃO chama o estimador) · TTL de 12h nunca atravessando o dia
+local + 3h · **vencido é GRAVADO com `meal` NULL, nunca descartado** (o paciente comeu e a estimativa
+foi paga; descartar trataria "não respondeu" como "não comeu") · `/hoje` avisa do pendente e reenvia
+os botões · refeição **nunca** em texto solto, só botão ou `/refeicao` (em grupo com privacy mode OFF
+o bot recebe tudo, e "almoço" dito por terceiro viraria resposta clínica do paciente).
+**21 testes quebraram**, e não por acaso — o contrato "foto/texto ⇒ registro imediato" estava assado
+na suíte. Helper `logAndConfirm` para o fluxo de 2 passos; nos testes de PRECISÃO usei o atalho, que
+os mantém focados no que testam.
+
+**E16 Fase 3 — lembretes proativos (2026-08-06, commitada; NÃO deployada).** ~16h se o consumo
+registrado está bem abaixo da meta, ~22h se faltou refeição. **Vai ao ar DESLIGADA.**
+**Três guardas independentes** para ligar (`TELEGRAM_REMINDERS=on` + `NODE_ENV=production` + modo
+webhook) e **três donos para desligar**: operador (kill switch por `fly secrets`, sem deploy — lição
+do vazamento de 2026-07-24), médico (toggle na ficha, nasce FALSE) e **paciente** (`/silenciar` — a
+LGPD art. 18 exige que o titular se oponha sem pedir a ninguém). Mais desligamento automático no
+403: bloquear o bot é revogação de fato.
+**A copy é o risco regulatório da fase.** "Sua alimentação está fraca" é juízo sobre a PESSOA,
+afirmação sem base (o bot conhece o REGISTRADO, não o comido) e prescritiva por implicação. Seis
+regras viradas em teste, com blacklist automatizada: o sujeito é o REGISTRO nunca o paciente ·
+números não adjetivos · a meta é do nutricionista · zero prescrição (o convite é a REGISTRAR, não a
+comer) · nenhuma culpa nem gamificação · saída visível. **SEM LLM** — em mensagem proativa e não
+supervisionada, deixar o modelo escrever entrega ao acaso a fronteira do CJ-4.
+**Decisões:** JANELA e não instante (16:00–16:59 / 21:45–22:30 locais; o processo reinicia e num
+deploy rolling o instante se perderia — passada a janela NÃO entrega, pois lembrete das 16h às 19h é
+pior que nenhum) · piso rígido 07:00–22:30 · **sem meta, nenhum alerta** · quem não registrou NADA
+recebe versão mais leve sem números · cita **no máximo UMA** refeição faltante (lista de faltas é
+boletim de notas) · **lanche nunca é cobrado** (é opcional; cobrar inventaria uma falta) · pendente
+tem prioridade às 22h · **grupo nunca recebe proativo**.
+**Migration 0028** com `UNIQUE (patient_id, kind, local_day)`: claim ANTES do envio, o que torna a
+entrega "no máximo uma vez" — trade-off deliberado, porque repetir "não recebi seu café da manhã"
+soa acusatório e perder um cutucão não. `listMealCoverageForDay` resolve o dia em UMA consulta e
+**não recebe a chave de cifra** — é o dividendo da coluna `meal` clara.
+**CJ-14 criado** (6 questões, 🔴 bloqueante para ATIVAR, não para desenvolver).
+Suíte: **1009 PASS (+1 skip)** (era 818; +191 no E16) · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
 CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) **verde de novo desde
 2026-07-30** — ficou VERMELHO de 22 a 30/07 (~20 commits) sem ninguém notar, e ninguém notou
 porque esta linha dizia "verde": o job de código sempre passou, quem reprovava era o
@@ -188,7 +237,7 @@ Resta **só `brace-expansion`**, e é insolúvel hoje: a advisory cobre `<=5.0.7
 brace-expansion@1.1.18`, e a linha 1.x não tem patch. Forçar a 5.x por override quebra o eslint
 ("expand is not a function" — o minimatch@3 não entende o export novo). Quem pode resolver é o
 **PR #11 (eslint 9→10)**, se largar o minimatch@3. Não alcança usuário e o gate `--prod` não conta.
-Migrations 0001–0025.
+Migrations 0001–0028 (0026 refeição · 0027 registro pendente · 0028 lembrete proativo).
 Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 · RUNBOOK Fase 5 = canal Telegram.
 
 | Épico | Status | Épico | Status |
@@ -201,7 +250,7 @@ Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 
 | E9 Documentação Clínica | ✅ | E11 Pacientes & Dashboard | ✅ completo (4 fases) |
 | E12 Bot de Telegram (foto→nutrição vs metas) | ✅ completo (9 stories + grupo + texto; só alimentação) | E13 Relatório Nutricional (TACO) | ✅ completo (em produção) |
 | E14 Painel Laboratorial dinâmico (laudo completo + apresentação) | ✅ completo (verificado no navegador) | E15 Histórico mês a mês (plano de 12 meses) | ✅ completo (4 fases, em produção) |
-| E16 Bot mais inteligente — Fase 1 (precisão do alimento) | ✅ local (falta deploy) | E16 Fases 2–4 (refeição · lembretes · CJ-14) | ⬜ planejado |
+| E16 F1 precisão + F2 pergunta a refeição | ✅ EM PRODUÇÃO (v64) | E16 F3 lembretes 16h/22h | ✅ código pronto, DESLIGADO (bloqueia CJ-14) |
 | Transcrição Confiável (léxico + revisão do médico + POC) | ✅ completo (falta áudio real p/ POC) | Projeção Corporal por foto (IA) | ✅ gpt-image-2 + geração assíncrona (falta navegador) |
 
 **Projeção Corporal por foto (2026-07-28).** O médico sobe uma foto do paciente, informa peso atual
@@ -407,7 +456,7 @@ packages/patients        E11: paciente cifrado + medições (bioimpedância/exam
 packages/lab-import      E11: extração de laudo PDF (ILabExtractor: Claude nativo + fake) — ADR-012
 packages/food-vision     E12: estimativa nutricional por foto (IFoodEstimator: Claude visão + fake) — ADR-015
 packages/telegram-link   E12: pareamento por código + gate de consentimento do canal (default NEGA) — ADR-013/014
-packages/telegram-bot    E12: lógica pura do bot (handlers de foto/comandos + orientação por IA)
+packages/telegram-bot    E12/E16: lógica pura do bot (foto/comandos + pergunta da refeição + lembretes proativos)
 packages/taco            E13: tabela TACO 4ª ed. embarcada (591 alimentos) + busca lexical + porções caseiras (regen: scripts/gen-taco.mjs)
 packages/nutrition-report E13: recordatório (LLM) → mapeamento TACO → cálculo determinístico → relatório cifrado+auditado
 packages/lab-catalog     E14: catálogo canônico de exames (slug+sinônimos) + leitura da faixa de referência DO LAUDO — puro, sem faixa clínica própria
