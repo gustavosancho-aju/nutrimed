@@ -1,11 +1,19 @@
 import type { SqlExecutor } from '@nutrimed/db';
 import {
   addFoodLogEntry,
+  addPendingFoodEntry,
+  listPendingFoodEntries,
+  confirmPendingFoodEntry,
+  flushExpiredPendingEntries,
   findLatestFoodLogEntry,
   updateFoodLogEntryValues,
   sumFoodLogForDay,
   loadCurrentNutritionGoal,
+  parseMeal,
+  MEAL_LABELS,
   type DailyProgress,
+  type FoodLogInput,
+  type Meal,
 } from '@nutrimed/patients';
 import {
   isChannelAuthorized,
@@ -19,6 +27,16 @@ import {
   type MappedItem,
 } from '@nutrimed/nutrition-report';
 import { FOOD_TABLES_VERSION } from '@nutrimed/food-catalog';
+import {
+  MAX_PENDING,
+  askMealText,
+  describePending,
+  extractLeadingMeal,
+  matchesPendingId,
+  mealButtons,
+  parseMealCallback,
+  pendingExpiresAt,
+} from './meal';
 import type { IFoodEstimator, FoodImageInput, FoodEstimate, FoodConfidence } from '@nutrimed/food-vision';
 import type { ILlmProvider } from '@nutrimed/providers';
 
@@ -56,8 +74,24 @@ export interface BotDeps {
   readonly tzOffsetMinutes?: number;
 }
 
+/** Botão inline. `data` viaja até o Telegram e volta — teto de 64 BYTES. */
+export interface BotButton {
+  readonly label: string;
+  readonly data: string;
+}
+
 export interface BotReply {
   readonly text: string;
+  /**
+   * Botões inline. O array externo são LINHAS. Ausente ⇒ mensagem simples.
+   * A lógica decide o que oferecer; o transporte traduz para `reply_markup`.
+   */
+  readonly buttons?: readonly (readonly BotButton[])[];
+  /**
+   * Texto do "toast" que o Telegram mostra ao tocar o botão. Curto (≤200 ch).
+   * Só faz sentido em resposta a `callbackData`.
+   */
+  readonly callbackAck?: string;
 }
 
 /** Update já normalizado pelo transporte (12.7) — a lógica não conhece o grammy. */
@@ -68,6 +102,19 @@ export interface BotUpdate {
   readonly photoRef?: string;
   /** Legenda da foto — descrição do paciente que orienta a estimativa. */
   readonly caption?: string;
+  /** Payload do botão tocado (`callback_query.data`). */
+  readonly callbackData?: string;
+  /** Id do callback — o transporte PRECISA respondê-lo, senão o botão fica girando. */
+  readonly callbackId?: string;
+  /** Mensagem que carregava os botões, para o transporte removê-los depois. */
+  readonly messageId?: number;
+  /**
+   * Quem tocou o botão. Em GRUPO o vínculo é por chat, não por usuário: isto não
+   * autentica ninguém, mas deixa a ação rastreável na auditoria em vez de anônima.
+   */
+  readonly fromId?: string;
+  /** Tipo do chat — mensagem proativa e texto livre se comportam diferente em grupo. */
+  readonly chatType?: 'private' | 'group' | 'supergroup' | 'channel';
 }
 
 const DISCLAIMER =
@@ -192,8 +239,11 @@ export async function handleStart(deps: BotDeps, chatId: string, arg?: string): 
         '✅ Canal ativado! Agora é só me enviar a foto do seu prato que eu estimo os nutrientes ' +
         '(a legenda da foto me ajuda a identificar os alimentos). Se preferir digitar — ou se você ' +
         'pesou a comida — use /comi 100g de arroz, 150g de frango: com as quantidades a conta fica ' +
-        'mais precisa. Use /hoje para ver seu progresso do dia, /meta para suas metas e /corrigir ' +
-        'se eu identificar algo errado.',
+        'mais precisa.\n\n' +
+        'Depois de cada registro eu pergunto de que refeição foi — é só tocar no botão. Se quiser ' +
+        'pular essa etapa, diga junto: /comi almoço 100g de arroz.\n\n' +
+        'Use /hoje para ver seu progresso do dia, /meta para suas metas e /corrigir se eu ' +
+        'identificar algo errado.',
     };
   }
   const reason = { invalid: 'Código inválido.', expired: 'Código expirado.', consumed: 'Esse código já foi usado.' }[
@@ -203,8 +253,92 @@ export async function handleStart(deps: BotDeps, chatId: string, arg?: string): 
 }
 
 /**
- * Foto do prato → estimativa → registro auditado → feedback vs. meta + disclaimer.
- * A legenda da foto (`caption`), se houver, orienta a identificação dos alimentos.
+ * Varredura preguiçosa dos pendentes vencidos deste paciente. Roda no topo dos
+ * handlers enquanto não existe o agendador (que assume isso na Fase 3). Nunca
+ * lança: perder a varredura é aceitável, derrubar o registro do paciente não.
+ */
+async function flushExpired(deps: BotDeps, patientId: string): Promise<void> {
+  try {
+    await flushExpiredPendingEntries(deps.db, clock(deps), deps.key, patientId);
+  } catch (error) {
+    console.error('[bot] varredura de pendentes falhou:', error);
+  }
+}
+
+/** Fecha o registro: soma o dia, gera orientação e monta a resposta final. */
+async function confirmedReply(
+  deps: BotDeps,
+  patientId: string,
+  meal: Meal,
+  extras: readonly (string | null)[],
+): Promise<BotReply> {
+  const now = clock(deps);
+  const progress = await sumFoodLogForDay(deps.db, patientId, localDayISO(now, tz(deps)), tz(deps), deps.key);
+  const orientation = await buildOrientation(deps.llm, progress);
+  return {
+    text: compose([
+      `✅ Registrei no seu ${MEAL_LABELS[meal].toLowerCase()}.`,
+      ...extras,
+      formatProgress(progress),
+      orientation,
+      DISCLAIMER,
+    ]),
+  };
+}
+
+/**
+ * O coração da Fase 2: com a refeição JÁ conhecida, grava direto; sem ela, guarda
+ * o prato como PENDENTE e pergunta com botões.
+ *
+ * Gravar só depois da resposta (em vez de gravar com `meal` nulo e completar
+ * depois) foi decisão de produto: um registro que já aparece no `/hoje` antes de
+ * o paciente confirmar contradiz a própria pergunta.
+ */
+async function registerOrAsk(
+  deps: BotDeps,
+  patientId: string,
+  chatId: string,
+  input: FoodLogInput,
+  meal: Meal | null,
+  auditAction: string,
+  preamble: readonly (string | null)[],
+): Promise<BotReply> {
+  if (meal) {
+    await addFoodLogEntry(
+      deps.db,
+      patientId,
+      { ...input, meal },
+      deps.key,
+      { action: auditAction, ...(input.modelVersion ? { modelVersion: input.modelVersion } : {}) },
+    );
+    return confirmedReply(deps, patientId, meal, preamble);
+  }
+
+  const now = clock(deps);
+  const pendingId = await addPendingFoodEntry(
+    deps.db,
+    patientId,
+    chatId,
+    input,
+    deps.key,
+    pendingExpiresAt(now, tz(deps)),
+  );
+  const pendentes = await listPendingFoodEntries(deps.db, patientId, deps.key);
+  const resumo =
+    pendentes.length > 1
+      ? describePending(pendentes.find((p) => p.id === pendingId) ?? pendentes[pendentes.length - 1]!, tz(deps))
+      : undefined;
+
+  return {
+    text: compose([...preamble, askMealText(input.values, pendentes.length, resumo), DISCLAIMER]),
+    buttons: mealButtons(pendingId),
+  };
+}
+
+/**
+ * Foto do prato → estimativa → PERGUNTA a refeição → registro auditado.
+ * A legenda da foto (`caption`), se houver, orienta a identificação dos alimentos
+ * e pode JÁ trazer a refeição ("jantar: frango grelhado").
  */
 export async function handlePhoto(
   deps: BotDeps,
@@ -221,15 +355,34 @@ export async function handlePhoto(
     return { text: 'No momento não consigo estimar sua foto (serviço indisponível). Tente novamente mais tarde.' };
   }
 
-  const estimate = await deps.estimator.estimate(image, caption?.trim() || undefined);
-  const modelVersion = deps.estimator.modelVersion;
-  const now = clock(deps);
+  await flushExpired(deps, patientId);
 
-  await addFoodLogEntry(
-    deps.db,
+  // A legenda pode já trazer a refeição ("jantar: frango"). O resto continua
+  // servindo de dica para a visão identificar os alimentos.
+  const { meal, rest } = extractLeadingMeal(caption ?? '');
+  const dica = rest.trim() || undefined;
+
+  // TETO DE PENDENTES: acima dele NÃO chamamos o estimador. A visão custa por
+  // chamada, e acumular perguntas sem resposta é sinal de conversa travada —
+  // não de uso normal. Lição do vazamento de custo de 2026-07-24.
+  const abertos = await listPendingFoodEntries(deps.db, patientId, deps.key);
+  if (!meal && abertos.length >= MAX_PENDING) {
+    return {
+      text:
+        `Tenho ${abertos.length} registros esperando você dizer de que refeição foram. ` +
+        'Me responda esses primeiro (é só tocar nos botões acima) que eu volto a estimar suas fotos.',
+    };
+  }
+
+  const estimate = await deps.estimator.estimate(image, dica);
+  const modelVersion = deps.estimator.modelVersion;
+
+  return registerOrAsk(
+    deps,
     patientId,
+    chatId,
     {
-      eatenAt: now,
+      eatenAt: clock(deps),
       values: {
         ...estimate.values,
         confidence: estimate.confidence,
@@ -238,13 +391,12 @@ export async function handlePhoto(
       ...(photoRef ? { photoRef } : {}),
       ...(modelVersion ? { modelVersion } : {}),
     },
-    deps.key,
-    { action: 'telegram-bot', ...(modelVersion ? { modelVersion } : {}) },
+    meal,
+    'telegram-bot',
+    // A estimativa aparece ANTES da pergunta: o paciente precisa ver o que o bot
+    // entendeu para poder corrigir, e não classificar às cegas.
+    [formatEstimate(estimate), CORRECT_TIP],
   );
-
-  const progress = await sumFoodLogForDay(deps.db, patientId, localDayISO(now, tz(deps)), tz(deps), deps.key);
-  const orientation = await buildOrientation(deps.llm, progress, estimate);
-  return { text: compose([formatEstimate(estimate), formatProgress(progress), orientation, CORRECT_TIP, DISCLAIMER]) };
 }
 
 /**
@@ -324,11 +476,27 @@ export async function handleToday(deps: BotDeps, chatId: string): Promise<BotRep
   const patientId = await resolvePatientByChat(deps.db, chatId);
   if (!patientId) return { text: NEEDS_PAIRING };
 
+  await flushExpired(deps, patientId);
+
   const now = clock(deps);
   const dayISO = localDayISO(now, tz(deps));
   const progress = await sumFoodLogForDay(deps.db, patientId, dayISO, tz(deps), deps.key);
   const orientation = await buildOrientation(deps.llm, progress);
-  return { text: compose([formatProgress(progress), orientation, DISCLAIMER]) };
+
+  // Sem isto, o paciente que mandou uma foto e não respondeu a pergunta vê um
+  // /hoje que não bate com o que enviou, e conclui que o bot perdeu o registro.
+  // Reenviamos os botões do pendente mais antigo para ele conseguir resolver.
+  const pendentes = await listPendingFoodEntries(deps.db, patientId, deps.key);
+  const alvo = pendentes[0];
+  const avisoPendente = alvo
+    ? `⏳ ${pendentes.length === 1 ? 'Tem 1 registro esperando' : `Tem ${pendentes.length} registros esperando`} ` +
+      `você dizer a refeição — o ${describePending(alvo, tz(deps))}. Ele ainda NÃO entrou na conta acima.`
+    : null;
+
+  return {
+    text: compose([formatProgress(progress), avisoPendente, orientation, DISCLAIMER]),
+    ...(alvo ? { buttons: mealButtons(alvo.id) } : {}),
+  };
 }
 
 /** `/meta` — metas vigentes (definidas pelo nutricionista). Sem meta ⇒ informa. */
@@ -398,8 +566,15 @@ export async function handleAte(deps: BotDeps, chatId: string, arg: string): Pro
   const patientId = await resolvePatientByChat(deps.db, chatId);
   if (!patientId) return { text: NEEDS_PAIRING };
 
-  const text = arg.trim();
-  if (!text) return { text: TEXT_LOG_HELP };
+  const raw = arg.trim();
+  if (!raw) return { text: TEXT_LOG_HELP };
+
+  await flushExpired(deps, patientId);
+
+  // Atalho: "/comi almoço 100g de arroz" já diz a refeição. Perguntar de novo
+  // seria ignorar o que o paciente acabou de falar.
+  const { meal, rest } = extractLeadingMeal(raw);
+  const text = rest.trim() || raw;
 
   const items = parseFoodText(text);
   if (items.length === 0) {
@@ -432,31 +607,6 @@ export async function handleAte(deps: BotDeps, chatId: string, arg: string): Pro
   // E16 um mesmo registro pode somar valor da TACO e valor de rótulo.
   const provenance = FOOD_TABLES_VERSION;
 
-  const now = clock(deps);
-  await addFoodLogEntry(
-    deps.db,
-    patientId,
-    {
-      eatenAt: now,
-      source: 'telegram-texto',
-      values: {
-        kcal: computation.totals.kcal ?? 0,
-        protein: computation.totals.protein ?? 0,
-        carbs: computation.totals.carbs ?? 0,
-        fat: computation.totals.fat ?? 0,
-        confidence,
-        itemsLabel,
-        ...(computation.estimatedCount > 0 ? { portionsEstimated: true } : {}),
-        ...(computation.unmatched.length > 0
-          ? { unmatchedItems: computation.unmatched.map((i) => i.food) }
-          : {}),
-      },
-      modelVersion: provenance,
-    },
-    deps.key,
-    { action: 'telegram-bot-texto', modelVersion: provenance },
-  );
-
   const t = computation.totals;
   // A procedência fica VISÍVEL para o paciente — é o que sustenta a confiança no
   // número. Mas precisa ser exata: desde o E16 um mesmo total pode somar valor da
@@ -477,19 +627,105 @@ export async function handleAte(deps: BotDeps, chatId: string, arg: string): Pro
       ? `❓ NÃO entraram na conta:\n${formatMisses(mapped)}`
       : null;
 
-  const progress = await sumFoodLogForDay(deps.db, patientId, localDayISO(now, tz(deps)), tz(deps), deps.key);
-  const orientation = await buildOrientation(deps.llm, progress);
-  return {
-    text: compose([
-      `✍️ Registrei o que você digitou:\n${formatTextItems(mapped)}\n${total}`,
+  return registerOrAsk(
+    deps,
+    patientId,
+    chatId,
+    {
+      eatenAt: clock(deps),
+      source: 'telegram-texto',
+      values: {
+        kcal: t.kcal ?? 0,
+        protein: t.protein ?? 0,
+        carbs: t.carbs ?? 0,
+        fat: t.fat ?? 0,
+        confidence,
+        itemsLabel,
+        ...(computation.estimatedCount > 0 ? { portionsEstimated: true } : {}),
+        ...(computation.unmatched.length > 0
+          ? { unmatchedItems: computation.unmatched.map((i) => i.food) }
+          : {}),
+      },
+      modelVersion: provenance,
+    },
+    meal,
+    'telegram-bot-texto',
+    [
+      `✍️ Entendi o que você digitou:\n${formatTextItems(mapped)}\n${total}`,
       formatUncertain(mapped),
       estimatedWarning,
       unmatchedWarning,
-      formatProgress(progress),
-      orientation,
-      DISCLAIMER,
-    ]),
-  };
+    ],
+  );
+}
+
+/** Resposta comum a botão e comando, depois que a refeição foi resolvida. */
+async function applyMeal(
+  deps: BotDeps,
+  patientId: string,
+  pendingId: string,
+  meal: Meal,
+): Promise<BotReply> {
+  const done = await confirmPendingFoodEntry(deps.db, patientId, pendingId, meal, deps.key);
+  if (!done) {
+    // Já consumido (duplo clique) ou expirado e varrido. Não é erro do paciente.
+    return { text: 'Esse registro já foi confirmado. 👍', callbackAck: 'Já confirmado' };
+  }
+  const reply = await confirmedReply(deps, patientId, meal, []);
+  return { ...reply, callbackAck: MEAL_LABELS[meal] };
+}
+
+/**
+ * Toque no botão de refeição. O `callbackData` traz o id do pendente, então duas
+ * perguntas abertas ao mesmo tempo não se confundem.
+ */
+export async function handleMealChoice(
+  deps: BotDeps,
+  chatId: string,
+  callbackData: string,
+): Promise<BotReply | null> {
+  const choice = parseMealCallback(callbackData);
+  if (!choice) return null; // botão de outra feature — não é nosso
+
+  if (!(await isChannelAuthorized(deps.db, chatId))) return { text: NEEDS_PAIRING };
+  const patientId = await resolvePatientByChat(deps.db, chatId);
+  if (!patientId) return { text: NEEDS_PAIRING };
+
+  const pendentes = await listPendingFoodEntries(deps.db, patientId, deps.key);
+  const alvo = pendentes.find((p) => matchesPendingId(p.id, choice.pendingIdCompact));
+  if (!alvo) {
+    return {
+      text: 'Esse registro já foi confirmado ou expirou. Se precisar, é só mandar de novo.',
+      callbackAck: 'Registro não está mais pendente',
+    };
+  }
+  return applyMeal(deps, patientId, alvo.id, choice.meal);
+}
+
+/**
+ * `/refeicao <nome>` — fallback textual do botão. Existe para cliente antigo,
+ * mensagem apagada e para quem prefere digitar. Aplica ao pendente MAIS ANTIGO.
+ *
+ * O bot NÃO aceita a refeição em texto solto (sem o comando): em grupo, com
+ * privacy mode OFF, ele recebe toda a conversa, e "almoço" dito por outra pessoa
+ * viraria resposta clínica do paciente.
+ */
+export async function handleMealCommand(deps: BotDeps, chatId: string, arg: string): Promise<BotReply> {
+  if (!(await isChannelAuthorized(deps.db, chatId))) return { text: NEEDS_PAIRING };
+  const patientId = await resolvePatientByChat(deps.db, chatId);
+  if (!patientId) return { text: NEEDS_PAIRING };
+
+  const meal = parseMeal(arg);
+  if (!meal) {
+    return { text: 'Não entendi a refeição. Use: /refeicao cafe | almoco | jantar | lanche.' };
+  }
+
+  const pendentes = await listPendingFoodEntries(deps.db, patientId, deps.key);
+  const alvo = pendentes[0];
+  if (!alvo) {
+    return { text: 'Não tenho nenhum registro esperando refeição agora.' };
+  }
+  return applyMeal(deps, patientId, alvo.id, meal);
 }
 
 /**
@@ -502,8 +738,13 @@ function matchCommand(text: string, command: string): string | null {
   return m ? text.slice(m[0].length).trim() : null;
 }
 
-/** Dispatcher: foto → estimativa; `/start`/`/comi`/`/corrigir`/`/hoje`/`/meta`; senão ajuda. */
+/**
+ * Dispatcher. Ordem importa: o toque em BOTÃO vem primeiro porque não tem texto
+ * nem foto — se caísse depois, sairia pelo "não entendi".
+ */
 export async function handleUpdate(deps: BotDeps, update: BotUpdate): Promise<BotReply | null> {
+  if (update.callbackData) return handleMealChoice(deps, update.chatId, update.callbackData);
+
   if (update.photo) return handlePhoto(deps, update.chatId, update.photo, update.photoRef, update.caption);
 
   const text = update.text?.trim();
@@ -514,12 +755,15 @@ export async function handleUpdate(deps: BotDeps, update: BotUpdate): Promise<Bo
   if (matchCommand(text, 'meta') !== null) return handleGoal(deps, update.chatId);
   const corrigir = matchCommand(text, 'corrigir');
   if (corrigir !== null) return handleCorrection(deps, update.chatId, corrigir);
+  const refeicao = matchCommand(text, 'refeicao');
+  if (refeicao !== null) return handleMealCommand(deps, update.chatId, refeicao);
   const comi = matchCommand(text, 'comi');
   if (comi !== null) return handleAte(deps, update.chatId, comi);
   return {
     text:
       'Não entendi. Envie a foto do seu prato ou use /comi para digitar o que comeu com as ' +
-      'quantidades (ex.: /comi 100g de arroz). Também tenho /hoje (progresso), /meta e ' +
-      '/corrigir (ajusta o último prato). Se ainda não vinculou, use /start CÓDIGO.',
+      'quantidades (ex.: /comi 100g de arroz). Também tenho /hoje (progresso), /meta, ' +
+      '/refeicao (responde de que refeição foi) e /corrigir (ajusta o último prato). ' +
+      'Se ainda não vinculou, use /start CÓDIGO.',
   };
 }

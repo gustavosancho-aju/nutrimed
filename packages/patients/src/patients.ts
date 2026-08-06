@@ -816,6 +816,61 @@ export interface FoodLogValues {
   readonly unmatchedItems?: readonly string[];
 }
 
+/**
+ * Refeição do registro (E16 Fase 2). Vocabulário FECHADO — o bot pergunta com
+ * botões, então não há texto livre para normalizar.
+ */
+export type Meal = 'cafe_da_manha' | 'almoco' | 'jantar' | 'lanche';
+
+/** Ordem de exibição — a do dia, não alfabética. */
+export const MEALS: readonly Meal[] = ['cafe_da_manha', 'almoco', 'jantar', 'lanche'];
+
+export const MEAL_LABELS: Record<Meal, string> = {
+  cafe_da_manha: 'Café da manhã',
+  almoco: 'Almoço',
+  jantar: 'Jantar',
+  lanche: 'Lanche',
+};
+
+/**
+ * Refeições ESPERADAS num dia. Lanche fica de fora de propósito: ele é opcional,
+ * e cobrar do paciente um lanche que ele pode simplesmente não ter feito seria
+ * inventar uma falta. Usado pelo lembrete das 22h (Fase 3).
+ */
+export const EXPECTED_MEALS: readonly Meal[] = ['cafe_da_manha', 'almoco', 'jantar'];
+
+const MEAL_ALIASES: Readonly<Record<string, Meal>> = {
+  cafe_da_manha: 'cafe_da_manha',
+  cafe: 'cafe_da_manha',
+  'cafe da manha': 'cafe_da_manha',
+  manha: 'cafe_da_manha',
+  desjejum: 'cafe_da_manha',
+  almoco: 'almoco',
+  almoço: 'almoco',
+  jantar: 'jantar',
+  janta: 'jantar',
+  ceia: 'jantar',
+  lanche: 'lanche',
+  merenda: 'lanche',
+  'lanche da tarde': 'lanche',
+};
+
+/**
+ * Interpreta o que o paciente escreveu como refeição. Aceita acento, caixa alta
+ * e as formas coloquiais ("janta", "café"). Devolve null quando não reconhece —
+ * nunca chuta, porque chutar aqui grava a refeição errada em silêncio.
+ */
+export function parseMeal(raw: string): Meal | null {
+  const key = raw
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[_\s]+/g, ' ')
+    .trim();
+  return MEAL_ALIASES[key] ?? MEAL_ALIASES[key.replace(/\s/g, '_')] ?? null;
+}
+
 export interface FoodLogEntry {
   readonly id: string;
   readonly patientId: string;
@@ -825,6 +880,8 @@ export interface FoodLogEntry {
   readonly photoRef: string | null;
   readonly values: FoodLogValues;
   readonly modelVersion: string | null;
+  /** null = "não informada" (legado, ou pendente que expirou sem resposta). */
+  readonly meal: Meal | null;
   readonly createdAt: Date;
 }
 
@@ -834,6 +891,7 @@ export interface FoodLogInput {
   readonly source?: string;
   readonly photoRef?: string;
   readonly modelVersion?: string;
+  readonly meal?: Meal;
 }
 
 /** Progresso do dia: consumo somado vs. meta vigente (null se não há meta). */
@@ -938,6 +996,7 @@ interface FoodLogRow {
   photo_ref: string | null;
   values_enc: string;
   model_version: string | null;
+  meal: string | null;
   created_at: Date;
 }
 
@@ -950,6 +1009,9 @@ function toFoodLogEntry(row: FoodLogRow, key: Buffer): FoodLogEntry {
     photoRef: row.photo_ref,
     values: JSON.parse(decryptField(row.values_enc, key)) as FoodLogValues,
     modelVersion: row.model_version,
+    // Valor fora do vocabulário vira null em vez de vazar para a UI: a coluna é
+    // texto livre no banco, e `parseMeal` é a fronteira de confiança.
+    meal: row.meal ? parseMeal(row.meal) : null,
     createdAt: new Date(row.created_at),
   };
 }
@@ -968,8 +1030,8 @@ export async function addFoodLogEntry(
   origin: WriteOrigin = { action: 'food-log-add' },
 ): Promise<string> {
   const res = await db.query<{ id: string }>(
-    `INSERT INTO food_log_entry (patient_id, eaten_at, source, photo_ref, values_enc, model_version)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+    `INSERT INTO food_log_entry (patient_id, eaten_at, source, photo_ref, values_enc, model_version, meal)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
     [
       patientId,
       input.eatenAt,
@@ -977,6 +1039,7 @@ export async function addFoodLogEntry(
       input.photoRef ?? null,
       encryptField(JSON.stringify(input.values), key),
       input.modelVersion ?? null,
+      input.meal ?? null,
     ],
   );
   const entryId = res.rows[0]!.id;
@@ -988,6 +1051,185 @@ export async function addFoodLogEntry(
   return entryId;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Registro pendente da refeição (E16 Fase 2)
+//
+// O bot pergunta "qual refeição?" ANTES de gravar. O prato fica aqui até o
+// paciente responder. Vive no banco (não em memória) porque a estimativa da foto
+// já foi PAGA quando o pendente nasce — ver o comentário da migration 0027.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface PendingFoodEntry {
+  readonly id: string;
+  readonly patientId: string;
+  readonly chatId: string;
+  readonly eatenAt: Date;
+  readonly source: string;
+  readonly photoRef: string | null;
+  readonly values: FoodLogValues;
+  readonly modelVersion: string | null;
+  readonly expiresAt: Date;
+}
+
+interface PendingRow {
+  id: string;
+  patient_id: string;
+  chat_id: string;
+  eaten_at: Date;
+  source: string;
+  photo_ref: string | null;
+  values_enc: string;
+  model_version: string | null;
+  expires_at: Date;
+}
+
+function toPendingEntry(row: PendingRow, key: Buffer): PendingFoodEntry {
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    chatId: row.chat_id,
+    eatenAt: new Date(row.eaten_at),
+    source: row.source,
+    photoRef: row.photo_ref,
+    values: JSON.parse(decryptField(row.values_enc, key)) as FoodLogValues,
+    modelVersion: row.model_version,
+    expiresAt: new Date(row.expires_at),
+  };
+}
+
+/** Guarda o prato à espera da refeição. Devolve o id, que vai no botão. */
+export async function addPendingFoodEntry(
+  db: SqlExecutor,
+  patientId: string,
+  chatId: string,
+  input: FoodLogInput,
+  key: Buffer,
+  expiresAt: Date,
+): Promise<string> {
+  const res = await db.query<{ id: string }>(
+    `INSERT INTO food_log_pending
+       (patient_id, chat_id, eaten_at, source, photo_ref, values_enc, model_version, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+    [
+      patientId,
+      chatId,
+      input.eatenAt,
+      input.source ?? 'telegram',
+      input.photoRef ?? null,
+      encryptField(JSON.stringify(input.values), key),
+      input.modelVersion ?? null,
+      expiresAt,
+    ],
+  );
+  return res.rows[0]!.id;
+}
+
+/** Pendentes ainda não respondidos, do mais antigo para o mais novo. */
+export async function listPendingFoodEntries(
+  db: SqlExecutor,
+  patientId: string,
+  key: Buffer,
+): Promise<PendingFoodEntry[]> {
+  const res = await db.query<PendingRow>(
+    `SELECT id, patient_id, chat_id, eaten_at, source, photo_ref, values_enc, model_version, expires_at
+     FROM food_log_pending
+     WHERE patient_id = $1 AND consumed_at IS NULL
+     ORDER BY created_at ASC`,
+    [patientId],
+  );
+  return res.rows.map((r) => toPendingEntry(r, key));
+}
+
+/**
+ * Confirma a refeição e grava de verdade no diário. Devolve null quando o
+ * pendente já foi consumido (duplo clique no botão) ou não existe.
+ *
+ * NÃO usa transação, e não é descuido: o `SqlExecutor` é um Pool compartilhado
+ * em produção, onde BEGIN/COMMIT não têm efeito garantido. A exclusão mútua vem
+ * do UPDATE condicional — um statement só —, e o `food_log_entry_id` gravado no
+ * fim fecha a cadeia para o caso de o processo morrer no meio.
+ */
+export async function confirmPendingFoodEntry(
+  db: SqlExecutor,
+  patientId: string,
+  pendingId: string,
+  meal: Meal,
+  key: Buffer,
+  origin: WriteOrigin = { action: 'telegram-bot-refeicao' },
+): Promise<{ entryId: string; values: FoodLogValues } | null> {
+  // CLAIM atômico: quem conseguir marcar consumed_at é quem grava.
+  const claimed = await db.query<PendingRow>(
+    `UPDATE food_log_pending SET consumed_at = now()
+     WHERE id = $1 AND patient_id = $2 AND consumed_at IS NULL
+     RETURNING id, patient_id, chat_id, eaten_at, source, photo_ref, values_enc, model_version, expires_at`,
+    [pendingId, patientId],
+  );
+  const row = claimed.rows[0];
+  if (!row) return null;
+
+  const pending = toPendingEntry(row, key);
+  const entryId = await addFoodLogEntry(
+    db,
+    patientId,
+    {
+      eatenAt: pending.eatenAt,
+      values: pending.values,
+      source: pending.source,
+      meal,
+      ...(pending.photoRef ? { photoRef: pending.photoRef } : {}),
+      ...(pending.modelVersion ? { modelVersion: pending.modelVersion } : {}),
+    },
+    key,
+    origin,
+  );
+  await db.query('UPDATE food_log_pending SET food_log_entry_id = $1 WHERE id = $2', [entryId, pendingId]);
+  return { entryId, values: pending.values };
+}
+
+/**
+ * Grava os pendentes VENCIDOS com `meal = NULL` e devolve o que gravou.
+ *
+ * NÃO descarta, e essa é a decisão importante: o paciente comeu, a estimativa já
+ * foi paga, e jogar o registro fora faria o `/hoje` e o dashboard mentirem. Seria
+ * tratar "não respondeu a pergunta" como "não comeu" — a mesma família de bug que
+ * o projeto já corrigiu três vezes (ausência de dado tratada como valor).
+ */
+export async function flushExpiredPendingEntries(
+  db: SqlExecutor,
+  now: Date,
+  key: Buffer,
+  patientId?: string,
+): Promise<readonly { patientId: string; chatId: string; entryId: string; values: FoodLogValues }[]> {
+  const claimed = await db.query<PendingRow>(
+    `UPDATE food_log_pending SET consumed_at = now()
+     WHERE consumed_at IS NULL AND expires_at <= $1
+       AND ($2::uuid IS NULL OR patient_id = $2)
+     RETURNING id, patient_id, chat_id, eaten_at, source, photo_ref, values_enc, model_version, expires_at`,
+    [now, patientId ?? null],
+  );
+
+  const out: { patientId: string; chatId: string; entryId: string; values: FoodLogValues }[] = [];
+  for (const row of claimed.rows) {
+    const pending = toPendingEntry(row, key);
+    const entryId = await addFoodLogEntry(
+      db,
+      pending.patientId,
+      {
+        eatenAt: pending.eatenAt,
+        values: pending.values,
+        source: pending.source,
+        ...(pending.photoRef ? { photoRef: pending.photoRef } : {}),
+        ...(pending.modelVersion ? { modelVersion: pending.modelVersion } : {}),
+      },
+      key,
+      { action: 'telegram-bot-refeicao-expirada' },
+    );
+    await db.query('UPDATE food_log_pending SET food_log_entry_id = $1 WHERE id = $2', [entryId, pending.id]);
+    out.push({ patientId: pending.patientId, chatId: pending.chatId, entryId, values: pending.values });
+  }
+  return out;
+}
+
 /** Última entrada do diário do paciente (mais recente por `eaten_at`). Null se vazio. */
 export async function findLatestFoodLogEntry(
   db: SqlExecutor,
@@ -995,7 +1237,7 @@ export async function findLatestFoodLogEntry(
   key: Buffer,
 ): Promise<FoodLogEntry | null> {
   const res = await db.query<FoodLogRow>(
-    `SELECT id, patient_id, eaten_at, source, photo_ref, values_enc, model_version, created_at
+    `SELECT id, patient_id, eaten_at, source, photo_ref, values_enc, model_version, meal, created_at
      FROM food_log_entry WHERE patient_id = $1 AND deleted_at IS NULL
      ORDER BY eaten_at DESC, created_at DESC
      LIMIT 1`,
@@ -1111,7 +1353,7 @@ export async function listFoodLogByDay(
 ): Promise<FoodLogEntry[]> {
   const { start, end } = localDayRangeUtc(dayISO, tzOffsetMinutes);
   const res = await db.query<FoodLogRow>(
-    `SELECT id, patient_id, eaten_at, source, photo_ref, values_enc, model_version, created_at
+    `SELECT id, patient_id, eaten_at, source, photo_ref, values_enc, model_version, meal, created_at
      FROM food_log_entry
      WHERE patient_id = $1 AND eaten_at >= $2 AND eaten_at < $3 AND deleted_at IS NULL
      ORDER BY eaten_at ASC, id ASC`,
@@ -1211,7 +1453,7 @@ export async function listNutritionRange(
   const { start } = localDayRangeUtc(days[0]!, tzOffsetMinutes);
   const { end } = localDayRangeUtc(days[days.length - 1]!, tzOffsetMinutes);
   const entriesRes = await db.query<FoodLogRow>(
-    `SELECT id, patient_id, eaten_at, source, photo_ref, values_enc, model_version, created_at
+    `SELECT id, patient_id, eaten_at, source, photo_ref, values_enc, model_version, meal, created_at
      FROM food_log_entry
      WHERE patient_id = $1 AND eaten_at >= $2 AND eaten_at < $3 AND deleted_at IS NULL
      ORDER BY eaten_at ASC, id ASC`,

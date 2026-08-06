@@ -5,7 +5,7 @@ import { runMigrations, type SqlExecutor , pgliteExecutor } from '@nutrimed/db';
 import { setNutritionGoal } from '@nutrimed/patients';
 import { createPairingCode } from '@nutrimed/telegram-link';
 import { FakeFoodEstimator, type FoodImageInput } from '@nutrimed/food-vision';
-import { handleStart, handlePhoto, handleToday, handleGoal, type BotDeps } from './bot';
+import { handleStart, handlePhoto, handleToday, handleGoal, handleUpdate, type BotDeps } from './bot';
 
 /**
  * Teste de integração da JORNADA COMPLETA do paciente (E2E interno — E12).
@@ -76,13 +76,22 @@ describe('Jornada completa do paciente (E2E interno)', () => {
     console.log(`[bot responde] →\n${started.text}`);
     expect(started.text).toMatch(/ativad/i);
 
-    // 4) Paciente envia a foto do prato.
-    const photo = await handlePhoto(deps, CHAT, IMAGE, 'tg-file-1');
+    // 4) Paciente envia a foto do prato — o bot estima e PERGUNTA a refeição.
+    const photo = await handleUpdate(deps, { chatId: CHAT, photo: IMAGE, photoRef: 'tg-file-1' });
     console.log(`\n[paciente envia] 📷 foto do prato`);
-    console.log(`[bot responde] →\n${photo.text}`);
-    expect(photo.text).toMatch(/kcal/);
-    expect(photo.text).toMatch(/faltam/i); // progresso vs. meta
-    expect(photo.text).toContain('não substitui'); // disclaimer (ADR-015)
+    console.log(`[bot responde] →\n${photo!.text}`);
+    console.log(`[botões] → ${photo!.buttons!.flat().map((b) => b.label).join(' | ')}`);
+    expect(photo!.text).toMatch(/kcal/);
+    expect(photo!.text).toMatch(/de que refei[çc][ãa]o/i);
+    expect(photo!.text).toContain('não substitui'); // disclaimer (ADR-015)
+
+    // 4b) Paciente toca em "Almoço" — só AGORA o prato entra na conta do dia.
+    const almoco = photo!.buttons!.flat()[1]!;
+    const confirmado = await handleUpdate(deps, { chatId: CHAT, callbackData: almoco.data, callbackId: 'cb-1' });
+    console.log(`\n[paciente toca] 🔘 ${almoco.label}`);
+    console.log(`[bot responde] →\n${confirmado!.text}`);
+    expect(confirmado!.text).toMatch(/registrei no seu/i);
+    expect(confirmado!.text).toMatch(/faltam/i); // progresso vs. meta
 
     // 5) Paciente consulta /hoje.
     const hoje = await handleToday(deps, CHAT);
@@ -100,7 +109,9 @@ describe('Jornada completa do paciente (E2E interno)', () => {
 
   it('segunda foto acumula no mesmo dia (consumo somado vs. meta)', async () => {
     const primeira = await handleToday(deps, CHAT);
-    await handlePhoto(deps, CHAT, IMAGE); // + 620 kcal (fake)
+    const ask = await handleUpdate(deps, { chatId: CHAT, photo: IMAGE }); // + 620 kcal (fake)
+    const jantar = ask!.buttons!.flat()[2]!;
+    await handleUpdate(deps, { chatId: CHAT, callbackData: jantar.data, callbackId: 'cb-2' });
     const depois = await handleToday(deps, CHAT);
     // 2 fotos de 620 kcal ⇒ 1240 consumidas; "faltam ~760".
     expect(depois.text).toMatch(/1240/);

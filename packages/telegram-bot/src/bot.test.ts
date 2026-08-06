@@ -7,6 +7,7 @@ import {
   sumFoodLogForDay,
   listFoodLogByDay,
   softDeleteFoodLogEntry,
+  type Meal,
 } from '@nutrimed/patients';
 import { createPairingCode, redeemPairingCode } from '@nutrimed/telegram-link';
 import { FakeFoodEstimator, type FoodImageInput } from '@nutrimed/food-vision';
@@ -19,8 +20,12 @@ import {
   handleToday,
   handleGoal,
   handleUpdate,
+  handleMealCommand,
   type BotDeps,
+  type BotReply,
+  type BotUpdate,
 } from './bot';
+import { mealCallbackData } from './meal';
 
 
 const KEY = randomBytes(32);
@@ -41,6 +46,38 @@ async function insertPatient(exec: SqlExecutor, userId: string): Promise<string>
     [userId, 'enc-name'],
   );
   return res.rows[0]!.id;
+}
+
+/**
+ * O fluxo do paciente em DOIS passos desde o E16 Fase 2: manda o prato, o bot
+ * pergunta a refeição com botões, ele toca em uma. Devolve a resposta FINAL (a
+ * da confirmação), que é onde estão o progresso do dia e a orientação.
+ *
+ * Existe porque a Fase 2 mudou o contrato "foto/texto ⇒ registro imediato" que
+ * estava assado nesta suíte — 21 testes dependiam dele.
+ */
+async function logAndConfirm(
+  d: BotDeps,
+  chatId: string,
+  update: Omit<BotUpdate, 'chatId'>,
+  meal: Meal = 'almoco',
+): Promise<{ ask: BotReply; confirm: BotReply }> {
+  const ask = await handleUpdate(d, { chatId, ...update });
+  if (!ask?.buttons) throw new Error(`esperava botões de refeição, veio: ${ask?.text ?? '(nada)'}`);
+  const botao = ask.buttons.flat().find((b) => b.data === mealCallbackData(pendingIdOf(ask), meal));
+  const confirm = await handleUpdate(d, { chatId, callbackData: botao!.data, callbackId: 'cb-test' });
+  return { ask, confirm: confirm! };
+}
+
+/** O id do pendente vem embutido no `callback_data` de qualquer um dos botões. */
+function pendingIdOf(reply: BotReply): string {
+  const data = reply.buttons!.flat()[0]!.data;
+  const compacto = data.split(':')[1]!;
+  // remonta o uuid com hífens (8-4-4-4-12)
+  return [
+    compacto.slice(0, 8), compacto.slice(8, 12), compacto.slice(12, 16),
+    compacto.slice(16, 20), compacto.slice(20),
+  ].join('-');
 }
 
 describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
@@ -103,22 +140,40 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
       expect(r.text).toMatch(/n[ãa]o est[áa] ativo/i);
     });
 
-    it('pareado: estima, registra (cifrado/auditado) e responde com disclaimer', async () => {
+    it('pareado: estima, PERGUNTA a refeição e só grava após a resposta', async () => {
       const patientId = await pairNewChat('chat-photo');
-      const r = await handlePhoto(deps, 'chat-photo', IMAGE, 'tg-file-1');
+      const { ask, confirm } = await logAndConfirm(deps, 'chat-photo', { photo: IMAGE, photoRef: 'tg-file-1' });
 
-      expect(r.text).toMatch(/kcal/);
-      expect(r.text).toContain('não substitui'); // disclaimer obrigatório (ADR-015)
+      // A estimativa aparece JUNTO da pergunta: o paciente precisa ver o que o
+      // bot entendeu antes de classificar, senão classifica às cegas.
+      expect(ask.text).toMatch(/kcal/);
+      expect(ask.text).toMatch(/de que refei[çc][ãa]o/i);
+      expect(ask.text).toContain('não substitui'); // disclaimer obrigatório (ADR-015)
+      expect(ask.buttons?.flat()).toHaveLength(4);
+
+      expect(confirm.text).toMatch(/registrei no seu almo/i);
 
       const progress = await sumFoodLogForDay(exec, patientId, '2026-07-01', -180, KEY);
       expect(progress.consumed.kcal).toBe(620); // valor do FakeFoodEstimator
+
+      const [entry] = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+      expect(entry?.meal).toBe('almoco');
     });
 
-    it('pareado com meta: mostra o quanto falta', async () => {
+    it('enquanto NÃO responde, o prato não entra na conta do dia', async () => {
+      const patientId = await pairNewChat('chat-photo-pend');
+      const ask = await handleUpdate(deps, { chatId: 'chat-photo-pend', photo: IMAGE, photoRef: 'f-p' });
+      expect(ask?.buttons).toBeDefined();
+
+      const progress = await sumFoodLogForDay(exec, patientId, '2026-07-01', -180, KEY);
+      expect(progress.consumed.kcal).toBe(0);
+    });
+
+    it('pareado com meta: mostra o quanto falta APÓS a confirmação', async () => {
       const patientId = await pairNewChat('chat-photo-goal');
       await setNutritionGoal(exec, patientId, userId, '2026-07-01', { kcal: 2000, protein: 150, carbs: 200, fat: 60 }, KEY);
-      const r = await handlePhoto(deps, 'chat-photo-goal', IMAGE);
-      expect(r.text).toMatch(/faltam/i);
+      const { confirm } = await logAndConfirm(deps, 'chat-photo-goal', { photo: IMAGE });
+      expect(confirm.text).toMatch(/faltam/i);
     });
 
     it('estimador indisponível (null): degrada com aviso, sem quebrar', async () => {
@@ -143,7 +198,7 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
 
     it('/corrigir: reestima a mesma foto e ATUALIZA a entrada (não duplica o consumo)', async () => {
       const patientId = await pairNewChat('chat-fix');
-      await handlePhoto(deps, 'chat-fix', IMAGE, 'tg-file-fix'); // 620 kcal (fake sem hint)
+      await logAndConfirm(deps, 'chat-fix', { photo: IMAGE, photoRef: 'tg-file-fix' }); // 620 kcal (fake sem hint)
 
       const r = await handleCorrection(deps, 'chat-fix', 'era frango grelhado, não peixe');
       expect(r.text).toMatch(/ajustad/i);
@@ -156,8 +211,8 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
 
     it('/corrigir corrige a última entrada, preservando as anteriores do dia', async () => {
       const patientId = await pairNewChat('chat-fix-2x');
-      await handlePhoto(deps, 'chat-fix-2x', IMAGE, 'tg-a'); // 620
-      await handlePhoto(deps, 'chat-fix-2x', IMAGE, 'tg-b'); // 620
+      await logAndConfirm(deps, 'chat-fix-2x', { photo: IMAGE, photoRef: 'tg-a' }); // 620
+      await logAndConfirm(deps, 'chat-fix-2x', { photo: IMAGE, photoRef: 'tg-b' }); // 620
       await handleCorrection(deps, 'chat-fix-2x', 'era frango'); // última vira 580
 
       const progress = await sumFoodLogForDay(exec, patientId, '2026-07-01', -180, KEY);
@@ -178,7 +233,7 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
 
     it('/corrigir sem photoRef salvo: pede o reenvio da foto com legenda', async () => {
       await pairNewChat('chat-fix-noref');
-      await handlePhoto(deps, 'chat-fix-noref', IMAGE); // sem photoRef
+      await logAndConfirm(deps, 'chat-fix-noref', { photo: IMAGE }); // sem photoRef
       const r = await handleCorrection(deps, 'chat-fix-noref', 'era frango');
       expect(r.text).toMatch(/envie a foto novamente/i);
     });
@@ -196,7 +251,7 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
 
     it('dispatcher roteia /corrigir', async () => {
       await pairNewChat('chat-fix-disp');
-      await handleUpdate(deps, { chatId: 'chat-fix-disp', photo: IMAGE, photoRef: 'f-d' });
+      await logAndConfirm(deps, 'chat-fix-disp', { photo: IMAGE, photoRef: 'f-d' });
       const r = await handleUpdate(deps, { chatId: 'chat-fix-disp', text: '/corrigir era frango' });
       expect(r?.text).toMatch(/ajustad/i);
     });
@@ -227,7 +282,9 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
     it('com llm: acrescenta a frase de orientação e mantém o disclaimer', async () => {
       await pairNewChat('chat-ia');
       const depsIa: BotDeps = { ...deps, llm: new FakeLlmProvider() };
-      const r = await handlePhoto(depsIa, 'chat-ia', IMAGE);
+      // A orientação depende do progresso do DIA, que só existe após a
+      // confirmação — por isso ela migrou para a resposta final.
+      const { confirm: r } = await logAndConfirm(depsIa, 'chat-ia', { photo: IMAGE });
       expect(r.text).toContain('[aurelio]'); // marcador determinístico do FakeLlmProvider
       expect(r.text).toContain('não substitui'); // disclaimer segue presente (ADR-015)
     });
@@ -265,7 +322,7 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
     it('gramas informados: calcula pela TACO, registra e soma no dia — SEM usar visão', async () => {
       const patientId = await pairNewChat('chat-comi');
       // estimator null prova que o caminho é determinístico (não passa pela visão)
-      const r = await handleAte({ ...deps, estimator: null }, 'chat-comi', '100g de arroz');
+      const r = await handleAte({ ...deps, estimator: null }, 'chat-comi', 'almoco 100g de arroz');
 
       expect(r.text).toMatch(/registrei/i);
       expect(r.text).toContain('tabela TACO');
@@ -283,7 +340,7 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
 
     it('vários itens numa mensagem', async () => {
       const patientId = await pairNewChat('chat-comi-multi');
-      const r = await handleAte(deps, 'chat-comi-multi', '100g de arroz, 150g de frango grelhado');
+      const r = await handleAte(deps, 'chat-comi-multi', 'almoco 100g de arroz, 150g de frango grelhado');
       expect(r.text).toContain('arroz');
       expect(r.text).toContain('frango');
 
@@ -297,7 +354,7 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
     // exercitados ponta a ponta — do texto ao valor gravado no banco.
     it('"80g de frango grelhado" registra o PEITO, não o coração de galinha', async () => {
       const patientId = await pairNewChat('chat-e16-frango');
-      await handleAte({ ...deps, estimator: null }, 'chat-e16-frango', '80g de frango grelhado');
+      await handleAte({ ...deps, estimator: null }, 'chat-e16-frango', 'almoco 80g de frango grelhado');
 
       const [entry] = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
       // Peito grelhado: 159 kcal e 32 g de proteína por 100 g ⇒ 80 g = ~127 kcal
@@ -311,7 +368,7 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
 
     it('"100g de arroz branco" registra arroz, não arroz carreteiro', async () => {
       const patientId = await pairNewChat('chat-e16-arroz');
-      await handleAte({ ...deps, estimator: null }, 'chat-e16-arroz', '100g de arroz branco');
+      await handleAte({ ...deps, estimator: null }, 'chat-e16-arroz', 'almoco 100g de arroz branco');
 
       const [entry] = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
       // Arroz tipo 1 cozido: 128 kcal, 2,5 g P, 0,2 g G. O carreteiro (match
@@ -322,7 +379,7 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
 
     it('"30g de whey protein isolado" é registrado — a TACO não tem suplemento', async () => {
       const patientId = await pairNewChat('chat-e16-whey');
-      const r = await handleAte({ ...deps, estimator: null }, 'chat-e16-whey', '30g de whey protein isolado');
+      const r = await handleAte({ ...deps, estimator: null }, 'chat-e16-whey', 'lanche 30g de whey protein isolado');
 
       // Antes desta rodada o bot respondia que não conseguia calcular.
       expect(r.text).toMatch(/registrei/i);
@@ -335,7 +392,7 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
 
     it('"200ml de leite desnatado" usa o leite LÍQUIDO, não o leite em pó', async () => {
       const patientId = await pairNewChat('chat-e16-leite');
-      await handleAte({ ...deps, estimator: null }, 'chat-e16-leite', '200ml de leite desnatado');
+      await handleAte({ ...deps, estimator: null }, 'chat-e16-leite', 'cafe 200ml de leite desnatado');
 
       // A TACO só analisou leite em PÓ (362 kcal/100 g); o líquido tem ~35.
       // 200 ml ⇒ ~70 kcal. Pelo leite em pó daria ~724 — 10×.
@@ -346,7 +403,7 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
 
     it('"90g de macarrão" registra a massa COZIDA — o caso relatado pelo piloto', async () => {
       const patientId = await pairNewChat('chat-e16-macarrao');
-      const r = await handleAte({ ...deps, estimator: null }, 'chat-e16-macarrao', '90g de macarrao');
+      const r = await handleAte({ ...deps, estimator: null }, 'chat-e16-macarrao', 'almoco 90g de macarrao');
 
       // O piloto recebeu "não tenho macarrão" porque a TACO só tem massa CRUA
       // (371 kcal/100 g) — cozida absorve água e cai para ~158. 90 g ⇒ ~142 kcal.
@@ -359,7 +416,7 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
 
     it('alimento que não é comida não vira registro (água)', async () => {
       const patientId = await pairNewChat('chat-e16-agua');
-      const r = await handleAte({ ...deps, estimator: null }, 'chat-e16-agua', '500ml de agua');
+      const r = await handleAte({ ...deps, estimator: null }, 'chat-e16-agua', 'almoco 500ml de agua');
 
       // Antes caía em "Coco, água de". O bot é só de ALIMENTAÇÃO desde
       // 2026-07-24 — água não entra na contagem nem como registro de 0 kcal.
@@ -370,7 +427,7 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
 
     it('"creatina" entra com ZERO calorias, nunca como proteína', async () => {
       const patientId = await pairNewChat('chat-e16-creatina');
-      await handleAte({ ...deps, estimator: null }, 'chat-e16-creatina', '5g de creatina');
+      await handleAte({ ...deps, estimator: null }, 'chat-e16-creatina', 'lanche 5g de creatina');
 
       const [entry] = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
       // Bases públicas trazem creatina com ~88 g de "proteína" por 100 g
@@ -382,7 +439,7 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
 
     it('sem quantidade: assume porção, SINALIZA na resposta e no registro', async () => {
       const patientId = await pairNewChat('chat-comi-sem-qtd');
-      const r = await handleAte(deps, 'chat-comi-sem-qtd', 'arroz');
+      const r = await handleAte(deps, 'chat-comi-sem-qtd', 'almoco arroz');
       expect(r.text).toMatch(/não informou a quantidade/i);
       expect(r.text).toContain('~estimada');
 
@@ -413,8 +470,8 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
 
     it('foto continua funcionando junto com o texto (os dois caminhos coexistem)', async () => {
       const patientId = await pairNewChat('chat-comi-e-foto');
-      await handleAte(deps, 'chat-comi-e-foto', '100g de arroz');
-      await handlePhoto(deps, 'chat-comi-e-foto', IMAGE, 'tg-coexiste');
+      await handleAte(deps, 'chat-comi-e-foto', 'almoco 100g de arroz');
+      await logAndConfirm(deps, 'chat-comi-e-foto', { photo: IMAGE, photoRef: 'tg-coexiste' }, 'jantar');
 
       const entries = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
       expect(entries).toHaveLength(2);
@@ -425,7 +482,7 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
   describe('exclusão pelo médico (soft-delete, migration 0021)', () => {
     it('registro excluído sai das somas e das listagens, mas a linha permanece', async () => {
       const patientId = await pairNewChat('chat-del');
-      await handleAte(deps, 'chat-del', '100g de arroz');
+      await handleAte(deps, 'chat-del', 'almoco 100g de arroz');
       const [entry] = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
       expect(entry).toBeDefined();
 
@@ -445,7 +502,7 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
 
     it('excluir registro de outro paciente falha (isolamento)', async () => {
       const patientA = await pairNewChat('chat-del-a');
-      await handleAte(deps, 'chat-del-a', '100g de arroz');
+      await handleAte(deps, 'chat-del-a', 'almoco 100g de arroz');
       const [entry] = await listFoodLogByDay(exec, patientA, '2026-07-01', -180, KEY);
       const patientB = await insertPatient(exec, userId);
 
@@ -490,5 +547,176 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
       const welcome = await handleUpdate(deps, { chatId: 'chat-group-2', text: '/start@RafaNutriBot' });
       expect(welcome?.text).toMatch(/c[óo]digo de\s*v[íi]nculo/i);
     });
+  });
+});
+
+describe('Pergunta da refeição (E16 Fase 2)', () => {
+  let db: PGlite;
+  let exec: SqlExecutor;
+  let userId: string;
+  let deps: BotDeps;
+
+  beforeAll(async () => {
+    db = new PGlite();
+    exec = pgliteExecutor(db);
+    await runMigrations(exec);
+    userId = await insertUser(exec, 'fase2@nutrimed.test');
+    deps = {
+      db: exec,
+      key: KEY,
+      estimator: new FakeFoodEstimator(),
+      now: NOW,
+      tzOffsetMinutes: -180,
+      downloadPhoto: async () => IMAGE,
+    };
+  });
+
+  afterAll(async () => {
+    await db.close();
+  });
+
+  async function pairNewChat(chatId: string): Promise<string> {
+    const patientId = await insertPatient(exec, userId);
+    const code = await createPairingCode(exec, patientId, userId);
+    await redeemPairingCode(exec, chatId, code);
+    return patientId;
+  }
+
+  it('o atalho evita a pergunta: "/comi almoço ..." grava direto', async () => {
+    // "Perguntar sempre" vale quando o paciente NÃO disse. Se ele já falou a
+    // refeição, perguntar de novo seria ignorá-lo.
+    const patientId = await pairNewChat('f2-atalho');
+    const r = await handleAte(deps, 'f2-atalho', 'almoço 100g de arroz');
+
+    expect(r.buttons).toBeUndefined();
+    expect(r.text).toMatch(/registrei no seu almo/i);
+
+    const [entry] = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+    expect(entry?.meal).toBe('almoco');
+  });
+
+  it('legenda da foto com a refeição também pula a pergunta', async () => {
+    const patientId = await pairNewChat('f2-legenda');
+    const r = await handleUpdate(deps, {
+      chatId: 'f2-legenda',
+      photo: IMAGE,
+      photoRef: 'f-leg',
+      caption: 'jantar: frango grelhado',
+    });
+    expect(r?.buttons).toBeUndefined();
+
+    const [entry] = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+    expect(entry?.meal).toBe('jantar');
+    // o resto da legenda continua servindo de dica para a visão
+    expect(entry?.values.itemsLabel).toContain('frango grelhado');
+  });
+
+  it('/refeicao é o fallback do botão e aplica ao pendente mais antigo', async () => {
+    const patientId = await pairNewChat('f2-comando');
+    await handleUpdate(deps, { chatId: 'f2-comando', photo: IMAGE, photoRef: 'f-cmd' });
+
+    const r = await handleMealCommand(deps, 'f2-comando', 'janta');
+    expect(r.text).toMatch(/registrei no seu jantar/i);
+
+    const [entry] = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+    expect(entry?.meal).toBe('jantar');
+  });
+
+  it('/refeicao sem pendente avisa em vez de falhar', async () => {
+    await pairNewChat('f2-sem-pend');
+    const r = await handleMealCommand(deps, 'f2-sem-pend', 'almoco');
+    expect(r.text).toMatch(/nenhum registro esperando/i);
+  });
+
+  it('/refeicao com termo desconhecido orienta, e NÃO chuta', async () => {
+    await pairNewChat('f2-termo-ruim');
+    await handleUpdate(deps, { chatId: 'f2-termo-ruim', photo: IMAGE });
+    const r = await handleMealCommand(deps, 'f2-termo-ruim', 'sobremesa');
+    expect(r.text).toMatch(/não entendi a refeição/i);
+  });
+
+  it('duplo toque no mesmo botão não duplica o consumo', async () => {
+    const patientId = await pairNewChat('f2-duplo');
+    const ask = await handleUpdate(deps, { chatId: 'f2-duplo', photo: IMAGE, photoRef: 'f-dup' });
+    const botao = ask!.buttons!.flat()[0]!;
+
+    await handleUpdate(deps, { chatId: 'f2-duplo', callbackData: botao.data, callbackId: 'cb-a' });
+    const segundo = await handleUpdate(deps, { chatId: 'f2-duplo', callbackData: botao.data, callbackId: 'cb-b' });
+
+    expect(segundo?.text).toMatch(/já foi confirmado|não está mais pendente|expirou/i);
+    const progress = await sumFoodLogForDay(exec, patientId, '2026-07-01', -180, KEY);
+    expect(progress.consumed.kcal).toBe(620); // uma vez só
+  });
+
+  it('dois pratos pendentes não se confundem — cada botão resolve o seu', async () => {
+    const patientId = await pairNewChat('f2-dois');
+    const a = await handleUpdate(deps, { chatId: 'f2-dois', photo: IMAGE, photoRef: 'f-1' });
+    const b = await handleUpdate(deps, { chatId: 'f2-dois', photo: IMAGE, photoRef: 'f-2' });
+    expect(a!.buttons![0]![0]!.data).not.toBe(b!.buttons![0]![0]!.data);
+
+    // a 2ª pergunta identifica QUAL prato, senão o paciente não sabe o que responde
+    expect(b!.text).toMatch(/das \d{2}h\d{2}/);
+
+    await handleUpdate(deps, { chatId: 'f2-dois', callbackData: a!.buttons!.flat()[0]!.data, callbackId: 'x' });
+    await handleUpdate(deps, { chatId: 'f2-dois', callbackData: b!.buttons!.flat()[2]!.data, callbackId: 'y' });
+
+    const entries = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+    expect(entries).toHaveLength(2);
+    expect(entries.map((e) => e.meal).sort()).toEqual(['cafe_da_manha', 'jantar']);
+  });
+
+  it('no 4º prato sem resposta o bot NÃO chama o estimador', async () => {
+    // A visão custa por chamada. Acumular perguntas sem resposta é sinal de
+    // conversa travada, não de uso normal (lição do vazamento de 2026-07-24).
+    await pairNewChat('f2-teto');
+    let chamadas = 0;
+    const contando: BotDeps = {
+      ...deps,
+      estimator: {
+        modelVersion: 'fake',
+        estimate: async (...args: Parameters<FakeFoodEstimator['estimate']>) => {
+          chamadas += 1;
+          return new FakeFoodEstimator().estimate(...args);
+        },
+      },
+    };
+
+    for (let i = 0; i < 3; i += 1) {
+      await handleUpdate(contando, { chatId: 'f2-teto', photo: IMAGE, photoRef: `f-${i}` });
+    }
+    expect(chamadas).toBe(3);
+
+    const quarta = await handleUpdate(contando, { chatId: 'f2-teto', photo: IMAGE, photoRef: 'f-3' });
+    expect(chamadas).toBe(3); // NÃO chamou de novo
+    expect(quarta?.text).toMatch(/esperando você dizer/i);
+  });
+
+  it('/hoje avisa do pendente e reenvia os botões', async () => {
+    // Sem isto o paciente vê um /hoje que não bate com o que enviou e conclui
+    // que o bot perdeu a foto.
+    await pairNewChat('f2-hoje');
+    await handleUpdate(deps, { chatId: 'f2-hoje', photo: IMAGE, photoRef: 'f-h' });
+
+    const r = await handleToday(deps, 'f2-hoje');
+    expect(r.text).toMatch(/esperando/i);
+    expect(r.text).toMatch(/não entrou na conta/i);
+    expect(r.buttons?.flat()).toHaveLength(4);
+  });
+
+  it('o callback_data cabe no limite de 64 bytes do Telegram', async () => {
+    await pairNewChat('f2-bytes');
+    const ask = await handleUpdate(deps, { chatId: 'f2-bytes', photo: IMAGE });
+    for (const b of ask!.buttons!.flat()) {
+      expect(Buffer.byteLength(b.data, 'utf8')).toBeLessThanOrEqual(64);
+    }
+  });
+
+  it('botão de chat não pareado não vaza nada', async () => {
+    const r = await handleUpdate(deps, {
+      chatId: 'f2-nao-pareado',
+      callbackData: 'm:00000000000000000000000000000000:a',
+      callbackId: 'cb',
+    });
+    expect(r?.text).toMatch(/não está ativo/i);
   });
 });
