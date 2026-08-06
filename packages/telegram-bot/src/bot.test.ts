@@ -291,6 +291,95 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
       expect(entry?.values.itemsLabel).toContain('arroz');
     });
 
+    // ── E16: precisão do alimento escolhido ──────────────────────────────
+    // Os casos abaixo foram medidos ERRADOS em produção (2026-08-06), com o
+    // paciente-piloto usando o bot para conduzir a dieta. Aqui eles são
+    // exercitados ponta a ponta — do texto ao valor gravado no banco.
+    it('"80g de frango grelhado" registra o PEITO, não o coração de galinha', async () => {
+      const patientId = await pairNewChat('chat-e16-frango');
+      await handleAte({ ...deps, estimator: null }, 'chat-e16-frango', '80g de frango grelhado');
+
+      const [entry] = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+      // Peito grelhado: 159 kcal e 32 g de proteína por 100 g ⇒ 80 g = ~127 kcal
+      // e ~25,6 g. O coração (o match antigo) daria ~166 kcal e ~18 g — a
+      // proteína, que é o número que o paciente persegue, vinha 30% menor.
+      expect(entry?.values.kcal).toBeGreaterThan(115);
+      expect(entry?.values.kcal).toBeLessThan(140);
+      expect(entry?.values.protein).toBeGreaterThan(23);
+      expect(entry?.values.fat).toBeLessThan(4); // coração daria ~9,7 g
+    });
+
+    it('"100g de arroz branco" registra arroz, não arroz carreteiro', async () => {
+      const patientId = await pairNewChat('chat-e16-arroz');
+      await handleAte({ ...deps, estimator: null }, 'chat-e16-arroz', '100g de arroz branco');
+
+      const [entry] = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+      // Arroz tipo 1 cozido: 128 kcal, 2,5 g P, 0,2 g G. O carreteiro (match
+      // antigo) traz carne-seca junto: 154 kcal, 10,8 g P, 7,1 g G.
+      expect(entry?.values.protein).toBeLessThan(5);
+      expect(entry?.values.fat).toBeLessThan(2);
+    });
+
+    it('"30g de whey protein isolado" é registrado — a TACO não tem suplemento', async () => {
+      const patientId = await pairNewChat('chat-e16-whey');
+      const r = await handleAte({ ...deps, estimator: null }, 'chat-e16-whey', '30g de whey protein isolado');
+
+      // Antes desta rodada o bot respondia que não conseguia calcular.
+      expect(r.text).toMatch(/registrei/i);
+      expect(r.text).toContain('rótulos'); // procedência exata: não é da TACO
+
+      const [entry] = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+      expect(entry?.values.protein).toBeGreaterThan(20); // 30 g × 83% ≈ 25 g
+      expect(entry?.values.kcal).toBeGreaterThan(90);
+    });
+
+    it('"200ml de leite desnatado" usa o leite LÍQUIDO, não o leite em pó', async () => {
+      const patientId = await pairNewChat('chat-e16-leite');
+      await handleAte({ ...deps, estimator: null }, 'chat-e16-leite', '200ml de leite desnatado');
+
+      // A TACO só analisou leite em PÓ (362 kcal/100 g); o líquido tem ~35.
+      // 200 ml ⇒ ~70 kcal. Pelo leite em pó daria ~724 — 10×.
+      const [entry] = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+      expect(entry?.values.kcal).toBeGreaterThan(50);
+      expect(entry?.values.kcal).toBeLessThan(100);
+    });
+
+    it('"90g de macarrão" registra a massa COZIDA — o caso relatado pelo piloto', async () => {
+      const patientId = await pairNewChat('chat-e16-macarrao');
+      const r = await handleAte({ ...deps, estimator: null }, 'chat-e16-macarrao', '90g de macarrao');
+
+      // O piloto recebeu "não tenho macarrão" porque a TACO só tem massa CRUA
+      // (371 kcal/100 g) — cozida absorve água e cai para ~158. 90 g ⇒ ~142 kcal.
+      expect(r.text).toMatch(/registrei/i);
+
+      const [entry] = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+      expect(entry?.values.kcal).toBeGreaterThan(120);
+      expect(entry?.values.kcal).toBeLessThan(165);
+    });
+
+    it('alimento que não é comida não vira registro (água)', async () => {
+      const patientId = await pairNewChat('chat-e16-agua');
+      const r = await handleAte({ ...deps, estimator: null }, 'chat-e16-agua', '500ml de agua');
+
+      // Antes caía em "Coco, água de". O bot é só de ALIMENTAÇÃO desde
+      // 2026-07-24 — água não entra na contagem nem como registro de 0 kcal.
+      expect(r.text).toMatch(/não entra na contagem/i);
+      const entries = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+      expect(entries).toHaveLength(0);
+    });
+
+    it('"creatina" entra com ZERO calorias, nunca como proteína', async () => {
+      const patientId = await pairNewChat('chat-e16-creatina');
+      await handleAte({ ...deps, estimator: null }, 'chat-e16-creatina', '5g de creatina');
+
+      const [entry] = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+      // Bases públicas trazem creatina com ~88 g de "proteína" por 100 g
+      // (artefato de Kjeldahl). Isso inflaria a aderência proteica do plano
+      // inteiro com proteína que não existe.
+      expect(entry?.values.kcal).toBe(0);
+      expect(entry?.values.protein).toBe(0);
+    });
+
     it('sem quantidade: assume porção, SINALIZA na resposta e no registro', async () => {
       const patientId = await pairNewChat('chat-comi-sem-qtd');
       const r = await handleAte(deps, 'chat-comi-sem-qtd', 'arroz');

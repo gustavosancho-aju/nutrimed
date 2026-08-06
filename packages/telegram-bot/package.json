@@ -21,7 +21,8 @@
     "@nutrimed/nutrition-report": "workspace:*",
     "@nutrimed/patients": "workspace:*",
     "@nutrimed/providers": "workspace:*",
-    "@nutrimed/telegram-link": "workspace:*"
+    "@nutrimed/telegram-link": "workspace:*",
+    "@nutrimed/food-catalog": "workspace:*"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.0",

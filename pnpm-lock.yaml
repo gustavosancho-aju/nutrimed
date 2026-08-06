@@ -423,6 +423,19 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
+  packages/food-catalog:
+    dependencies:
+      '@nutrimed/taco':
+        specifier: workspace:*
+        version: link:../taco
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.21
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
   packages/food-vision:
     dependencies:
       '@nutrimed/providers':
@@ -508,6 +521,9 @@ importers:
       '@nutrimed/db':
         specifier: workspace:*
         version: link:../db
+      '@nutrimed/food-catalog':
+        specifier: workspace:*
+        version: link:../food-catalog
       '@nutrimed/patients':
         specifier: workspace:*
         version: link:../patients
@@ -630,6 +646,9 @@ importers:
       '@nutrimed/db':
         specifier: workspace:*
         version: link:../db
+      '@nutrimed/food-catalog':
+        specifier: workspace:*
+        version: link:../food-catalog
       '@nutrimed/food-vision':
         specifier: workspace:*
         version: link:../food-vision
