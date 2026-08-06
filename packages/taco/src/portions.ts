@@ -28,6 +28,13 @@ const KEYWORD_RULES: readonly PortionRule[] = [
   { keywords: ['oleo', 'óleo', 'azeite', 'manteiga', 'margarina'], portion: { grams: 10, label: '1 colher de sopa (10 g)' } },
   { keywords: ['acucar', 'açúcar', 'mel', 'doce', 'chocolate'], portion: { grams: 20, label: '1 colher de sopa (20 g)' } },
   { keywords: ['cafe', 'café', 'cha', 'chá'], portion: { grams: 100, label: '1 xícara (100 ml)' } },
+  // Suplementos e pastas vêm da tabela própria (@nutrimed/food-catalog) e não
+  // têm categoria na TACO — sem estas regras cairiam na porção padrão de 100 g,
+  // que para whey seria ~3 doses (405 kcal onde o paciente tomou ~120).
+  { keywords: ['whey', 'albumina'], portion: { grams: 30, label: '1 dose/scoop (30 g)' } },
+  { keywords: ['creatina'], portion: { grams: 3, label: '1 dose (3 g)' } },
+  { keywords: ['pasta de amendoim'], portion: { grams: 20, label: '1 colher de sopa (20 g)' } },
+  { keywords: ['goma de tapioca'], portion: { grams: 80, label: '1 tapioca média (80 g)' } },
 ];
 
 const CATEGORY_PORTIONS: Readonly<Record<string, Portion>> = {

@@ -20,8 +20,16 @@ export interface TacoMatch {
 /** Versão do dataset embarcado (proveniência NFR10). */
 export const TACO_VERSION: string = dataset.version;
 
-/** Score mínimo para considerar um match confiável; abaixo disso o item deve ser sinalizado. */
-export const TACO_MATCH_THRESHOLD = 0.5;
+/**
+ * Score mínimo para considerar um match confiável; abaixo disso o item deve ser
+ * sinalizado ao paciente.
+ *
+ * Era 0.5, e isso era um bug silencioso: "arroz branco" pontuava EXATAMENTE 0.5
+ * contra "Arroz carreteiro" e, como a comparação é `>=`, era gravado como
+ * certeza. Um item que casou metade dos termos não é uma certeza — é um palpite.
+ * Com o bônus de cabeça (ver `searchFood`), match bom passa folgado de 0.6.
+ */
+export const TACO_MATCH_THRESHOLD = 0.6;
 
 const FOODS: readonly TacoFood[] = dataset.foods as readonly TacoFood[];
 const BY_ID = new Map(FOODS.map((f) => [f.id, f]));
@@ -80,11 +88,70 @@ function expandQueryTokens(tokens: readonly string[]): string[] {
 }
 
 /**
- * Busca os k alimentos mais próximos da consulta. Score pondera cobertura da consulta
- * (peso maior — o que o paciente disse precisa estar no item) e concisão do item
- * (desempate: "Arroz, cozido" ganha de "Arroz, com legumes, cozido" para "arroz").
- * Itens "cru(a)" só vencem se o paciente disse "cru" — recordatório descreve o que
- * foi COMIDO, e feijão cru (329 kcal/100 g) no lugar do cozido (76) triplicaria o total.
+ * Bônus para o alimento cujo termo de CABEÇA casa com a consulta.
+ *
+ * As descrições da TACO são "SubstantivoPrincipal, qualificador, qualificador"
+ * ("Arroz, tipo 1, cozido"; "Morango, cru"). Quando o primeiro token casa, o item
+ * É aquele alimento; quando ele aparece só no meio, o alimento é OUTRO que apenas
+ * contém aquele ("Bolinho de arroz", "Biscoito recheado com morango", "Pão,
+ * aveia, forma"). Sem este sinal, "aveia" casava com pão de aveia e "carne moída"
+ * com estrogonofe — os dois tinham score idêntico ao do item certo.
+ */
+const HEAD_TOKEN_BONUS = 0.15;
+
+/**
+ * Penalidade para a variante CRUA quando o paciente não pediu "cru".
+ *
+ * Duas forças, e a distinção importa:
+ *
+ * FORTE (×0.6) — cereal ou leguminosa que TEM alternativa preparada na tabela.
+ * É o caso que originou a regra: feijão cru tem 329 kcal/100 g contra 76 do
+ * cozido, arroz cru 358 contra 128. Trocar um pelo outro triplica o total do dia.
+ * A condição "tem alternativa preparada" é essencial — sem ela, "aveia" (cuja
+ * única entrada na TACO é "Aveia, flocos, crua") era esmagada e perdia para
+ * "Pão, aveia, forma". Penalizar o único item existente não protege ninguém.
+ *
+ * FRACA (×0.98) — todo o resto. Fruta e salada se comem CRUAS, e é assim que a
+ * TACO as descreve ("Banana, prata, crua", "Morango, cru"): a penalidade forte
+ * aqui foi um bug real. Mas um empurrãozinho ainda é útil para desempate — sem
+ * ele, "feijão" casava com "Feijão, broto, cru" (broto de feijão, 39 kcal), que
+ * a TACO classifica como hortaliça e que por isso escapava da regra forte.
+ */
+const RAW_PENALTY_STRONG = 0.6;
+const RAW_PENALTY_WEAK = 0.98;
+
+const STRONG_RAW_CATEGORIES: ReadonlySet<string> = new Set([
+  'Cereais e derivados',
+  'Leguminosas e derivados',
+]);
+
+/**
+ * Termos de cabeça que possuem ao menos um item NÃO-cru na tabela. É o que
+ * distingue "existe alternativa preparada" (arroz, feijão) de "só existe a forma
+ * crua" (aveia) — e sem essa distinção a penalidade forte pune o inocente.
+ */
+const HEADS_WITH_PREPARED: ReadonlySet<string> = (() => {
+  const heads = new Set<string>();
+  for (const entry of INDEX) {
+    const head = entry.tokens[0];
+    if (head === undefined) continue;
+    if (!entry.tokenSet.has('cru') && !entry.tokenSet.has('crua')) heads.add(head);
+  }
+  return heads;
+})();
+
+/**
+ * Busca os k alimentos mais próximos da consulta. O score pondera cobertura da
+ * consulta (peso maior — o que o paciente disse precisa estar no item), concisão
+ * do item e o bônus de cabeça (ver `HEAD_TOKEN_BONUS`).
+ *
+ * ATENÇÃO ao mexer aqui: esta busca é o FALLBACK. O que o paciente digita com
+ * frequência é resolvido pelo catálogo curado (`@nutrimed/food-catalog`), porque
+ * há casos que nenhum score resolve — "Frango, coração, grelhado" é, para a
+ * consulta "frango grelhado", um match lexicalmente MELHOR que "Frango, peito,
+ * sem pele, grelhado" (casa a mesma fração com menos sobra). Similaridade de
+ * string não sabe qual alimento as pessoas comem; só a curadoria sabe.
+ * Todo ajuste aqui precisa passar pelo corpus em `packages/food-catalog`.
  */
 export function searchFood(query: string, k = 5): TacoMatch[] {
   const queryTokens = expandQueryTokens(tokenize(query));
@@ -101,10 +168,18 @@ export function searchFood(query: string, k = 5): TacoMatch[] {
     const queryCoverage = matched / queryTokens.length;
     const foodCoverage = matched / entry.tokens.length;
     let score = queryCoverage * 0.75 + foodCoverage * 0.25;
-    if (!queryWantsRaw && (entry.tokenSet.has('cru') || entry.tokenSet.has('crua'))) {
-      score *= 0.6; // variante crua só entra na falta de alternativa preparada
+
+    const head = entry.tokens[0];
+    if (head !== undefined && queryTokens.includes(head)) score += HEAD_TOKEN_BONUS;
+
+    const isRaw = entry.tokenSet.has('cru') || entry.tokenSet.has('crua');
+    if (isRaw && !queryWantsRaw) {
+      const temPreparado = head !== undefined && HEADS_WITH_PREPARED.has(head);
+      const forte = temPreparado && STRONG_RAW_CATEGORIES.has(entry.food.category);
+      score *= forte ? RAW_PENALTY_STRONG : RAW_PENALTY_WEAK;
     }
-    scored.push({ food: entry.food, score: Math.round(score * 1000) / 1000 });
+
+    scored.push({ food: entry.food, score: Math.round(Math.min(score, 1) * 1000) / 1000 });
   }
 
   scored.sort((a, b) => b.score - a.score || a.food.description.length - b.food.description.length);

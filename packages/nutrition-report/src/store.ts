@@ -4,6 +4,7 @@
 import type { SqlExecutor } from '@nutrimed/db';
 import { decryptField, encryptField } from '@nutrimed/crypto';
 import { writeAudit } from '@nutrimed/audit';
+import { FOOD_TABLES_VERSION } from '@nutrimed/food-catalog';
 import type { NutritionComputation } from './compute';
 
 export interface NutritionReport {
@@ -55,10 +56,19 @@ export async function saveNutritionReport(
     );
   }
 
-  // Proveniência: os IDs TACO citados vão em kbSources — o médico pode auditar
-  // de onde saiu cada número (NFR10).
+  // Proveniência: os IDs dos alimentos citados vão em kbSources — o médico pode
+  // auditar de onde saiu cada número (NFR10). O PREFIXO importa: desde o E16
+  // alguns alimentos vêm da tabela própria (`nutrimed:`), montada a partir de
+  // rótulo ANVISA e USDA porque a TACO não tem suplemento nenhum. Emitir tudo
+  // como `taco:` faria a trilha afirmar uma origem que não é a verdadeira.
   const tacoSources =
-    origin.data?.items.filter((i) => i.taco).map((i) => `taco:${i.taco!.id}@${origin.data!.tacoVersion}`) ?? [];
+    origin.data?.items
+      .filter((i) => i.taco)
+      .map((i) =>
+        i.taco!.source === 'nutrimed'
+          ? `nutrimed:${i.taco!.id}@${FOOD_TABLES_VERSION}`
+          : `taco:${i.taco!.id}@${origin.data!.tacoVersion}`,
+      ) ?? [];
   await writeAudit(db, consultationId, {
     triggeredBy: `nutrition-report-${origin.action}`,
     kbSources: tacoSources,

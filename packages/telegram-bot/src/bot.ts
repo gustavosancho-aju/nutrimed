@@ -18,6 +18,7 @@ import {
   computeNutrition,
   type MappedItem,
 } from '@nutrimed/nutrition-report';
+import { FOOD_TABLES_VERSION } from '@nutrimed/food-catalog';
 import type { IFoodEstimator, FoodImageInput, FoodEstimate, FoodConfidence } from '@nutrimed/food-vision';
 import type { ILlmProvider } from '@nutrimed/providers';
 
@@ -365,6 +366,26 @@ function formatTextItems(mapped: readonly MappedItem[]): string {
     .join('\n');
 }
 
+/** Uma linha por item que ficou de fora, com o motivo específico. */
+function formatMisses(mapped: readonly MappedItem[]): string {
+  return mapped
+    .filter((m) => m.status === 'unmatched')
+    .map((m) => `• ${m.item.food} — ${m.missReason ?? 'não encontrei esse alimento.'}`)
+    .join('\n');
+}
+
+/**
+ * Itens em que o alimento escolhido veio da busca por semelhança e ficou abaixo
+ * do limiar de confiança. Mostrar O QUE foi entendido é o que permite o paciente
+ * corrigir — sem isso ele só descobre o erro pelo total estranho no fim do dia.
+ */
+function formatUncertain(mapped: readonly MappedItem[]): string | null {
+  const incertos = mapped.filter((m) => m.status === 'uncertain' && m.taco);
+  if (incertos.length === 0) return null;
+  const linhas = incertos.map((m) => `• "${m.item.food}" → entendi como *${m.taco!.description}*`).join('\n');
+  return `🤔 Não tenho certeza destes:\n${linhas}\nSe não for isso, me diga o nome mais específico.`;
+}
+
 /**
  * `/comi <alimentos e quantidades>` — registro alimentar por TEXTO
  * (2026-07-24). Caminho 100% determinístico: parser + tabela TACO, SEM visão e
@@ -388,11 +409,10 @@ export async function handleAte(deps: BotDeps, chatId: string, arg: string): Pro
   const mapped = mapRecallToTaco(items);
   const computation = computeNutrition(mapped);
   if (computation.unmatched.length === items.length) {
-    return {
-      text:
-        'Não encontrei esses alimentos na tabela TACO, então não registrei nada. Tente nomes mais ' +
-        'simples (ex.: "arroz branco cozido", "frango grelhado") ou envie a foto do prato.',
-    };
+    // Nada entrou na conta. Mostrar o MOTIVO de cada item, não uma recusa
+    // genérica: "não tenho leite líquido com valor confiável" e "não conheço
+    // esse alimento" pedem ações diferentes do paciente.
+    return { text: `Não registrei nada:\n${formatMisses(mapped)}` };
   }
 
   const anyUncertain = mapped.some((m) => m.status === 'uncertain');
@@ -407,7 +427,10 @@ export async function handleAte(deps: BotDeps, chatId: string, arg: string): Pro
     .map((m) => (m.grams !== null ? `${m.item.food} ${m.grams} g` : m.item.food))
     .join(', ')
     .slice(0, 200);
-  const provenance = `taco-${computation.tacoVersion}`;
+  // `tacoVersion` JÁ vem como "taco-4ed" — o template antigo produzia
+  // "taco-taco-4ed". Agora a proveniência cita as DUAS tabelas, porque desde o
+  // E16 um mesmo registro pode somar valor da TACO e valor de rótulo.
+  const provenance = FOOD_TABLES_VERSION;
 
   const now = clock(deps);
   await addFoodLogEntry(
@@ -435,8 +458,14 @@ export async function handleAte(deps: BotDeps, chatId: string, arg: string): Pro
   );
 
   const t = computation.totals;
+  // A procedência fica VISÍVEL para o paciente — é o que sustenta a confiança no
+  // número. Mas precisa ser exata: desde o E16 um mesmo total pode somar valor da
+  // TACO e valor de rótulo (a TACO não tem suplemento nenhum), e dizer "pela
+  // tabela TACO" nesse caso seria atribuir à TACO um número que não é dela.
+  const usouRotulo = mapped.some((m) => m.taco?.source === 'nutrimed');
+  const fonte = usouRotulo ? 'pela tabela TACO + rótulos' : 'pela tabela TACO';
   const total =
-    `Total pela tabela TACO: ~${Math.round(t.kcal ?? 0)} kcal · ` +
+    `Total ${fonte}: ~${Math.round(t.kcal ?? 0)} kcal · ` +
     `P ${Math.round(t.protein ?? 0)} g · C ${Math.round(t.carbs ?? 0)} g · G ${Math.round(t.fat ?? 0)} g`;
   const estimatedWarning =
     computation.estimatedCount > 0
@@ -445,8 +474,7 @@ export async function handleAte(deps: BotDeps, chatId: string, arg: string): Pro
       : null;
   const unmatchedWarning =
     computation.unmatched.length > 0
-      ? `❓ Não encontrei na tabela TACO: ${computation.unmatched.map((i) => i.food).join(', ')} — ` +
-        'esses itens NÃO entraram na conta.'
+      ? `❓ NÃO entraram na conta:\n${formatMisses(mapped)}`
       : null;
 
   const progress = await sumFoodLogForDay(deps.db, patientId, localDayISO(now, tz(deps)), tz(deps), deps.key);
@@ -454,6 +482,7 @@ export async function handleAte(deps: BotDeps, chatId: string, arg: string): Pro
   return {
     text: compose([
       `✍️ Registrei o que você digitou:\n${formatTextItems(mapped)}\n${total}`,
+      formatUncertain(mapped),
       estimatedWarning,
       unmatchedWarning,
       formatProgress(progress),

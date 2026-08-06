@@ -135,7 +135,44 @@ apareceu 3× nesta sessão, nos 3 lugares corrigido.
 **Painel e ficha só de alimentação (2026-07-28):** saíram os cartões de Água e Sono, as 2 colunas do
 relatório diário e as metas `waterMl`/`sleepMinHours`/`sleepMaxHours` da ficha. Schema, serviços,
 campos opcionais no tipo e dados coletados FICARAM (metas antigas seguem no blob cifrado).
-Suíte: **818 PASS (+1 skip)** · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
+**E16 Fase 1 — PRECISÃO do alimento (2026-08-06, local).** Nasceu do piloto usando o bot como
+paciente real: "boto que comi 80 g de frango grelhado e sinto que não calcula certo" e "30 g de whey
+isolado ele diz que não tem na TACO". Medido no código de produção, era pior que a percepção:
+`frango grelhado` casava com **"Frango, coração, grelhado"** (proteína −30%, gordura +385%),
+`arroz branco` com **"Arroz carreteiro"** (proteína 4,3×, gordura 35×), `banana` com **bananada**
+(2,9×), `leite desnatado` com o leite em **PÓ** (~10×), além de `aveia`→pão de aveia,
+`tapioca`→com manteiga, `carne moída`→estrogonofe e `filé de tilápia`→merluza frita.
+**Três causas em `packages/taco/src/search.ts`:** (1) o score premiava descrição CURTA
+(`foodCoverage`), e o alimento que as pessoas comem quase nunca tem o nome mais curto; (2) a
+penalidade `×0.6` criada para evitar *feijão cru* atingia **toda fruta e salada**, que a TACO
+descreve como "crua"; (3) `TACO_MATCH_THRESHOLD = 0.5` com comparação `>=` fazia um match de metade
+dos termos ser gravado como CERTEZA.
+**A lição central:** nenhum ajuste de score resolve o caso do frango — "Frango, coração, grelhado" é,
+lexicalmente, um match MELHOR que "Frango, peito, sem pele, grelhado" (casa a mesma fração com menos
+sobra). Similaridade de string não sabe qual alimento as pessoas comem. Por isso a correção é um
+**catálogo curado** (`@nutrimed/food-catalog`, ~95 alias / 280 sinônimos, mesmo padrão do
+`lab-catalog` do E14), que vence a busca sempre; a busca virou fallback da cauda longa.
+**Regra de curadoria:** termo genérico aponta para a forma MAIS CONSUMIDA no Brasil, não a mais
+"correta" — quem digita "atum" quer a lata. O bot mostra o que entendeu, então o paciente corrige.
+**Tabela própria para o que a TACO não tem** (ela é de 2011 e acadêmica: ZERO suplementos): whey
+iso/conc, creatina, albumina, clara e ovo pasteurizados, pasta de amendoim, goma de tapioca e os
+**DOIS** iogurtes gregos. **A escolha das fontes foi por LICENÇA:** a **TBCA (USP) é CC BY-NC-ND —
+uso comercial PROIBIDO** e o "ND" impede até redistribuir modificado (só com licença paga do FoRC);
+o **Open Food Facts é ODbL**, cujo share-alike pega a fatia DERIVADA da nossa tabela (não o código) e
+cujo §4.6 obriga a publicá-la a quem recebe o relatório. Sobraram **USDA (CC0)** e **rótulo ANVISA**.
+**Decisões que valem lembrar:** creatina é **0/0/0/0 hard-coded**, nunca buscada — bases públicas a
+trazem com ~88 g de "proteína"/100 g (artefato de Kjeldahl: 32% de nitrogênio × fator 6,25), o que
+injetaria ~1,6 kg de proteína fantasma num plano de 12 meses. **Barra de proteína NÃO recebe valor
+genérico** (294–504 kcal/100 g variando só com o sabor) — pede marca. E alimento comum sem fonte
+aceitável fica **BLOQUEADO com motivo** (leite líquido, macarrão cozido, tilápia, grão-de-bico
+cozido): dizer "não tenho valor confiável" é honesto, registrar 10× não é.
+**Sem backfill** — a foto não se reestima de graça e o texto original do `/comi` nunca foi
+persistido. Corrige daqui pra frente. Proveniência ficou exata: `kbSources` emite `nutrimed:` para
+valor de rótulo (era tudo `taco:`) e o `model_version` virou `taco-4ed+nutrimed-1` (antes gerava
+`taco-taco-4ed`, prefixo duplicado). O corpus de regressão (`corpus.fixture.ts`, 99 casos, os 9 erros
+medidos marcados 🔴) é o artefato que impede tudo isso de voltar — **viu o bot errar? primeiro uma
+linha lá, depois a heurística**.
+Suíte: **935 PASS (+1 skip)** (era 818; +117 do E16 Fase 1) · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
 CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) **verde de novo desde
 2026-07-30** — ficou VERMELHO de 22 a 30/07 (~20 commits) sem ninguém notar, e ninguém notou
 porque esta linha dizia "verde": o job de código sempre passou, quem reprovava era o
@@ -164,6 +201,7 @@ Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 
 | E9 Documentação Clínica | ✅ | E11 Pacientes & Dashboard | ✅ completo (4 fases) |
 | E12 Bot de Telegram (foto→nutrição vs metas) | ✅ completo (9 stories + grupo + texto; só alimentação) | E13 Relatório Nutricional (TACO) | ✅ completo (em produção) |
 | E14 Painel Laboratorial dinâmico (laudo completo + apresentação) | ✅ completo (verificado no navegador) | E15 Histórico mês a mês (plano de 12 meses) | ✅ completo (4 fases, em produção) |
+| E16 Bot mais inteligente — Fase 1 (precisão do alimento) | ✅ local (falta deploy) | E16 Fases 2–4 (refeição · lembretes · CJ-14) | ⬜ planejado |
 | Transcrição Confiável (léxico + revisão do médico + POC) | ✅ completo (falta áudio real p/ POC) | Projeção Corporal por foto (IA) | ✅ gpt-image-2 + geração assíncrona (falta navegador) |
 
 **Projeção Corporal por foto (2026-07-28).** O médico sobe uma foto do paciente, informa peso atual
@@ -342,7 +380,7 @@ sinalizados, delta vs meta do paciente (E11) quando vinculado — rascunho edit�
 com fontes TACO em kbSources → painel 🩺 Diagnóstico → telemetria (custo/gate/
 latência/ruído/autonomia).
 
-## Monorepo (30 pacotes)
+## Monorepo (31 pacotes)
 
 ```
 apps/web                 Tela de consulta + ficha/dashboard + gateway WS + webhook do bot Telegram
@@ -373,6 +411,7 @@ packages/telegram-bot    E12: lógica pura do bot (handlers de foto/comandos + o
 packages/taco            E13: tabela TACO 4ª ed. embarcada (591 alimentos) + busca lexical + porções caseiras (regen: scripts/gen-taco.mjs)
 packages/nutrition-report E13: recordatório (LLM) → mapeamento TACO → cálculo determinístico → relatório cifrado+auditado
 packages/lab-catalog     E14: catálogo canônico de exames (slug+sinônimos) + leitura da faixa de referência DO LAUDO — puro, sem faixa clínica própria
+packages/food-catalog    E16: catálogo canônico de ALIMENTOS (termo do paciente → item TACO) + tabela própria p/ o que a TACO não tem (suplementos) — resolveFood() é o único ponto de entrada
 packages/body-projection Projeção corporal por foto (IBodyProjector: Gemini imagem+texto→imagem + fake) — nunca persiste
 packages/consultation-form Ficha de consulta (anamnese de nutrologia): schema dos 12 blocos + extração por IA + persistência cifrada
 ```
@@ -381,6 +420,14 @@ Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build`
 
 ## Pendências (ordem sugerida)
 
+0. **Destravar os 4 alimentos BLOQUEADOS do E16** — `leite líquido`, `macarrão cozido`, `tilápia` e
+   `grão-de-bico cozido` estão em `BLOCKED_TERMS` (`packages/food-catalog/src/catalog.ts`) porque a
+   TACO não os tem numa forma comível (só leite em PÓ, só massa CRUA, só grão-de-bico CRU) e a
+   tentativa de buscar os valores no USDA em 2026-08-06 bateu no rate limit da `DEMO_KEY` (reseta em
+   ~11 h; para uso recorrente, pegar chave própria grátis em data.gov). Fluxo: pegar os fdcId no
+   USDA (CC0), acrescentar em `extra-foods.ts` com `source: 'usda-cc0'`, mover os termos de
+   `BLOCKED_TERMS` para `FOOD_CATALOG` e trocar o caso do corpus de `BLOQUEADO` para o esperado.
+   Leite é o mais urgente: é item de todo café da manhã.
 1. **Parecer jurídico (CJ-1..CJ-13)** — bloqueia o piloto com pacientes reais e o áudio real da
    POC 2.5. O **brief técnico** (`docs/architecture/project-decisions/brief-tecnico-juridico.md`)
    deixa a consultoria turnkey; falta o parecer de advogado + regras de negócio (retenção +

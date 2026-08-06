@@ -291,6 +291,73 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
       expect(entry?.values.itemsLabel).toContain('arroz');
     });
 
+    // ── E16: precisão do alimento escolhido ──────────────────────────────
+    // Os casos abaixo foram medidos ERRADOS em produção (2026-08-06), com o
+    // paciente-piloto usando o bot para conduzir a dieta. Aqui eles são
+    // exercitados ponta a ponta — do texto ao valor gravado no banco.
+    it('"80g de frango grelhado" registra o PEITO, não o coração de galinha', async () => {
+      const patientId = await pairNewChat('chat-e16-frango');
+      await handleAte({ ...deps, estimator: null }, 'chat-e16-frango', '80g de frango grelhado');
+
+      const [entry] = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+      // Peito grelhado: 159 kcal e 32 g de proteína por 100 g ⇒ 80 g = ~127 kcal
+      // e ~25,6 g. O coração (o match antigo) daria ~166 kcal e ~18 g — a
+      // proteína, que é o número que o paciente persegue, vinha 30% menor.
+      expect(entry?.values.kcal).toBeGreaterThan(115);
+      expect(entry?.values.kcal).toBeLessThan(140);
+      expect(entry?.values.protein).toBeGreaterThan(23);
+      expect(entry?.values.fat).toBeLessThan(4); // coração daria ~9,7 g
+    });
+
+    it('"100g de arroz branco" registra arroz, não arroz carreteiro', async () => {
+      const patientId = await pairNewChat('chat-e16-arroz');
+      await handleAte({ ...deps, estimator: null }, 'chat-e16-arroz', '100g de arroz branco');
+
+      const [entry] = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+      // Arroz tipo 1 cozido: 128 kcal, 2,5 g P, 0,2 g G. O carreteiro (match
+      // antigo) traz carne-seca junto: 154 kcal, 10,8 g P, 7,1 g G.
+      expect(entry?.values.protein).toBeLessThan(5);
+      expect(entry?.values.fat).toBeLessThan(2);
+    });
+
+    it('"30g de whey protein isolado" é registrado — a TACO não tem suplemento', async () => {
+      const patientId = await pairNewChat('chat-e16-whey');
+      const r = await handleAte({ ...deps, estimator: null }, 'chat-e16-whey', '30g de whey protein isolado');
+
+      // Antes desta rodada o bot respondia que não conseguia calcular.
+      expect(r.text).toMatch(/registrei/i);
+      expect(r.text).toContain('rótulos'); // procedência exata: não é da TACO
+
+      const [entry] = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+      expect(entry?.values.protein).toBeGreaterThan(20); // 30 g × 83% ≈ 25 g
+      expect(entry?.values.kcal).toBeGreaterThan(90);
+    });
+
+    it('alimento sem valor confiável é RECUSADO com motivo, não estimado errado', async () => {
+      const patientId = await pairNewChat('chat-e16-leite');
+      const r = await handleAte({ ...deps, estimator: null }, 'chat-e16-leite', '200ml de leite desnatado');
+
+      // A TACO só tem leite em PÓ (362 kcal/100 g). Registrar isso daria ~10× o
+      // valor do líquido. Recusar com explicação é honesto; chutar não é.
+      expect(r.text).toMatch(/não registrei nada/i);
+      expect(r.text).toMatch(/leite líquido/i);
+
+      const entries = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+      expect(entries).toHaveLength(0);
+    });
+
+    it('"creatina" entra com ZERO calorias, nunca como proteína', async () => {
+      const patientId = await pairNewChat('chat-e16-creatina');
+      await handleAte({ ...deps, estimator: null }, 'chat-e16-creatina', '5g de creatina');
+
+      const [entry] = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+      // Bases públicas trazem creatina com ~88 g de "proteína" por 100 g
+      // (artefato de Kjeldahl). Isso inflaria a aderência proteica do plano
+      // inteiro com proteína que não existe.
+      expect(entry?.values.kcal).toBe(0);
+      expect(entry?.values.protein).toBe(0);
+    });
+
     it('sem quantidade: assume porção, SINALIZA na resposta e no registro', async () => {
       const patientId = await pairNewChat('chat-comi-sem-qtd');
       const r = await handleAte(deps, 'chat-comi-sem-qtd', 'arroz');
