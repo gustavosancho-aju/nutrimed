@@ -1324,6 +1324,111 @@ function localDayISOOf(at: Date, tzOffsetMinutes: number): string {
   return new Date(at.getTime() + tzOffsetMinutes * 60_000).toISOString().slice(0, 10);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Lembretes proativos (E16 Fase 3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface DayMealCoverage {
+  readonly patientId: string;
+  readonly chatId: string;
+  /** Refeições DISTINTAS registradas no dia local (exclui as não informadas). */
+  readonly meals: readonly Meal[];
+  readonly entryCount: number;
+}
+
+/**
+ * Cobertura de refeições do dia para TODOS os canais com lembrete ligado, em UMA
+ * consulta agregada.
+ *
+ * NÃO recebe `key`, e isso é o ponto: nada aqui é cifrado. É exatamente por esse
+ * motivo que `meal` é coluna clara (migration 0026) — a rotina proativa decide se
+ * manda o lembrete das 22h **sem nunca decifrar dado clínico**. Fazer o contrário
+ * exigiria ler e decifrar todas as linhas do dia de todos os pacientes a cada
+ * tick, que é o erro que o E15 já pagou no `listNutritionDiary`.
+ *
+ * GRUPO fica de fora: lembrete de aderência num chat com nutrólogo e
+ * nutricionista é divulgação a terceiros que o paciente não iniciou.
+ */
+export async function listMealCoverageForDay(
+  db: SqlExecutor,
+  dayISO: string,
+  tzOffsetMinutes: number,
+): Promise<DayMealCoverage[]> {
+  const { start, end } = localDayRangeUtc(dayISO, tzOffsetMinutes);
+  const res = await db.query<{
+    patient_id: string;
+    chat_id: string;
+    entry_count: number;
+    meals: (string | null)[] | null;
+  }>(
+    `SELECT l.patient_id,
+            l.chat_id,
+            count(f.id)::int AS entry_count,
+            coalesce(array_agg(DISTINCT f.meal) FILTER (WHERE f.meal IS NOT NULL), '{}') AS meals
+     FROM telegram_link l
+     LEFT JOIN food_log_entry f
+            ON f.patient_id = l.patient_id
+           AND f.eaten_at  >= $1
+           AND f.eaten_at  <  $2
+           AND f.deleted_at IS NULL
+     WHERE l.consent_granted = true
+       AND l.revoked_at IS NULL
+       AND l.reminders_enabled = true
+       AND coalesce(l.chat_type, '') NOT IN ('group', 'supergroup')
+       AND l.chat_id NOT LIKE '-%'
+     GROUP BY l.patient_id, l.chat_id`,
+    [start, end],
+  );
+  return res.rows.map((r) => ({
+    patientId: r.patient_id,
+    chatId: r.chat_id,
+    entryCount: r.entry_count,
+    meals: (r.meals ?? []).flatMap((m) => {
+      const parsed = m ? parseMeal(m) : null;
+      return parsed ? [parsed] : [];
+    }),
+  }));
+}
+
+/**
+ * Reserva o direito de enviar UM lembrete deste tipo, para este paciente, neste
+ * dia local. Devolve false se já foi enviado.
+ *
+ * Um statement só — `ON CONFLICT DO NOTHING RETURNING` — porque não há transação
+ * disponível (Pool compartilhado). É chamado ANTES do envio: ver o trade-off
+ * "no máximo uma vez" documentado na migration 0028.
+ */
+export async function claimReminder(
+  db: SqlExecutor,
+  patientId: string,
+  kind: string,
+  localDay: string,
+  chatId: string,
+  detail?: string,
+): Promise<boolean> {
+  const res = await db.query<{ id: string }>(
+    `INSERT INTO patient_reminder_log (patient_id, kind, local_day, chat_id, detail)
+     VALUES ($1, $2, $3::date, $4, $5)
+     ON CONFLICT (patient_id, kind, local_day) DO NOTHING
+     RETURNING id`,
+    [patientId, kind, localDay, chatId, detail ?? null],
+  );
+  return res.rows.length > 0;
+}
+
+/** Desfaz o claim — usado quando o envio falha e queremos permitir nova tentativa. */
+export async function releaseReminderClaim(
+  db: SqlExecutor,
+  patientId: string,
+  kind: string,
+  localDay: string,
+): Promise<void> {
+  await db.query(
+    'DELETE FROM patient_reminder_log WHERE patient_id = $1 AND kind = $2 AND local_day = $3::date',
+    [patientId, kind, localDay],
+  );
+}
+
 /**
  * Dias `YYYY-MM-DD` de `start` a `end`, INCLUSIVOS, em ordem crescente.
  * Aritmética em UTC puro (sem fuso do servidor) — atravessa virada de mês e ano

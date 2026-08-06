@@ -1,15 +1,25 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { generatePairingCodeAction, revokeChannelAction } from '@/lib/telegram-actions';
+import { generatePairingCodeAction, revokeChannelAction, setRemindersAction } from '@/lib/telegram-actions';
 
 /**
  * Painel do canal Telegram na ficha (E12/12.4). Gera o código de pareamento
  * (exibido UMA vez), mostra o status e permite revogar. O código em si é o
  * consentimento do paciente (ADR-013/014) — some da tela ao recarregar.
  */
-export function TelegramLinkPanel({ patientId, active }: { patientId: string; active: boolean }) {
+export function TelegramLinkPanel({
+  patientId,
+  active,
+  remindersEnabled = false,
+}: {
+  patientId: string;
+  active: boolean;
+  /** E16 Fase 3 — lembretes proativos. Nasce FALSE: é finalidade nova (CJ-14). */
+  remindersEnabled?: boolean;
+}) {
   const [code, setCode] = useState<string | null>(null);
+  const [reminders, setReminders] = useState(remindersEnabled);
   const [pending, startTransition] = useTransition();
 
   function generate() {
@@ -22,6 +32,16 @@ export function TelegramLinkPanel({ patientId, active }: { patientId: string; ac
     startTransition(async () => {
       await revokeChannelAction(patientId);
       setCode(null);
+    });
+  }
+
+  function toggleReminders(next: boolean) {
+    setReminders(next); // otimista: o toggle responde na hora
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set('patientId', patientId);
+      if (next) fd.set('enabled', 'on');
+      await setRemindersAction(fd);
     });
   }
 
@@ -56,6 +76,29 @@ export function TelegramLinkPanel({ patientId, active }: { patientId: string; ac
           </button>
         )}
       </div>
+
+      {active && (
+        <div className="mt-4 rounded-[10px] border border-ink/10 p-4">
+          <label className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              checked={reminders}
+              onChange={(e) => toggleReminders(e.target.checked)}
+              disabled={pending}
+              className="mt-0.5 h-4 w-4 accent-[var(--brand)]"
+            />
+            <span className="text-sm">
+              <span className="font-medium text-ink">Enviar lembretes ao paciente</span>
+              <span className="mt-1 block text-xs text-ink-muted">
+                O bot passa a INICIAR contato: à tarde, se o registro do dia estiver bem abaixo da
+                meta; à noite, se faltar alguma refeição. Isso é uma finalidade diferente da que o
+                paciente aceitou ao parear — ative só depois de combinar com ele. O paciente pode
+                desligar sozinho a qualquer momento enviando <code>/silenciar</code>.
+              </span>
+            </span>
+          </label>
+        </div>
+      )}
 
       {code && (
         <div className="mt-4 rounded-[10px] border border-brand/20 bg-brand/5 p-4">

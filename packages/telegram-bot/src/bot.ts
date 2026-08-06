@@ -19,6 +19,7 @@ import {
   isChannelAuthorized,
   resolvePatientByChat,
   redeemPairingCode,
+  setRemindersEnabled,
 } from '@nutrimed/telegram-link';
 import {
   parseFoodText,
@@ -27,6 +28,7 @@ import {
   type MappedItem,
 } from '@nutrimed/nutrition-report';
 import { FOOD_TABLES_VERSION } from '@nutrimed/food-catalog';
+import { REMINDER_TEXTS } from './reminders';
 import {
   MAX_PENDING,
   askMealText,
@@ -228,11 +230,17 @@ function compose(parts: Array<string | null | undefined>): string {
 }
 
 /** `/start [código]` — boas-vindas ou pareamento (o resgate é o consentimento). */
-export async function handleStart(deps: BotDeps, chatId: string, arg?: string): Promise<BotReply> {
+export async function handleStart(
+  deps: BotDeps,
+  chatId: string,
+  arg?: string,
+  /** Tipo do chat — guardado no vínculo para o lembrete proativo nunca sair em grupo. */
+  chatType?: string,
+): Promise<BotReply> {
   const code = arg?.trim();
   if (!code) return { text: WELCOME };
 
-  const result = await redeemPairingCode(deps.db, chatId, code);
+  const result = await redeemPairingCode(deps.db, chatId, code, chatType);
   if (result.ok) {
     return {
       text:
@@ -243,7 +251,11 @@ export async function handleStart(deps: BotDeps, chatId: string, arg?: string): 
         'Depois de cada registro eu pergunto de que refeição foi — é só tocar no botão. Se quiser ' +
         'pular essa etapa, diga junto: /comi almoço 100g de arroz.\n\n' +
         'Use /hoje para ver seu progresso do dia, /meta para suas metas e /corrigir se eu ' +
-        'identificar algo errado.',
+        'identificar algo errado.\n\n' +
+        // Lastro informativo do CJ-14: mensagem PROATIVA é finalidade nova, e o
+        // paciente precisa saber que ela existe e como desligar ANTES de ligarem.
+        'ℹ️ Se o seu nutricionista ativar, eu também posso te enviar lembretes para registrar as ' +
+        'refeições. Você pode desligá-los quando quiser com /silenciar.',
     };
   }
   const reason = { invalid: 'Código inválido.', expired: 'Código expirado.', consumed: 'Esse código já foi usado.' }[
@@ -729,6 +741,33 @@ export async function handleMealCommand(deps: BotDeps, chatId: string, arg: stri
 }
 
 /**
+ * `/silenciar` e `/lembretes` — o PACIENTE liga e desliga os lembretes
+ * proativos sozinho.
+ *
+ * Existe por exigência da LGPD (art. 18, direito de oposição): o titular precisa
+ * conseguir parar SEM depender de pedir ao médico. O toggle da ficha e o
+ * `TELEGRAM_REMINDERS` do operador são outras camadas, com outros donos — nenhuma
+ * substitui esta.
+ */
+export async function handleReminderToggle(
+  deps: BotDeps,
+  chatId: string,
+  enabled: boolean,
+): Promise<BotReply> {
+  if (!(await isChannelAuthorized(deps.db, chatId))) return { text: NEEDS_PAIRING };
+  const patientId = await resolvePatientByChat(deps.db, chatId);
+  if (!patientId) return { text: NEEDS_PAIRING };
+
+  await setRemindersEnabled(
+    deps.db,
+    patientId,
+    enabled,
+    enabled ? 'telegram-reminders-optin-paciente' : 'telegram-reminders-optout-paciente',
+  );
+  return { text: enabled ? REMINDER_TEXTS.resumed : REMINDER_TEXTS.silenced };
+}
+
+/**
  * `/comando` ou `/comando@NomeDoBot` (forma usada em grupos). Retorna o resto do
  * texto (argumento) se casar, `null` se não. O sufixo `@bot` é aceito com
  * qualquer nome — o Telegram só entrega ao bot os comandos endereçados a ele.
@@ -750,13 +789,15 @@ export async function handleUpdate(deps: BotDeps, update: BotUpdate): Promise<Bo
   const text = update.text?.trim();
   if (!text) return null;
   const start = matchCommand(text, 'start');
-  if (start !== null) return handleStart(deps, update.chatId, start || undefined);
+  if (start !== null) return handleStart(deps, update.chatId, start || undefined, update.chatType);
   if (matchCommand(text, 'hoje') !== null) return handleToday(deps, update.chatId);
   if (matchCommand(text, 'meta') !== null) return handleGoal(deps, update.chatId);
   const corrigir = matchCommand(text, 'corrigir');
   if (corrigir !== null) return handleCorrection(deps, update.chatId, corrigir);
   const refeicao = matchCommand(text, 'refeicao');
   if (refeicao !== null) return handleMealCommand(deps, update.chatId, refeicao);
+  if (matchCommand(text, 'silenciar') !== null) return handleReminderToggle(deps, update.chatId, false);
+  if (matchCommand(text, 'lembretes') !== null) return handleReminderToggle(deps, update.chatId, true);
   const comi = matchCommand(text, 'comi');
   if (comi !== null) return handleAte(deps, update.chatId, comi);
   return {

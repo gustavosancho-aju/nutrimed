@@ -5,7 +5,7 @@ import { getDb } from '@/lib/db';
 import { getEncryptionKey } from '@/lib/crypto-key';
 import { loadPatient, computeAge, loadCurrentNutritionGoal } from '@nutrimed/patients';
 import { listConsultationsByPatient } from '@nutrimed/consent';
-import { getLinkStatus } from '@nutrimed/telegram-link';
+import { getLinkStatus, areRemindersEnabled } from '@nutrimed/telegram-link';
 import { setGoalAction } from '@/lib/telegram-actions';
 import { startConsultationAction } from '@/lib/consent-actions';
 import { deletePatientAction } from '@/lib/patient-settings-actions';
@@ -50,6 +50,7 @@ export default async function PatientPage({
   const consultations = await listConsultationsByPatient(db, id);
   const age = computeAge(patient.birthDate, new Date());
   const link = await getLinkStatus(db, id);
+  const remindersOn = await areRemindersEnabled(db, id);
   const goal = await loadCurrentNutritionGoal(db, id, key);
   const goalFields = [
     { name: 'kcal', label: 'Calorias (kcal)', value: goal?.values.kcal },
@@ -187,7 +188,7 @@ export default async function PatientPage({
           qualquer momento).
         </p>
         <div className="mt-4">
-          <TelegramLinkPanel patientId={patient.id} active={link?.granted ?? false} />
+          <TelegramLinkPanel patientId={patient.id} active={link?.granted ?? false} remindersEnabled={remindersOn} />
         </div>
 
         <div className="mt-6 border-t border-ink/10 pt-6">

@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { loadPatient, setNutritionGoal, type NutritionGoalValues } from '@nutrimed/patients';
-import { createPairingCode, revokeChannel } from '@nutrimed/telegram-link';
+import { createPairingCode, revokeChannel, setRemindersEnabled } from '@nutrimed/telegram-link';
 import { getDb } from './db';
 import { getCurrentUser } from './auth';
 import { getEncryptionKey } from './crypto-key';
@@ -41,6 +41,24 @@ export async function generatePairingCodeAction(patientId: string): Promise<stri
 export async function revokeChannelAction(patientId: string): Promise<void> {
   const { db } = await assertOwner(patientId);
   await revokeChannel(db, patientId);
+  revalidatePath(`/patients/${patientId}`);
+}
+
+/**
+ * Liga/desliga os lembretes proativos deste paciente (E16 Fase 3).
+ *
+ * É o gate CLÍNICO, e nasce desligado: mensagem proativa é finalidade nova sob a
+ * LGPD, e o texto de pareamento que os pacientes atuais aceitaram descrevia um
+ * bot que responde — não um que inicia contato. O médico só deve ligar depois de
+ * o paciente re-consentir (CJ-14).
+ *
+ * Não substitui o `/silenciar` do paciente: o titular precisa conseguir se opor
+ * sem depender de pedir a alguém (LGPD art. 18).
+ */
+export async function setRemindersAction(formData: FormData): Promise<void> {
+  const patientId = String(formData.get('patientId') ?? '');
+  const { db } = await assertOwner(patientId);
+  await setRemindersEnabled(db, patientId, formData.get('enabled') === 'on', 'telegram-reminders-medico');
   revalidatePath(`/patients/${patientId}`);
 }
 

@@ -6,6 +6,7 @@ import type { ILlmProvider } from '@nutrimed/providers';
 import { handleUpdate, type BotButton, type BotDeps, type BotUpdate } from '@nutrimed/telegram-bot';
 import { TelegramTelemetry } from '@nutrimed/telemetry';
 import { getDb } from './db';
+import { startReminderScheduler } from './reminder-scheduler';
 
 /**
  * Runtime do bot de Telegram no processo do Next (E12 — 12.7).
@@ -326,12 +327,18 @@ async function init(): Promise<TelegramRuntime | null> {
     }
   }
 
+  const push = (chatId: string, text: string, buttons?: readonly (readonly BotButton[])[]) =>
+    sendMessage(token, chatId, text, buttons);
+
+  // Lembretes proativos (E16 Fase 3). Sobe DESLIGADO: só liga com
+  // TELEGRAM_REMINDERS=on em produção e modo webhook (ver reminder-scheduler).
+  startReminderScheduler({ deps, push, mode });
+
   return {
     secretToken,
     telemetry,
     process: (update: unknown) => processUpdate(token, deps, telemetry, update),
-    push: (chatId: string, text: string, buttons?: readonly (readonly BotButton[])[]) =>
-      sendMessage(token, chatId, text, buttons),
+    push,
   };
 }
 
