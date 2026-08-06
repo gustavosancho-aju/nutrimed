@@ -2,6 +2,7 @@ import {
   EXPECTED_MEALS,
   MEAL_LABELS,
   claimReminder,
+  hasReminderClaim,
   listMealCoverageForDay,
   listPendingFoodEntries,
   loadCurrentNutritionGoal,
@@ -48,7 +49,7 @@ import { describePending, mealButtons } from './meal';
  * └──────────────────────────────────────────────────────────────────────────┘
  */
 
-export type ReminderKind = 'abaixo-da-meta-16h' | 'refeicao-faltante-22h';
+export type ReminderKind = 'abaixo-da-meta-16h' | 'refeicao-faltante-22h' | 'dia-completo-22h';
 
 export interface PlannedReminder {
   readonly patientId: string;
@@ -164,6 +165,26 @@ function textNothingToday(): string {
   ].join('\n\n');
 }
 
+/**
+ * Dia com as três refeições esperadas registradas.
+ *
+ * A DISTINÇÃO É FINA E IMPORTA: comemorar aqui é comemorar a ADESÃO AO DIÁRIO —
+ * um comportamento do paciente com o bot, verificável e não clínico. Comemorar
+ * "você bateu a meta de calorias" seria comemorar RESULTADO CLÍNICO, e aí o bot
+ * estaria avaliando conduta alimentar sem médico no circuito (CJ-4).
+ *
+ * Por isso esta mensagem fala de REGISTRO e nunca cita meta, kcal ou qualidade
+ * do que foi comido — nem para elogiar. Há teste garantindo.
+ */
+function textDayComplete(registrou: readonly Meal[]): string {
+  return [
+    `🎉 Dia completo! Você registrou ${listar(registrou)} hoje.`,
+    'Obrigado por manter o diário em dia — é isso que deixa o acompanhamento do seu ' +
+      'nutricionista preciso de verdade.',
+    OPT_OUT,
+  ].join('\n\n');
+}
+
 function textPendingMeal(resumo: string): string {
   return [
     `Oi! Ficou faltando só me dizer de que refeição foi o prato ${resumo}.`,
@@ -263,7 +284,25 @@ async function planMissingMeal(
   if (c.entryCount === 0) return { ...base, text: textNothingToday(), detail: 'sem-registros' };
 
   const faltando = missingMeals(c.meals);
-  if (faltando.length === 0) return null;
+  if (faltando.length === 0) {
+    // Dia completo: em vez de silêncio, um reconhecimento da adesão ao diário.
+    //
+    // MAS não se já cobramos hoje. Se o "faltou o jantar" saiu às 21h50 e o
+    // paciente registrou às 22h, mandar "obrigado por manter o diário em dia"
+    // 10 minutos depois soa vazio — e o reconhecimento vale justamente por não
+    // ser automático.
+    if (await hasReminderClaim(deps.db, c.patientId, 'refeicao-faltante-22h', day)) return null;
+
+    const jaFeitas = EXPECTED_MEALS.filter((m) => c.meals.includes(m));
+    return {
+      patientId: c.patientId,
+      chatId: c.chatId,
+      kind: 'dia-completo-22h' as const,
+      localDay: day,
+      text: textDayComplete(jaFeitas),
+      detail: 'completo',
+    };
+  }
   // Cita NO MÁXIMO UMA, a mais antiga na ordem do dia. Uma lista de faltas é um
   // boletim de notas, e não é isso que o produto quer ser.
   const alvo = faltando[0]!;

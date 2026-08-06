@@ -35,6 +35,7 @@ export {
   parseMeal,
   listMealCoverageForDay,
   claimReminder,
+  hasReminderClaim,
   releaseReminderClaim,
   MEALS,
   MEAL_LABELS,

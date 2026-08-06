@@ -174,13 +174,64 @@ describe('Lembretes proativos (E16 Fase 3)', () => {
       expect(plano!.text).not.toMatch(/almoço/i);
     });
 
-    it('quem registrou as 3 esperadas não recebe nada', async () => {
+    it('quem registrou as 3 esperadas NÃO é cobrado — recebe reconhecimento', async () => {
+      // Comportamento mudou a pedido do piloto (2026-08-06): antes o dia
+      // completo era silêncio. Silêncio como recompensa por fazer certo é um
+      // sinal fraco; o reconhecimento da ADESÃO é o que reforça o hábito.
       const id = await novoPaciente('lb-completo', { reminders: true, goalKcal: 2000 });
       await registrar(id, 400, 'cafe_da_manha', 8);
       await registrar(id, 700, 'almoco', 12);
       await registrar(id, 600, 'jantar', 20);
-      const planos = await planReminders(deps, localAt(22, 0));
-      expect(planos.map((p) => p.chatId)).not.toContain('lb-completo');
+
+      const plano = (await planReminders(deps, localAt(22, 0))).find((p) => p.chatId === 'lb-completo');
+      expect(plano!.kind).toBe('dia-completo-22h');
+      expect(plano!.text).not.toMatch(/não chegou|faltou|falta/i);
+    });
+
+    it('dia completo: comemora o REGISTRO, nunca o resultado clínico', async () => {
+      // A distinção é fina e é toda a diferença: "você registrou as 3 refeições"
+      // é adesão ao diário (comportamento com o bot, verificável, não clínico).
+      // "você bateu a meta de calorias" seria avaliação de conduta alimentar sem
+      // médico no circuito — a fronteira do CJ-4.
+      const id = await novoPaciente('lb-completo-msg', { reminders: true, goalKcal: 2000 });
+      await registrar(id, 400, 'cafe_da_manha', 8);
+      await registrar(id, 700, 'almoco', 12);
+      await registrar(id, 600, 'jantar', 20);
+
+      const plano = (await planReminders(deps, localAt(22, 0))).find((p) => p.chatId === 'lb-completo-msg');
+      expect(plano).toBeDefined();
+      expect(plano!.kind).toBe('dia-completo-22h');
+      expect(plano!.text).toMatch(/dia completo/i);
+      expect(plano!.text).toMatch(/café da manhã.*almoço.*jantar/i);
+
+      // NÃO cita meta, kcal, nem julga o que foi comido
+      expect(plano!.text).not.toMatch(/meta|kcal|caloria/i);
+      expect(plano!.text).not.toMatch(/ótima|excelente escolha|saudável|equilibrad/i);
+    });
+
+    it('não parabeniza logo depois de ter cobrado — soaria vazio', async () => {
+      // Se o "faltou o jantar" saiu às 21h50 e o paciente registrou às 22h,
+      // mandar "obrigado por manter o diário em dia" 10 min depois é hollow.
+      const id = await novoPaciente('lb-cobrado', { reminders: true, goalKcal: 2000 });
+      await registrar(id, 400, 'cafe_da_manha', 8);
+      await registrar(id, 700, 'almoco', 12);
+
+      // 1º tick: cobra o jantar
+      const enviados: string[] = [];
+      await runReminderTick(deps, async (c) => { enviados.push(c); return true; }, localAt(21, 50));
+      expect(enviados).toContain('lb-cobrado');
+
+      // paciente registra o jantar e o tick roda de novo na MESMA janela
+      await registrar(id, 600, 'jantar', 22);
+      const planos = await planReminders(deps, localAt(22, 10));
+      expect(planos.map((p) => p.chatId)).not.toContain('lb-cobrado');
+    });
+
+    it('quem não registrou nada não recebe parabéns', async () => {
+      await novoPaciente('lb-nada-parabens', { reminders: true, goalKcal: 2000 });
+      const plano = (await planReminders(deps, localAt(22, 0))).find((p) => p.chatId === 'lb-nada-parabens');
+      expect(plano!.kind).toBe('refeicao-faltante-22h');
+      expect(plano!.text).not.toMatch(/dia completo|parabéns/i);
     });
 
     it('LANCHE nunca é cobrado — cobrar seria inventar uma falta', () => {
@@ -326,7 +377,10 @@ describe('Lembretes proativos (E16 Fase 3)', () => {
       // variação U+FE0F como membro solto, e aí o `ℹ️` do disclaimer casa por
       // tabela — o teste reprovava a própria mensagem correta.
       for (const t of await todasAsMensagens()) {
-        expect(t).not.toMatch(/❌|⚠|sequência|streak|parabéns|meta batida/i);
+        // 'parabéns' SAIU da lista: comemorar a ADESÃO AO DIÁRIO é permitido (regra 7).
+        // O que continua proibido é comemorar RESULTADO CLÍNICO — ver o teste
+        // 'nunca comemora resultado clínico' abaixo.
+        expect(t).not.toMatch(/❌|⚠|sequência|streak|meta batida|dias seguidos/i);
       }
     });
   });

@@ -1416,6 +1416,20 @@ export async function claimReminder(
   return res.rows.length > 0;
 }
 
+/** Já enviamos este tipo de lembrete para este paciente neste dia local? */
+export async function hasReminderClaim(
+  db: SqlExecutor,
+  patientId: string,
+  kind: string,
+  localDay: string,
+): Promise<boolean> {
+  const res = await db.query<{ id: string }>(
+    'SELECT id FROM patient_reminder_log WHERE patient_id = $1 AND kind = $2 AND local_day = $3::date LIMIT 1',
+    [patientId, kind, localDay],
+  );
+  return res.rows.length > 0;
+}
+
 /** Desfaz o claim — usado quando o envio falha e queremos permitir nova tentativa. */
 export async function releaseReminderClaim(
   db: SqlExecutor,
