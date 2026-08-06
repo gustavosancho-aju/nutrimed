@@ -84,7 +84,8 @@ describe('integridade do catálogo', () => {
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.miss.reason).toBe('sem-match');
-      expect(r.miss.message).toMatch(/não encontrei/i);
+      expect(r.miss.message).toMatch(/não conheço/i);
+      expect(r.miss.message, 'a recusa precisa dizer o que fazer').toMatch(/foto/i);
     }
   });
 });

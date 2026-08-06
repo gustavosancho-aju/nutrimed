@@ -82,3 +82,20 @@ describe('parseFoodText — registro alimentar por texto do paciente', () => {
     expect(computation.estimatedCount).toBe(1);
   });
 });
+
+describe('separador "com" (E16 — 2026-08-06)', () => {
+  it('separa alimentos ligados por "com"', () => {
+    // "macarrão integral com 100g de frango" virava UM item e casava com
+    // "Frango, com açafrão" — um match errado com cara de certeza.
+    const itens = parseFoodText('macarrao integral com 100g de frango');
+    expect(itens).toHaveLength(2);
+    expect(itens[0]?.food).toBe('macarrao integral');
+    expect(itens[1]?.food).toBe('frango');
+    expect(itens[1]?.quantity).toBe(100);
+  });
+
+  it('arroz com feijão vira dois itens', () => {
+    const itens = parseFoodText('100g de arroz com 80g de feijao');
+    expect(itens.map((i) => i.food)).toEqual(['arroz', 'feijao']);
+  });
+});

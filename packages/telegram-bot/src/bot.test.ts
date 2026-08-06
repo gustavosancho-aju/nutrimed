@@ -333,15 +333,37 @@ describe('Telegram Bot — lógica pura (E12 — 12.6)', () => {
       expect(entry?.values.kcal).toBeGreaterThan(90);
     });
 
-    it('alimento sem valor confiável é RECUSADO com motivo, não estimado errado', async () => {
+    it('"200ml de leite desnatado" usa o leite LÍQUIDO, não o leite em pó', async () => {
       const patientId = await pairNewChat('chat-e16-leite');
-      const r = await handleAte({ ...deps, estimator: null }, 'chat-e16-leite', '200ml de leite desnatado');
+      await handleAte({ ...deps, estimator: null }, 'chat-e16-leite', '200ml de leite desnatado');
 
-      // A TACO só tem leite em PÓ (362 kcal/100 g). Registrar isso daria ~10× o
-      // valor do líquido. Recusar com explicação é honesto; chutar não é.
-      expect(r.text).toMatch(/não registrei nada/i);
-      expect(r.text).toMatch(/leite líquido/i);
+      // A TACO só analisou leite em PÓ (362 kcal/100 g); o líquido tem ~35.
+      // 200 ml ⇒ ~70 kcal. Pelo leite em pó daria ~724 — 10×.
+      const [entry] = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+      expect(entry?.values.kcal).toBeGreaterThan(50);
+      expect(entry?.values.kcal).toBeLessThan(100);
+    });
 
+    it('"90g de macarrão" registra a massa COZIDA — o caso relatado pelo piloto', async () => {
+      const patientId = await pairNewChat('chat-e16-macarrao');
+      const r = await handleAte({ ...deps, estimator: null }, 'chat-e16-macarrao', '90g de macarrao');
+
+      // O piloto recebeu "não tenho macarrão" porque a TACO só tem massa CRUA
+      // (371 kcal/100 g) — cozida absorve água e cai para ~158. 90 g ⇒ ~142 kcal.
+      expect(r.text).toMatch(/registrei/i);
+
+      const [entry] = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
+      expect(entry?.values.kcal).toBeGreaterThan(120);
+      expect(entry?.values.kcal).toBeLessThan(165);
+    });
+
+    it('alimento que não é comida não vira registro (água)', async () => {
+      const patientId = await pairNewChat('chat-e16-agua');
+      const r = await handleAte({ ...deps, estimator: null }, 'chat-e16-agua', '500ml de agua');
+
+      // Antes caía em "Coco, água de". O bot é só de ALIMENTAÇÃO desde
+      // 2026-07-24 — água não entra na contagem nem como registro de 0 kcal.
+      expect(r.text).toMatch(/não entra na contagem/i);
       const entries = await listFoodLogByDay(exec, patientId, '2026-07-01', -180, KEY);
       expect(entries).toHaveLength(0);
     });

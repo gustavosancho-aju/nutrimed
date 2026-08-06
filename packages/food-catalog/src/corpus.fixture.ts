@@ -58,9 +58,17 @@ export const CORPUS: readonly CorpusCase[] = [
   },
   {
     term: 'leite desnatado',
-    expect: 'BLOQUEADO',
+    expect: 'desnatado, líquido',
+    reject: 'pó',
     regressao: true,
     nota: 'casava com leite em PÓ (362 kcal contra ~35 do líquido) — 10×',
+  },
+  {
+    term: 'macarrao',
+    expect: 'Macarrão cozido',
+    regressao: true,
+    nota: 'RELATADO PELO PILOTO: "coloquei 90g de macarrão e ele disse que não tinha". A TACO só ' +
+      'tem massa CRUA (371 kcal); cozida absorve água e cai para ~158 — fator 2,4×',
   },
   {
     term: 'aveia',
@@ -85,7 +93,8 @@ export const CORPUS: readonly CorpusCase[] = [
   },
   {
     term: 'file de tilapia',
-    expect: 'BLOQUEADO',
+    expect: 'Tilápia',
+    reject: 'Merluza',
     regressao: true,
     nota: 'casava com "Merluza, filé, frito" — peixe errado E preparo errado',
   },
@@ -132,7 +141,8 @@ export const CORPUS: readonly CorpusCase[] = [
   { term: 'batata', expect: 'inglesa, cozida', reject: 'frita' },
   { term: 'batata doce', expect: 'doce, cozida' },
   { term: 'batata frita', expect: 'frita' },
-  { term: 'macarrao', expect: 'BLOQUEADO', nota: 'a TACO só tem massa CRUA (371 kcal); cozida absorve água' },
+  { term: 'espaguete', expect: 'Macarrão cozido' },
+  { term: 'macarrao integral', expect: 'integral', reject: 'instantâneo' },
   { term: 'goma de tapioca', expect: 'Goma de tapioca' },
   { term: 'polvilho', expect: 'Polvilho' },
 
@@ -140,7 +150,7 @@ export const CORPUS: readonly CorpusCase[] = [
   { term: 'feijao', expect: 'carioca, cozido', reject: 'cru' },
   { term: 'feijao preto', expect: 'preto, cozido', reject: 'cru' },
   { term: 'lentilha', expect: 'Lentilha, cozida', reject: 'crua' },
-  { term: 'grao de bico', expect: 'BLOQUEADO', nota: 'a TACO só tem cru (355 kcal); o cozido fica em ~165' },
+  { term: 'grao de bico', expect: 'Grão-de-bico cozido', reject: 'cru' },
 
   // ── Ovos e laticínios ────────────────────────────────────────────────────
   { term: 'ovo', expect: 'inteiro, cozido' },
@@ -190,6 +200,29 @@ export const CORPUS: readonly CorpusCase[] = [
   // ── Bebidas ──────────────────────────────────────────────────────────────
   { term: 'cafe', expect: 'Café, infusão', reject: 'pó' },
   { term: 'suco de laranja', expect: 'suco' },
+  { term: 'leite', expect: 'integral, líquido', reject: 'pó' },
+  { term: 'leite integral', expect: 'integral, líquido' },
+
+  // ── 2ª varredura (2026-08-06): matches silenciosamente errados ───────────
+  // Achados rodando ~150 termos do cardápio brasileiro contra o resolvedor.
+  // Todos resolviam com CONFIANÇA — nada sinalizava o erro ao paciente.
+  { term: 'salada', expect: 'Alface', reject: 'maionese', nota: 'caía em "Salada, de legumes, COM MAIONESE"' },
+  { term: 'camarao', expect: 'Camarão, Rio Grande', reject: 'baiana', nota: 'caía em "Camarão à baiana", um prato' },
+  { term: 'limao', expect: 'tahiti, cru', reject: 'suco', nota: 'a fruta, não o suco' },
+  { term: 'tangerina', expect: 'Poncã, crua', reject: 'suco' },
+  { term: 'berinjela', expect: 'cozida', reject: 'crua' },
+  { term: 'chuchu', expect: 'cozido' },
+  { term: 'ervilha', expect: 'enlatada', reject: 'em vagem' },
+  { term: 'peixe', expect: 'Tilápia', nota: 'genérico ⇒ o peixe mais consumido no país' },
+
+  // ── 2ª varredura: alimentos que a TACO tem com OUTRO nome ───────────────
+  { term: 'bolacha', expect: 'Biscoito', nota: 'a TACO só diz "biscoito"' },
+  { term: 'strogonoff', expect: 'Estrogonofe', nota: 'a TACO grafa "estrogonofe"' },
+  { term: 'bacon', expect: 'Toucinho', nota: 'a TACO só diz "toucinho"' },
+  { term: 'nozes', expect: 'Noz', nota: 'falhava: a singularização corta o "s" e produz "noze"' },
+
+  // ── 2ª varredura: não é alimento ────────────────────────────────────────
+  { term: 'agua', expect: 'BLOQUEADO', nota: 'caía em "Coco, água de"; e água não entra na contagem' },
 ];
 
 /** Marcador de que o termo deve ser RECUSADO, não resolvido. */

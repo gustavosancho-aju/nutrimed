@@ -47,7 +47,7 @@ export interface ExtraFood {
  * Versão da tabela, para proveniência. Sobe a cada mudança de VALOR (acrescentar
  * item também conta) — é ela que aparece no `model_version` do registro.
  */
-export const EXTRA_FOODS_VERSION = 'nutrimed-1';
+export const EXTRA_FOODS_VERSION = 'nutrimed-2';
 
 export const EXTRA_FOODS: readonly ExtraFood[] = [
   // ── Suplementos ──────────────────────────────────────────────────────────
@@ -161,6 +161,72 @@ export const EXTRA_FOODS: readonly ExtraFood[] = [
     source: 'rotulo-anvisa',
     origin: 'Casas Pedro, Doce Mel, Norte (rótulos convergentes)',
     per100g: { kcal: 230, protein: 0, carbs: 57, fat: 0 },
+  },
+
+  // ── Básicos que a TACO só tem em forma NÃO-COMÍVEL ───────────────────────
+  // A TACO analisou o macarrão CRU (371 kcal), o leite em PÓ (362) e o
+  // grão-de-bico CRU (355). Ninguém come nenhum dos três assim. Sem estes itens,
+  // "90 g de macarrão" ou "200 ml de leite" ou eram recusados ou entravam com
+  // ~2,4× a energia real. Valores do USDA SR Legacy (domínio público, CC0);
+  // citação canônica: https://fdc.nal.usda.gov/food-details/<fdcId>/nutrients
+  {
+    id: 'nm-macarrao-cozido',
+    description: 'Macarrão cozido',
+    category: 'Cereais e derivados',
+    source: 'usda-cc0',
+    origin: 'USDA FDC 169737 (Pasta, cooked, enriched, without added salt)',
+    per100g: { kcal: 158, protein: 5.8, carbs: 30.9, fat: 0.93 },
+  },
+  {
+    id: 'nm-macarrao-integral-cozido',
+    description: 'Macarrão integral cozido',
+    category: 'Cereais e derivados',
+    source: 'usda-cc0',
+    origin: 'USDA FDC 168910 (Pasta, whole-wheat, cooked)',
+    per100g: { kcal: 149, protein: 5.99, carbs: 30.1, fat: 1.71, fiber: 4.5 },
+  },
+  {
+    // Conferido contra rótulo BR: Piracanjuba Integral ÷2 = 58/3,1/4,7/3,0 por
+    // 100 ml, que bate com o USDA. (Rótulo BR é por VOLUME e 100 ml ≈ 103 g, daí
+    // ficar ~3% abaixo — é conversão, não divergência de dado.)
+    id: 'nm-leite-integral',
+    description: 'Leite de vaca integral, líquido',
+    category: 'Leite e derivados',
+    source: 'usda-cc0',
+    origin: 'USDA FDC 172217 (Milk, whole, 3.25% milkfat), conferido com Piracanjuba UHT',
+    per100g: { kcal: 61, protein: 3.15, carbs: 4.78, fat: 3.27 },
+  },
+  {
+    id: 'nm-leite-semidesnatado',
+    description: 'Leite de vaca semidesnatado, líquido',
+    category: 'Leite e derivados',
+    source: 'usda-cc0',
+    origin: 'USDA FDC 172205 (Milk, reduced fat, 2% milkfat)',
+    per100g: { kcal: 50, protein: 3.3, carbs: 4.8, fat: 1.98 },
+  },
+  {
+    id: 'nm-leite-desnatado',
+    description: 'Leite de vaca desnatado, líquido',
+    category: 'Leite e derivados',
+    source: 'usda-cc0',
+    origin: 'USDA FDC 173432 (Milk, nonfat/skim)',
+    per100g: { kcal: 35, protein: 3.37, carbs: 4.86, fat: 0.18 },
+  },
+  {
+    id: 'nm-tilapia',
+    description: 'Tilápia, filé, grelhada/assada',
+    category: 'Pescados e frutos do mar',
+    source: 'usda-cc0',
+    origin: 'USDA FDC 175177 (Fish, tilapia, cooked, dry heat)',
+    per100g: { kcal: 128, protein: 26.2, carbs: 0, fat: 2.65 },
+  },
+  {
+    id: 'nm-grao-de-bico-cozido',
+    description: 'Grão-de-bico cozido',
+    category: 'Leguminosas e derivados',
+    source: 'usda-cc0',
+    origin: 'USDA FDC 173757 (Chickpeas, mature seeds, cooked, boiled, without salt)',
+    per100g: { kcal: 164, protein: 8.86, carbs: 27.4, fat: 2.59, fiber: 7.6 },
   },
 
   // ── Iogurte grego: DOIS alimentos sob o mesmo nome ───────────────────────

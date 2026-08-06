@@ -1,5 +1,5 @@
 import { searchFood, getFood, TACO_MATCH_THRESHOLD, TACO_VERSION, type TacoFood } from '@nutrimed/taco';
-import { blockedTerm, lookupAlias, normalizeTerm, type FoodRef } from './catalog';
+import { blockedTerm, lookupAlias, nonNutritiveTerm, normalizeTerm, type FoodRef } from './catalog';
 import { EXTRA_FOODS_VERSION, getExtraFood, AMBIGUOUS_FOODS, type ExtraFood } from './extra-foods';
 
 /**
@@ -47,7 +47,7 @@ export interface ResolvedFood {
 /** Por que um termo não virou alimento — a mensagem é mostrada ao paciente. */
 export interface UnresolvedFood {
   readonly term: string;
-  readonly reason: 'bloqueado' | 'ambiguo' | 'sem-match';
+  readonly reason: 'bloqueado' | 'ambiguo' | 'sem-match' | 'nao-nutritivo';
   /** Explicação em pt-BR, já pronta para o bot. */
   readonly message: string;
 }
@@ -107,7 +107,14 @@ export function resolveFood(term: string): FoodResolution {
     if (resolved) return { ok: true, food: resolved };
   }
 
-  // 2. alimento comum sem fonte aceitável — melhor não registrar que registrar errado
+  // 2a. não é alimento (água, chá sem açúcar). Responder "não encontrei água na
+  // tabela" seria um bug aos olhos do paciente — e o bot é só de ALIMENTAÇÃO.
+  const nonNutritive = nonNutritiveTerm(clean);
+  if (nonNutritive) {
+    return { ok: false, miss: { term: clean, reason: 'nao-nutritivo', message: nonNutritive } };
+  }
+
+  // 2b. alimento comum sem fonte aceitável — melhor não registrar que registrar errado
   const blocked = blockedTerm(clean);
   if (blocked) {
     return {
@@ -131,12 +138,15 @@ export function resolveFood(term: string): FoodResolution {
   // 4. busca lexical na TACO
   const [match] = searchFood(clean, 1);
   if (!match) {
+    // Sobram sobretudo PRATOS COMPOSTOS (pizza, sopa, panqueca) e alimentos
+    // modernos (granola, quinoa, chia) que a TACO de 2011 não cobre. Para prato
+    // composto a foto é mesmo o caminho certo — decompor no texto seria pior.
     return {
       ok: false,
       miss: {
         term: clean,
         reason: 'sem-match',
-        message: 'não encontrei esse alimento na tabela TACO.',
+        message: 'não conheço esse alimento. Mande a foto do prato que eu estimo, ou use um nome mais comum.',
       },
     };
   }

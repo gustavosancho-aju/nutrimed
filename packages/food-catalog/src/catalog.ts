@@ -111,10 +111,22 @@ export const FOOD_CATALOG: readonly FoodAlias[] = [
 
   // ── Pescados ─────────────────────────────────────────────────────────────
   { slug: 'salmao-grelhado', ref: taco('317'), synonyms: ['salmao', 'salmao grelhado', 'file de salmao'] },
+  {
+    // Peixe mais consumido no Brasil e ausente da TACO. "peixe" genérico cai
+    // aqui: é o palpite menos ruim e o bot mostra o que entendeu.
+    slug: 'tilapia',
+    ref: nm('nm-tilapia'),
+    synonyms: ['tilapia', 'file de tilapia', 'tilapia grelhada', 'peixe', 'file de peixe', 'peixe grelhado'],
+  },
   { slug: 'atum-conserva', ref: taco('277'), synonyms: ['atum', 'atum em lata', 'atum enlatado', 'lata de atum'] },
   { slug: 'atum-fresco', ref: taco('278'), synonyms: ['atum fresco', 'file de atum'] },
   { slug: 'sardinha-conserva', ref: taco('319'), synonyms: ['sardinha', 'sardinha em lata', 'sardinha enlatada'] },
   { slug: 'sardinha-assada', ref: taco('318'), synonyms: ['sardinha assada', 'sardinha fresca'] },
+  // "camarão" caía em "Camarão à baiana" — um PRATO (com leite de coco e dendê),
+  // não o camarão que o paciente comeu.
+  { slug: 'camarao-cozido', ref: taco('284'), synonyms: ['camarao', 'camarao cozido', 'camaroes'] },
+  { slug: 'merluza-assada', ref: taco('301'), synonyms: ['merluza', 'merluza assada', 'file de merluza'] },
+  { slug: 'pescada', ref: taco('308'), synonyms: ['pescada', 'file de pescada'] },
 
   // ── Cereais e massas ─────────────────────────────────────────────────────
   {
@@ -132,6 +144,21 @@ export const FOOD_CATALOG: readonly FoodAlias[] = [
   { slug: 'pao-forma', ref: taco('54'), synonyms: ['pao de forma', 'pao sovado', 'pao branco'] },
   { slug: 'pao-queijo', ref: taco('140'), synonyms: ['pao de queijo'] },
   { slug: 'tapioca-goma', ref: nm('nm-goma-tapioca'), synonyms: ['tapioca', 'goma de tapioca', 'massa de tapioca', 'goma'] },
+  {
+    // A TACO só tem massa CRUA (371 kcal). Cozida absorve água e cai para ~158 —
+    // fator 2,4×. É o alimento que o piloto tentou registrar primeiro.
+    slug: 'macarrao-cozido',
+    ref: nm('nm-macarrao-cozido'),
+    synonyms: [
+      'macarrao', 'macarrao cozido', 'espaguete', 'espaguete cozido', 'massa', 'massas',
+      'talharim', 'penne', 'parafuso', 'fusilli', 'macarrao comum',
+    ],
+  },
+  {
+    slug: 'macarrao-integral-cozido',
+    ref: nm('nm-macarrao-integral-cozido'),
+    synonyms: ['macarrao integral', 'massa integral', 'espaguete integral'],
+  },
   { slug: 'polvilho-doce', ref: taco('146'), synonyms: ['polvilho', 'polvilho doce', 'fecula de mandioca'] },
   { slug: 'cuscuz-milho', ref: taco('533'), synonyms: ['cuscuz', 'cuscuz de milho', 'cuscuz nordestino'] },
   { slug: 'farinha-mandioca', ref: taco('122'), synonyms: ['farinha', 'farinha de mandioca', 'farofa pronta'] },
@@ -148,6 +175,11 @@ export const FOOD_CATALOG: readonly FoodAlias[] = [
   { slug: 'feijao-fradinho', ref: taco('563'), synonyms: ['feijao fradinho', 'fradinho', 'feijao de corda'] },
   { slug: 'lentilha-cozida', ref: taco('577'), synonyms: ['lentilha', 'lentilha cozida'] },
   { slug: 'soja-tofu', ref: taco('584'), synonyms: ['tofu', 'queijo de soja'] },
+  {
+    slug: 'grao-de-bico-cozido',
+    ref: nm('nm-grao-de-bico-cozido'),
+    synonyms: ['grao de bico', 'grao bico', 'grao de bico cozido'],
+  },
 
   // ── Ovos ─────────────────────────────────────────────────────────────────
   { slug: 'ovo-cozido', ref: taco('488'), synonyms: ['ovo', 'ovo cozido', 'ovos', 'ovo de galinha', 'ovo inteiro'] },
@@ -158,6 +190,20 @@ export const FOOD_CATALOG: readonly FoodAlias[] = [
   { slug: 'ovo-liquido', ref: nm('nm-ovo-liquido'), synonyms: ['ovo liquido', 'ovo pasteurizado', 'ovo integral pasteurizado'] },
 
   // ── Laticínios ───────────────────────────────────────────────────────────
+  {
+    // A TACO só analisou leite em PÓ (362 kcal/100 g). "leite" genérico vai para
+    // o INTEGRAL: é o mais consumido, e o paciente que toma desnatado costuma
+    // dizer "desnatado".
+    slug: 'leite-integral',
+    ref: nm('nm-leite-integral'),
+    synonyms: ['leite', 'leite integral', 'leite de vaca', 'copo de leite'],
+  },
+  { slug: 'leite-desnatado', ref: nm('nm-leite-desnatado'), synonyms: ['leite desnatado', 'leite zero'] },
+  {
+    slug: 'leite-semidesnatado',
+    ref: nm('nm-leite-semidesnatado'),
+    synonyms: ['leite semidesnatado', 'leite semi desnatado'],
+  },
   { slug: 'iogurte-natural', ref: taco('448'), synonyms: ['iogurte', 'iogurte natural', 'iogurte integral'] },
   { slug: 'iogurte-desnatado', ref: taco('449'), synonyms: ['iogurte desnatado', 'iogurte natural desnatado', 'iogurte light'] },
   {
@@ -204,6 +250,10 @@ export const FOOD_CATALOG: readonly FoodAlias[] = [
   { slug: 'amendoim', ref: taco('557'), synonyms: ['amendoim', 'amendoim cru'] },
   { slug: 'castanha-caju', ref: taco('588'), synonyms: ['castanha de caju', 'caju torrado'] },
   { slug: 'castanha-para', ref: taco('589'), synonyms: ['castanha do para', 'castanha do brasil', 'castanha'] },
+  // "nozes" não casava com "Noz, crua": a singularização ingênua do tokenizador
+  // corta o 's' final e produz "noze", que não existe em lugar nenhum.
+  { slug: 'noz', ref: taco('597'), synonyms: ['nozes', 'noz', 'noz crua'] },
+  { slug: 'amendoa', ref: taco('586'), synonyms: ['amendoa', 'amendoas'] },
 
   // ── Tubérculos e legumes ─────────────────────────────────────────────────
   { slug: 'batata-cozida', ref: taco('91'), synonyms: ['batata', 'batata inglesa', 'batata cozida', 'batata inglesa cozida'] },
@@ -215,7 +265,19 @@ export const FOOD_CATALOG: readonly FoodAlias[] = [
   { slug: 'cenoura-cozida', ref: taco('109'), synonyms: ['cenoura cozida'] },
   { slug: 'abobrinha-cozida', ref: taco('70'), synonyms: ['abobrinha', 'abobrinha cozida', 'abobrinha italiana'] },
   { slug: 'beterraba-cozida', ref: taco('97'), synonyms: ['beterraba', 'beterraba cozida'] },
-  { slug: 'alface', ref: taco('78'), synonyms: ['alface', 'alface crespa', 'folhas', 'salada de alface'] },
+  {
+    // "salada" caía em "Salada, de legumes, COM MAIONESE" (96 kcal, 7 g de
+    // gordura) — quem digita "salada" quase nunca quer maionese junto.
+    slug: 'alface',
+    ref: taco('78'),
+    synonyms: ['alface', 'alface crespa', 'folhas', 'salada de alface', 'salada', 'salada verde', 'folhas verdes'],
+  },
+  { slug: 'salada-legumes-vapor', ref: taco('546'), synonyms: ['salada de legumes', 'legumes cozidos', 'legumes no vapor'] },
+  { slug: 'berinjela-cozida', ref: taco('95'), synonyms: ['berinjela', 'berinjela cozida'] },
+  { slug: 'chuchu-cozido', ref: taco('112'), synonyms: ['chuchu', 'chuchu cozido'] },
+  { slug: 'repolho', ref: taco('149'), synonyms: ['repolho', 'repolho branco', 'repolho cru'] },
+  { slug: 'ervilha', ref: taco('560'), synonyms: ['ervilha', 'ervilhas', 'ervilha em lata'] },
+  { slug: 'espinafre-refogado', ref: taco('120'), synonyms: ['espinafre', 'espinafre refogado'] },
   { slug: 'tomate', ref: taco('157'), synonyms: ['tomate', 'tomate cru'] },
   { slug: 'couve-refogada', ref: taco('116'), synonyms: ['couve', 'couve refogada', 'couve manteiga'] },
 
@@ -245,9 +307,34 @@ export const FOOD_CATALOG: readonly FoodAlias[] = [
   { slug: 'goiaba', ref: taco('200'), synonyms: ['goiaba', 'goiaba vermelha'] },
   { slug: 'abacate', ref: taco('163'), synonyms: ['abacate'] },
 
+  { slug: 'limao', ref: taco('220'), synonyms: ['limao', 'limao tahiti'] },
+  { slug: 'tangerina', ref: taco('251'), synonyms: ['tangerina', 'mexerica', 'bergamota', 'poncã', 'ponca'] },
+
+  // ── Preparações e industrializados: nomes coloquiais ─────────────────────
+  // A TACO usa grafias e nomes que ninguém digita. Sem estes alias os termos
+  // simplesmente não casavam, embora o alimento ESTEJA na tabela.
+  { slug: 'biscoito-doce', ref: taco('8'), synonyms: ['biscoito', 'bolacha', 'biscoito maisena', 'bolacha maisena'] },
+  { slug: 'biscoito-cream-cracker', ref: taco('13'), synonyms: ['cream cracker', 'bolacha salgada', 'biscoito salgado', 'bolacha agua e sal'] },
+  { slug: 'estrogonofe-carne', ref: taco('537'), synonyms: ['estrogonofe', 'strogonoff', 'estrogonofe de carne', 'strogonoff de carne'] },
+  { slug: 'estrogonofe-frango', ref: taco('538'), synonyms: ['estrogonofe de frango', 'strogonoff de frango'] },
+  { slug: 'toucinho', ref: taco('445'), synonyms: ['bacon', 'toucinho', 'toucinho frito'] },
+
   // ── Bebidas ──────────────────────────────────────────────────────────────
   { slug: 'cafe', ref: taco('471'), synonyms: ['cafe', 'cafe preto', 'cafe coado', 'cafezinho'] },
 ];
+
+/**
+ * Termos que NÃO são alimento para efeito de contagem nutricional. Merecem
+ * resposta própria: "não encontrei água na tabela" seria um bug aos olhos do
+ * paciente, e registrar água como alimento de 0 kcal poluiria o diário — o bot
+ * foi deliberadamente restrito à ALIMENTAÇÃO em 2026-07-24 (água e sono saíram).
+ */
+export const NON_NUTRITIVE_TERMS: Readonly<Record<string, string>> = {
+  agua: 'água não entra na contagem de calorias — não precisa registrar.',
+  'agua mineral': 'água não entra na contagem de calorias — não precisa registrar.',
+  'agua com gas': 'água não entra na contagem de calorias — não precisa registrar.',
+  'cha sem acucar': 'chá sem açúcar não tem calorias relevantes — não precisa registrar.',
+};
 
 /**
  * Alimentos MUITO comuns que a TACO não tem e para os quais ainda não há valor
@@ -261,24 +348,8 @@ export const FOOD_CATALOG: readonly FoodAlias[] = [
  * Sai daqui assim que houver valor de fonte de licença compatível (USDA CC0).
  */
 export const BLOCKED_TERMS: Readonly<Record<string, string>> = {
-  leite: 'leite líquido',
-  'leite integral': 'leite líquido',
-  'leite desnatado': 'leite líquido',
-  'leite semidesnatado': 'leite líquido',
-  'leite de vaca': 'leite líquido',
-  macarrao: 'macarrão cozido',
-  'macarrao cozido': 'macarrão cozido',
-  espaguete: 'macarrão cozido',
-  massa: 'macarrão cozido',
-  tilapia: 'tilápia',
-  'file de tilapia': 'tilápia',
-  'tilapia grelhada': 'tilápia',
-  // A TACO só tem grão-de-bico CRU (355 kcal/100 g). Ninguém come cru: o cozido
-  // fica em ~165, então mapear o termo genérico para a entrada existente
-  // dobraria a energia. Mesmo raciocínio do leite em pó.
-  'grao de bico': 'grão-de-bico cozido',
-  'grao bico': 'grão-de-bico cozido',
-  'requeijao': 'requeijão',
+  requeijao: 'requeijão',
+  'queijo cremoso': 'requeijão',
 };
 
 /** Índice sinônimo normalizado → alias. Construído uma vez, consulta O(1). */
@@ -307,6 +378,15 @@ const BLOCKED_BY_KEY = new Map<string, string>(
 /** Nome legível do alimento bloqueado, ou null se o termo não é bloqueado. */
 export function blockedTerm(term: string): string | null {
   return BLOCKED_BY_KEY.get(normalizeTerm(term)) ?? null;
+}
+
+const NON_NUTRITIVE_BY_KEY = new Map<string, string>(
+  Object.entries(NON_NUTRITIVE_TERMS).map(([term, msg]) => [normalizeTerm(term), msg]),
+);
+
+/** Mensagem para termo que não é alimento (água, chá sem açúcar), ou null. */
+export function nonNutritiveTerm(term: string): string | null {
+  return NON_NUTRITIVE_BY_KEY.get(normalizeTerm(term)) ?? null;
 }
 
 /** Só para teste/diagnóstico: quantos sinônimos o índice cobre. */

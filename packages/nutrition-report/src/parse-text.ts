@@ -91,7 +91,13 @@ function cleanFood(raw: string): string {
  * Texto que não produz nenhum item reconhecível ⇒ lista vazia (o bot orienta).
  */
 export function parseFoodText(text: string): RecallItem[] {
-  const segments = stripAccents(text).toLowerCase().split(/[,;\n+]|\s+e\s+/);
+  // Separadores: pontuação, "e" e "com". O "com" entrou depois que
+  // "macarrão integral com 100g de frango" virou UM item e casou com "Frango,
+  // com açafrão" — erro confiante, a classe pior. Em recordatório "com" quase
+  // sempre liga dois alimentos ("arroz com feijão", "pão com manteiga"), e
+  // quando liga um preparo ("bolo com cobertura") o pedaço solto não casa e é
+  // sinalizado, o que é melhor que um match errado com cara de certeza.
+  const segments = stripAccents(text).toLowerCase().split(/[,;\n+]|\s+e\s+|\s+com\s+/);
   const items: RecallItem[] = [];
 
   for (const rawSegment of segments) {

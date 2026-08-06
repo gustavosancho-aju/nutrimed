@@ -18,9 +18,11 @@
 export {
   FOOD_CATALOG,
   BLOCKED_TERMS,
+  NON_NUTRITIVE_TERMS,
   blockedTerm,
   catalogSize,
   lookupAlias,
+  nonNutritiveTerm,
   normalizeTerm,
   type FoodAlias,
   type FoodRef,
