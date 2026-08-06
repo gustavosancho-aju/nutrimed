@@ -36,6 +36,10 @@ import { describePending, mealButtons } from './meal';
  * │     REGISTRAR, não a comer.                                               │
  * │  5. Nenhuma culpa, nenhuma gamificação: sem streak, sem ❌, sem ⚠️.        │
  * │  6. Saída visível (/silenciar) e disclaimer em toda mensagem proativa.    │
+ * │  7. Reconhecer o REGISTRO é permitido; a ESCOLHA ALIMENTAR, não. É o que  │
+ * │     deixa o tom acolhedor sem virar avaliação clínica — agradecer por     │
+ * │     manter o diário em dia fala do comportamento com o BOT; elogiar o     │
+ * │     que a pessoa comeu é juízo sobre conduta, sem médico no circuito.     │
  * │                                                                          │
  * │ E SEM LLM. `buildOrientation` é tolerável na resposta REATIVA (o paciente │
  * │ iniciou); numa mensagem proativa e não supervisionada, deixar o modelo    │
@@ -111,11 +115,21 @@ export function missingMeals(covered: readonly Meal[]): readonly Meal[] {
 
 // ── Textos ───────────────────────────────────────────────────────────────────
 
+/**
+ * A DISTINÇÃO QUE SUSTENTA O TOM ACOLHEDOR (regra 7): reconhecer o REGISTRO é
+ * seguro — é um comportamento do paciente com o bot, e agradecer por ele não é
+ * juízo clínico. Elogiar (ou criticar) a ESCOLHA ALIMENTAR não é: aí vira
+ * avaliação de conduta, sem médico no circuito, que é a fronteira do CJ-4.
+ *
+ * "Vi que você registrou o almoço, obrigado" ✅
+ * "Que ótima escolha de almoço!" ❌
+ */
+
 function textBelowGoal(consumedKcal: number, goalKcal: number): string {
   return [
-    `Oi! Até agora recebi registros somando ~${Math.round(consumedKcal)} kcal de hoje. ` +
-      `A meta que seu nutricionista definiu para o dia é ~${Math.round(goalKcal)} kcal.`,
-    'Se você comeu e ainda não registrou, é só me mandar a foto do prato ou usar /comi.',
+    `Oi! Vi seus registros de hoje — somam ~${Math.round(consumedKcal)} kcal, e a meta que seu ` +
+      `nutricionista definiu para o dia é ~${Math.round(goalKcal)} kcal.`,
+    'Se você comeu mais alguma coisa e ainda não me contou, é só mandar a foto do prato ou usar /comi que eu atualizo.',
     DISCLAIMER,
     OPT_OUT,
   ].join('\n\n');
@@ -123,29 +137,46 @@ function textBelowGoal(consumedKcal: number, goalKcal: number): string {
 
 function textNoRecords(): string {
   return [
-    'Oi! Hoje ainda não recebi nenhum registro seu.',
-    'Se quiser registrar o que comeu, é só mandar a foto do prato ou usar /comi.',
+    'Oi, tudo bem? Hoje ainda não chegou nenhum registro seu por aqui.',
+    'Se quiser me contar o que você comeu, é só mandar a foto do prato ou usar /comi — eu cuido do resto.',
     OPT_OUT,
   ].join('\n\n');
 }
 
-function textMissingMeal(meal: Meal): string {
+function textMissingMeal(meal: Meal, registrou: readonly Meal[]): string {
+  // O reconhecimento é do REGISTRO, não da comida — ver o bloco acima.
+  const jaRegistrou =
+    registrou.length > 0
+      ? `Vi que você registrou ${listar(registrou)} hoje — obrigado por manter isso em dia. `
+      : '';
   return [
-    `Antes de encerrar o dia: não recebi o registro do ${MEAL_LABELS[meal].toLowerCase()} de hoje.`,
-    'Se quiser registrar, é só mandar a foto do prato ou usar /comi.',
+    `${jaRegistrou}Só não chegou aqui o registro do ${MEAL_LABELS[meal].toLowerCase()}.`,
+    'Se quiser incluir, ainda dá tempo: é só mandar a foto ou usar /comi.',
     OPT_OUT,
   ].join('\n\n');
 }
 
 function textNothingToday(): string {
-  return ['Antes de encerrar o dia: hoje não recebi registros seus.', OPT_OUT].join('\n\n');
+  return [
+    'Antes de encerrar o dia: hoje não chegou nenhum registro seu por aqui.',
+    'Se quiser incluir alguma coisa, ainda dá tempo — me manda a foto do prato ou usa /comi.',
+    OPT_OUT,
+  ].join('\n\n');
 }
 
 function textPendingMeal(resumo: string): string {
   return [
-    `Ficou faltando me dizer de que refeição foi o prato ${resumo}.`,
+    `Oi! Ficou faltando só me dizer de que refeição foi o prato ${resumo}.`,
+    'É só tocar em uma das opções abaixo que eu fecho o registro do seu dia.',
     OPT_OUT,
   ].join('\n\n');
+}
+
+/** "o café da manhã e o almoço" — lista em português, sem vírgula solta no fim. */
+function listar(meals: readonly Meal[]): string {
+  const nomes = meals.map((m) => `o ${MEAL_LABELS[m].toLowerCase()}`);
+  if (nomes.length === 1) return nomes[0]!;
+  return `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}`;
 }
 
 // ── Planejamento ─────────────────────────────────────────────────────────────
@@ -236,7 +267,10 @@ async function planMissingMeal(
   // Cita NO MÁXIMO UMA, a mais antiga na ordem do dia. Uma lista de faltas é um
   // boletim de notas, e não é isso que o produto quer ser.
   const alvo = faltando[0]!;
-  return { ...base, text: textMissingMeal(alvo), detail: alvo };
+  // Passa o que ELE JÁ registrou para a mensagem reconhecer o esforço antes de
+  // apontar a lacuna — o reconhecimento é do registro, nunca da comida.
+  const jaFeitas = EXPECTED_MEALS.filter((m) => c.meals.includes(m));
+  return { ...base, text: textMissingMeal(alvo, jaFeitas), detail: alvo };
 }
 
 // ── Execução ─────────────────────────────────────────────────────────────────

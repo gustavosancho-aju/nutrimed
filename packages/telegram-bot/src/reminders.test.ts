@@ -153,7 +153,7 @@ describe('Lembretes proativos (E16 Fase 3)', () => {
       // Listar faltas para quem não registrou nada lê como sermão.
       await novoPaciente('lb-zero', { reminders: true, goalKcal: 2000 });
       const plano = (await planReminders(deps, localAt(16, 30))).find((p) => p.chatId === 'lb-zero');
-      expect(plano!.text).toMatch(/ainda não recebi nenhum registro/i);
+      expect(plano!.text).toMatch(/ainda não chegou nenhum registro/i);
       expect(plano!.text).not.toMatch(/\d{3,}/); // sem kcal nem meta
     });
 
@@ -288,6 +288,31 @@ describe('Lembretes proativos (E16 Fase 3)', () => {
       for (const t of await todasAsMensagens()) {
         expect(t).not.toMatch(/você não (comeu|tomou|almoçou|jantou)/i);
       }
+    });
+
+    it('reconhece o REGISTRO, mas nunca julga a escolha alimentar', async () => {
+      // A regra 7 é o que permite o tom acolhedor sem virar avaliação clínica:
+      // agradecer por manter o diário fala do comportamento com o BOT; elogiar
+      // ou criticar o que a pessoa comeu é juízo sobre conduta, sem médico no
+      // circuito — a fronteira do CJ-4.
+      const id = await novoPaciente('lb-tom', { reminders: true, goalKcal: 2000 });
+      await registrar(id, 400, 'cafe_da_manha', 8);
+      await registrar(id, 700, 'almoco', 12);
+
+      const plano = (await planReminders(deps, localAt(22, 0))).find((p) => p.chatId === 'lb-tom');
+      // reconhece o que foi registrado
+      expect(plano!.text).toMatch(/obrigado|vi que voc[êe] registrou/i);
+      expect(plano!.text).toMatch(/café da manhã/i);
+      // e NÃO opina sobre a comida
+      expect(plano!.text).not.toMatch(/ótima escolha|bem alimentad|saudável|equilibrad|leve demais|pesad/i);
+    });
+
+    it('sem nada registrado, não finge reconhecimento', async () => {
+      // "Obrigado por manter em dia" para quem não registrou nada seria falso e
+      // soaria irônico.
+      await novoPaciente('lb-tom-zero', { reminders: true, goalKcal: 2000 });
+      const plano = (await planReminders(deps, localAt(22, 0))).find((p) => p.chatId === 'lb-tom-zero');
+      expect(plano!.text).not.toMatch(/obrigado/i);
     });
 
     it('toda mensagem proativa oferece a saída', async () => {
