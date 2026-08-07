@@ -584,4 +584,93 @@ CREATE TABLE IF NOT EXISTS consultation_form (
 );
 `,
   },
+  {
+    name: '0026_food_log_meal',
+    sql: `
+-- O bot passa a PERGUNTAR de que refeição se trata antes de gravar (decisão de
+-- produto do Gustavo: perguntar SEMPRE, nunca inferir pelo horário).
+--
+-- Coluna CLARA, fora do values_enc, por dois motivos:
+--
+-- (1) FUNCIONAL, e é o decisivo. O lembrete das 22h precisa perguntar "quais
+--     refeições de hoje não têm registro" para TODOS os pacientes ativos. Com o
+--     dado dentro do blob cifrado isso viraria: ler todas as linhas do dia de
+--     todos os pacientes, DECIFRAR cada uma e filtrar em memória — a cada tick,
+--     todo dia. É o mesmo erro que o E15 já pagou no listNutritionDiary (2
+--     consultas POR DIA; 12 meses ≈ 730). Em coluna clara a cobertura sai em UMA
+--     consulta agregada, e a rotina proativa NUNCA precisa da chave de cifra.
+--
+-- (2) SENSIBILIDADE: o rótulo é um enum fechado de 4 valores, sem conteúdo
+--     clínico, e JÁ é derivável de eaten_at, que está em claro desde a 0006 —
+--     "12h47" diz "almoço" com mais precisão que o rótulo. O que é sensível (o
+--     QUE e QUANTO se comeu) segue inteiro dentro de values_enc. Mesmo desenho
+--     de patient_self_log.kind (0020) e food_log_entry.source.
+--     Risco aceito e registrado: a SEQUÊNCIA de refeições ao longo de meses é um
+--     traço comportamental consultável por SQL (jejum intermitente, p.ex.).
+--     Entra no brief jurídico junto com eaten_at, não como decisão silenciosa.
+--
+-- text e não enum nativo: o projeto nunca usou enum PG (source, kind, status são
+-- todos text), e enum exigiria migration para cada valor novo. A validação fica
+-- em parseMeal(), que é onde os testes chegam.
+--
+-- NULL = "não informada". Legado NÃO é preenchido por horário: inferir
+-- retroativamente é inventar dado. É também o que grava o pendente que expira —
+-- o paciente comeu, e descartar o registro por ele não ter respondido uma
+-- pergunta do bot seria tratar ausência de resposta como ausência de refeição.
+ALTER TABLE food_log_entry ADD COLUMN IF NOT EXISTS meal text;
+`,
+  },
+  {
+    name: '0027_food_log_pending',
+    sql: `
+-- Registro alimentar À ESPERA da resposta "qual refeição?".
+--
+-- POR QUE NO BANCO e não em memória (globalThis), que seria mais simples:
+--   1. CUSTO. A visão do Claude é chamada ANTES do pendente existir
+--      (handlePhoto → estimator.estimate). Com estado em memória, todo deploy
+--      (rolling, wait_timeout 5m no fly.toml) e todo crash fariam o paciente
+--      reenviar a foto e PAGAR a estimativa de novo. O projeto já pagou caro por
+--      custo não-controlado (vazamento de 2026-07-24).
+--   2. VÁRIOS PENDENTES. Um Map por chat só comporta um. Com linha no banco e id
+--      no callback_data, dois pratos seguidos convivem e cada pergunta é
+--      respondida de forma independente.
+--   3. JANELA REAL. O paciente responde 40 min depois, no ônibus. TTL curto em
+--      memória não serve; TTL longo é vazamento de heap por chat.
+--
+-- Chaveado por PACIENTE (não por chat): o bot já resolveu chatId→patientId antes
+-- de chamar o estimador, e assim grupo e privado se comportam igual.
+--
+-- values_enc: MESMO blob de food_log_entry (kcal/macros/itemsLabel) — é dado
+-- clínico e vai cifrado (NFR9).
+--
+-- consumed_at é o CLAIM ATÔMICO. O SqlExecutor não expõe transação e em produção
+-- é um Pool COMPARTILHADO (ver aviso em packages/audit/src/audit.ts), então
+-- BEGIN/COMMIT não valem aqui: a exclusão mútua contra duplo clique no botão
+-- precisa caber em UM statement — UPDATE ... WHERE consumed_at IS NULL
+-- RETURNING, o mesmo padrão já usado no resgate do código de pareamento.
+--
+-- food_log_entry_id fecha a cadeia: se o processo morrer ENTRE o claim e o
+-- INSERT do food log, a varredura acha consumed_at IS NOT NULL AND
+-- food_log_entry_id IS NULL e termina o trabalho. Sem transação, é a única forma
+-- honesta de garantir "exatamente uma vez".
+CREATE TABLE IF NOT EXISTS food_log_pending (
+  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  patient_id        uuid NOT NULL REFERENCES patient(id),
+  chat_id           text NOT NULL,
+  eaten_at          timestamptz NOT NULL,
+  source            text NOT NULL DEFAULT 'telegram',
+  photo_ref         text,
+  values_enc        text NOT NULL,
+  model_version     text,
+  expires_at        timestamptz NOT NULL,
+  consumed_at       timestamptz,
+  food_log_entry_id uuid REFERENCES food_log_entry(id),
+  created_at        timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_food_log_pending_patient
+  ON food_log_pending(patient_id, created_at) WHERE consumed_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_food_log_pending_expiry
+  ON food_log_pending(expires_at) WHERE consumed_at IS NULL;
+`,
+  },
 ];

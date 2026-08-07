@@ -58,6 +58,8 @@ describe('Migrations 0001 — schema base (AC1, AC3)', () => {
       '0023_body_projection',
       '0024_body_projection_async',
       '0025_consultation_form',
+      '0026_food_log_meal',
+      '0027_food_log_pending',
     ]);
   });
 

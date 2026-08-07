@@ -14,6 +14,12 @@ import {
   listFoodLogByDay,
   sumFoodLogForDay,
   listNutritionDiary,
+  addPendingFoodEntry,
+  listPendingFoodEntries,
+  confirmPendingFoodEntry,
+  flushExpiredPendingEntries,
+  parseMeal,
+  EXPECTED_MEALS,
 } from './patients';
 
 
@@ -250,5 +256,140 @@ describe('Nutrition Goals & Food Log (E12 — 12.2)', () => {
       expect(comEntradas.progress.goal).toEqual({ kcal: 2000, protein: 150, carbs: 200, fat: 60 });
       expect(comEntradas.progress.remaining).toEqual({ kcal: 700, protein: 60, carbs: 70, fat: 20 });
     });
+  });
+});
+
+describe('Registro pendente da refeição (E16 Fase 2)', () => {
+  let db: PGlite;
+  let exec: SqlExecutor;
+  let patientId: string;
+
+  const PRATO = { kcal: 620, protein: 42, carbs: 68, fat: 18 };
+  const daqui = (min: number) => new Date(Date.now() + min * 60_000);
+
+  /**
+   * Dia LOCAL (BR) de agora — não o dia UTC.
+   *
+   * `new Date().toISOString().slice(0,10)` devolve o dia em UTC, e
+   * `sumFoodLogForDay` espera o dia LOCAL. Entre 21h e meia-noite no Brasil os
+   * dois divergem, e o teste passava a procurar o dia seguinte enquanto o
+   * registro pertencia ao dia corrente — falha que só aparecia nesse intervalo.
+   * Foi o CI que pegou (rodou às 21h11 BRT); localmente passava.
+   */
+  const hojeLocal = (): string => new Date(Date.now() + BR * 60_000).toISOString().slice(0, 10);
+
+  beforeAll(async () => {
+    db = new PGlite();
+    exec = pgliteExecutor(db);
+    await runMigrations(exec);
+    const userId = await insertUser(exec, 'pendente@nutrimed.test');
+    patientId = await createPatient(exec, userId, { name: 'Paciente Pendente' }, KEY);
+  });
+
+  afterAll(async () => {
+    await db.close();
+  });
+
+  it('o pendente NÃO entra no diário antes de o paciente responder', async () => {
+    await addPendingFoodEntry(exec, patientId, 'chat-1', { eatenAt: new Date(), values: PRATO }, KEY, daqui(60));
+
+    // Dia LOCAL: com o dia UTC este teste passaria VAZIO entre 21h e meia-noite
+    // (procuraria um dia sem registro nenhum e veria 0 por engano).
+    const progresso = await sumFoodLogForDay(exec, patientId, hojeLocal(), BR, KEY);
+    expect(progresso.consumed.kcal).toBe(0);
+
+    const pendentes = await listPendingFoodEntries(exec, patientId, KEY);
+    expect(pendentes).toHaveLength(1);
+    expect(pendentes[0]?.values.kcal).toBe(620);
+  });
+
+  it('confirmar grava com a refeição escolhida e some da lista de pendentes', async () => {
+    const id = await addPendingFoodEntry(
+      exec, patientId, 'chat-1', { eatenAt: new Date(), values: PRATO }, KEY, daqui(60),
+    );
+    const r = await confirmPendingFoodEntry(exec, patientId, id, 'almoco', KEY);
+    expect(r?.values.kcal).toBe(620);
+
+    const entrada = await findLatestFoodLogEntry(exec, patientId, KEY);
+    expect(entrada?.meal).toBe('almoco');
+
+    const aindaPendente = (await listPendingFoodEntries(exec, patientId, KEY)).map((p) => p.id);
+    expect(aindaPendente).not.toContain(id);
+  });
+
+  it('duplo clique no botão NÃO duplica o registro', async () => {
+    // O SqlExecutor é um Pool compartilhado em produção e não expõe transação:
+    // a exclusão mútua tem que vir do UPDATE condicional, num statement só.
+    const id = await addPendingFoodEntry(
+      exec, patientId, 'chat-1', { eatenAt: new Date(), values: PRATO }, KEY, daqui(60),
+    );
+    const [a, b] = await Promise.all([
+      confirmPendingFoodEntry(exec, patientId, id, 'jantar', KEY),
+      confirmPendingFoodEntry(exec, patientId, id, 'jantar', KEY),
+    ]);
+    // exatamente um vence; o outro recebe null
+    expect([a, b].filter(Boolean)).toHaveLength(1);
+  });
+
+  it('paciente não confirma pendente de OUTRO paciente', async () => {
+    const outroUser = await insertUser(exec, 'outro@nutrimed.test');
+    const outro = await createPatient(exec, outroUser, { name: 'Outro' }, KEY);
+    const id = await addPendingFoodEntry(
+      exec, patientId, 'chat-1', { eatenAt: new Date(), values: PRATO }, KEY, daqui(60),
+    );
+    expect(await confirmPendingFoodEntry(exec, outro, id, 'almoco', KEY)).toBeNull();
+  });
+
+  it('pendente VENCIDO é gravado com meal NULL — nunca descartado', async () => {
+    // O paciente comeu e a estimativa já foi paga. Descartar faria o /hoje
+    // mentir e puniria o paciente por não responder uma pergunta do bot.
+    const antes = await sumFoodLogForDay(exec, patientId, hojeLocal(), BR, KEY);
+    await addPendingFoodEntry(
+      exec, patientId, 'chat-1', { eatenAt: new Date(), values: PRATO }, KEY, daqui(-5),
+    );
+
+    const gravados = await flushExpiredPendingEntries(exec, new Date(), KEY, patientId);
+    expect(gravados).toHaveLength(1);
+    expect(gravados[0]?.chatId).toBe('chat-1');
+
+    const entrada = await findLatestFoodLogEntry(exec, patientId, KEY);
+    expect(entrada?.meal).toBeNull();
+
+    const depois = await sumFoodLogForDay(exec, patientId, hojeLocal(), BR, KEY);
+    expect(depois.consumed.kcal).toBeGreaterThan(antes.consumed.kcal);
+  });
+
+  it('varredura de vencidos é idempotente', async () => {
+    expect(await flushExpiredPendingEntries(exec, new Date(), KEY, patientId)).toHaveLength(0);
+  });
+
+  it('pendente ainda no prazo não é varrido', async () => {
+    await addPendingFoodEntry(
+      exec, patientId, 'chat-1', { eatenAt: new Date(), values: PRATO }, KEY, daqui(120),
+    );
+    expect(await flushExpiredPendingEntries(exec, new Date(), KEY, patientId)).toHaveLength(0);
+    expect((await listPendingFoodEntries(exec, patientId, KEY)).length).toBeGreaterThan(0);
+  });
+});
+
+describe('parseMeal', () => {
+  it('aceita as formas que o paciente escreve', () => {
+    expect(parseMeal('almoço')).toBe('almoco');
+    expect(parseMeal('ALMOCO')).toBe('almoco');
+    expect(parseMeal('café da manhã')).toBe('cafe_da_manha');
+    expect(parseMeal('cafe_da_manha')).toBe('cafe_da_manha');
+    expect(parseMeal('janta')).toBe('jantar');
+    expect(parseMeal(' Lanche ')).toBe('lanche');
+  });
+
+  it('não chuta: termo desconhecido vira null', () => {
+    // Chutar aqui gravaria a refeição errada em silêncio.
+    expect(parseMeal('sobremesa')).toBeNull();
+    expect(parseMeal('')).toBeNull();
+  });
+
+  it('lanche NÃO é refeição esperada — cobrar seria inventar uma falta', () => {
+    expect(EXPECTED_MEALS).not.toContain('lanche');
+    expect(EXPECTED_MEALS).toHaveLength(3);
   });
 });

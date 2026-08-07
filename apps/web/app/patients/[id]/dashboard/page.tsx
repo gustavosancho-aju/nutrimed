@@ -14,6 +14,7 @@ import {
   loadCurrentNutritionGoal,
   listNutritionRange,
   computeAge,
+  MEAL_LABELS,
   type DailyNutritionDiary,
 } from '@nutrimed/patients';
 import {
@@ -679,6 +680,15 @@ export default async function DashboardPage({
                                               ? 'registro por texto'
                                               : 'registro por foto'}
                                           </span>
+                                        </span>
+                                        {/* Refeição informada pelo paciente (E16 Fase 2). "não
+                                            informada" é honesto: o pendente pode ter expirado
+                                            sem resposta, e o legado nunca teve o campo. */}
+                                        <span
+                                          className={entry.meal ? 'font-medium text-ink' : 'italic text-ink-muted'}
+                                          title={entry.meal ? 'Refeição informada pelo paciente' : 'O paciente não informou a refeição'}
+                                        >
+                                          · {entry.meal ? MEAL_LABELS[entry.meal] : 'refeição não informada'}
                                         </span>
                                         <span>· {entry.values.itemsLabel ?? 'sem descrição'}</span>
                                         <span>· ~{Math.round(entry.values.kcal)} kcal</span>
