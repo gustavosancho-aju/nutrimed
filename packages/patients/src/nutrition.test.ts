@@ -267,6 +267,17 @@ describe('Registro pendente da refeição (E16 Fase 2)', () => {
   const PRATO = { kcal: 620, protein: 42, carbs: 68, fat: 18 };
   const daqui = (min: number) => new Date(Date.now() + min * 60_000);
 
+  /**
+   * Dia LOCAL (BR) de agora — não o dia UTC.
+   *
+   * `new Date().toISOString().slice(0,10)` devolve o dia em UTC, e
+   * `sumFoodLogForDay` espera o dia LOCAL. Entre 21h e meia-noite no Brasil os
+   * dois divergem, e o teste passava a procurar o dia seguinte enquanto o
+   * registro pertencia ao dia corrente — falha que só aparecia nesse intervalo.
+   * Foi o CI que pegou (rodou às 21h11 BRT); localmente passava.
+   */
+  const hojeLocal = (): string => new Date(Date.now() + BR * 60_000).toISOString().slice(0, 10);
+
   beforeAll(async () => {
     db = new PGlite();
     exec = pgliteExecutor(db);
@@ -282,8 +293,9 @@ describe('Registro pendente da refeição (E16 Fase 2)', () => {
   it('o pendente NÃO entra no diário antes de o paciente responder', async () => {
     await addPendingFoodEntry(exec, patientId, 'chat-1', { eatenAt: new Date(), values: PRATO }, KEY, daqui(60));
 
-    const dia = new Date().toISOString().slice(0, 10);
-    const progresso = await sumFoodLogForDay(exec, patientId, dia, BR, KEY);
+    // Dia LOCAL: com o dia UTC este teste passaria VAZIO entre 21h e meia-noite
+    // (procuraria um dia sem registro nenhum e veria 0 por engano).
+    const progresso = await sumFoodLogForDay(exec, patientId, hojeLocal(), BR, KEY);
     expect(progresso.consumed.kcal).toBe(0);
 
     const pendentes = await listPendingFoodEntries(exec, patientId, KEY);
@@ -331,7 +343,7 @@ describe('Registro pendente da refeição (E16 Fase 2)', () => {
   it('pendente VENCIDO é gravado com meal NULL — nunca descartado', async () => {
     // O paciente comeu e a estimativa já foi paga. Descartar faria o /hoje
     // mentir e puniria o paciente por não responder uma pergunta do bot.
-    const antes = await sumFoodLogForDay(exec, patientId, new Date().toISOString().slice(0, 10), BR, KEY);
+    const antes = await sumFoodLogForDay(exec, patientId, hojeLocal(), BR, KEY);
     await addPendingFoodEntry(
       exec, patientId, 'chat-1', { eatenAt: new Date(), values: PRATO }, KEY, daqui(-5),
     );
@@ -343,7 +355,7 @@ describe('Registro pendente da refeição (E16 Fase 2)', () => {
     const entrada = await findLatestFoodLogEntry(exec, patientId, KEY);
     expect(entrada?.meal).toBeNull();
 
-    const depois = await sumFoodLogForDay(exec, patientId, new Date().toISOString().slice(0, 10), BR, KEY);
+    const depois = await sumFoodLogForDay(exec, patientId, hojeLocal(), BR, KEY);
     expect(depois.consumed.kcal).toBeGreaterThan(antes.consumed.kcal);
   });
 
