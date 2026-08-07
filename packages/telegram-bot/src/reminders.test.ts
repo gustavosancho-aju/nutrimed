@@ -197,6 +197,42 @@ describe('Lembretes proativos (E16 Fase 3)', () => {
       expect(plano!.text).not.toMatch(/não chegou|faltou|falta/i);
     });
 
+    it('registro SEM rótulo não vira "faltou" — o bot não afirma o que não sabe', async () => {
+      // Bug relatado pelo piloto em 2026-08-06: ele registrou as 3 refeições, mas
+      // as duas primeiras foram ANTES da migration 0026 e ficaram com meal nulo.
+      // O bot disse "não chegou o registro do café da manhã" — FALSO: o registro
+      // chegou, faltou o rótulo. Mesma familia do case review e do "não
+      // registrou = não bateu": ausência de dado tratada como valor.
+      const id = await novoPaciente('lb-sem-rotulo', { reminders: true, goalKcal: 2000 });
+      await registrar(id, 400, 'jantar', 20);
+      // dois registros SEM refeição (legado / pendente expirado)
+      await addFoodLogEntry(
+        exec, id, { eatenAt: localAt(8), values: { kcal: 300, protein: 10, carbs: 30, fat: 8 } }, KEY,
+      );
+      await addFoodLogEntry(
+        exec, id, { eatenAt: localAt(12), values: { kcal: 600, protein: 30, carbs: 60, fat: 15 } }, KEY,
+      );
+
+      const plano = (await planReminders(deps, localAt(22, 0))).find((p) => p.chatId === 'lb-sem-rotulo');
+      expect(plano).toBeDefined();
+      expect(plano!.detail).toBe('sem-rotulo');
+      // NÃO afirma que alguma refeição faltou
+      expect(plano!.text).not.toMatch(/não chegou|faltou|falta/i);
+      expect(plano!.text).toMatch(/sem a refeição informada/i);
+      expect(plano!.text).toMatch(/não consigo dizer/i);
+      expect(plano!.text).toMatch(/\/refeicao/);
+    });
+
+    it('sem registro sem rótulo, a cobrança específica volta a valer', async () => {
+      const id = await novoPaciente('lb-rotulado', { reminders: true, goalKcal: 2000 });
+      await registrar(id, 400, 'almoco', 12);
+      await registrar(id, 600, 'jantar', 20);
+
+      const plano = (await planReminders(deps, localAt(22, 0))).find((p) => p.chatId === 'lb-rotulado');
+      expect(plano!.detail).toBe('cafe_da_manha');
+      expect(plano!.text).toMatch(/café da manhã/i);
+    });
+
     it('dia completo: comemora o REGISTRO, nunca o resultado clínico', async () => {
       // A distinção é fina e é toda a diferença: "você registrou as 3 refeições"
       // é adesão ao diário (comportamento com o bot, verificável, não clínico).

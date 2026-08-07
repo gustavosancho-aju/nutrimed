@@ -1334,6 +1334,19 @@ export interface DayMealCoverage {
   /** Refeições DISTINTAS registradas no dia local (exclui as não informadas). */
   readonly meals: readonly Meal[];
   readonly entryCount: number;
+  /**
+   * Registros do dia SEM refeição informada.
+   *
+   * Existem por dois motivos legítimos: entradas anteriores à migration 0026
+   * (todo o histórico de qualquer paciente) e pendentes que expiraram sem
+   * resposta. Eles significam **"não sei qual refeição"**, e não "aquela
+   * refeição não aconteceu".
+   *
+   * A distinção é o que impede o bot de afirmar "não chegou o registro do café
+   * da manhã" quando o registro CHEGOU e só não foi rotulado — afirmação falsa,
+   * que é pior que uma áspera.
+   */
+  readonly unlabeledCount: number;
 }
 
 /**
@@ -1372,11 +1385,13 @@ export async function listMealCoverageForDay(
     patient_id: string;
     chat_id: string;
     entry_count: number;
+    unlabeled_count: number;
     meals: (string | null)[] | null;
   }>(
     `SELECT l.patient_id,
             l.chat_id,
             count(f.id)::int AS entry_count,
+            count(f.id) FILTER (WHERE f.meal IS NULL)::int AS unlabeled_count,
             coalesce(array_agg(DISTINCT f.meal) FILTER (WHERE f.meal IS NOT NULL), '{}') AS meals
      FROM telegram_link l
      LEFT JOIN food_log_entry f
@@ -1394,6 +1409,7 @@ export async function listMealCoverageForDay(
     patientId: r.patient_id,
     chatId: r.chat_id,
     entryCount: r.entry_count,
+    unlabeledCount: r.unlabeled_count,
     meals: (r.meals ?? []).flatMap((m) => {
       const parsed = m ? parseMeal(m) : null;
       return parsed ? [parsed] : [];

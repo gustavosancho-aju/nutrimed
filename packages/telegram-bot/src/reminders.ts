@@ -185,6 +185,21 @@ function textDayComplete(registrou: readonly Meal[]): string {
   ].join('\n\n');
 }
 
+/**
+ * Há registros do dia sem refeição informada. O bot NÃO pode afirmar que
+ * alguma refeição faltou — ele não sabe. Diz o que sabe e oferece o conserto.
+ */
+function textUnlabeled(quantos: number): string {
+  const plural = quantos === 1 ? 'um registro' : `${quantos} registros`;
+  return [
+    `Antes de encerrar o dia: recebi ${plural} seu hoje sem a refeição informada, então não ` +
+      'consigo dizer se o dia ficou completo.',
+    'Se quiser organizar, me diga a refeição com /refeicao (ex.: /refeicao almoco). ' +
+      'Nos próximos registros eu já pergunto na hora.',
+    OPT_OUT,
+  ].join('\n\n');
+}
+
 function textPendingMeal(resumo: string): string {
   return [
     `Oi! Ficou faltando só me dizer de que refeição foi o prato ${resumo}.`,
@@ -282,6 +297,23 @@ async function planMissingMeal(
   }
 
   if (c.entryCount === 0) return { ...base, text: textNothingToday(), detail: 'sem-registros' };
+
+  // REGISTRO SEM RÓTULO = "não sei qual refeição", NÃO "aquela refeição não
+  // aconteceu". Sem esta guarda o bot afirma "não chegou o registro do café da
+  // manhã" quando o registro CHEGOU e só não foi etiquetado — afirmação FALSA,
+  // que é pior que uma áspera e contradiz a regra 1 (o sujeito é o registro, e o
+  // bot só diz o que sabe).
+  //
+  // Acontece de verdade: todo registro anterior à migration 0026 tem meal nulo,
+  // então no primeiro dia de qualquer paciente a maior parte do diário está sem
+  // rótulo. Foi exatamente o que o piloto recebeu em 2026-08-06.
+  //
+  // É a mesma família de bug que este projeto já corrigiu no case review
+  // (silêncio lido como pausa), no "não registrou = não bateu" e nos cartões de
+  // métrica: AUSÊNCIA DE DADO TRATADA COMO VALOR.
+  if (c.unlabeledCount > 0) {
+    return { ...base, text: textUnlabeled(c.unlabeledCount), detail: 'sem-rotulo' };
+  }
 
   const faltando = missingMeals(c.meals);
   if (faltando.length === 0) {
