@@ -5,6 +5,7 @@ export {
   handleAte,
   handleMealChoice,
   handleMealCommand,
+  handleReminderToggle,
   handleToday,
   handleGoal,
   handleUpdate,
@@ -13,3 +14,18 @@ export {
   type BotReply,
   type BotUpdate,
 } from './bot';
+
+export {
+  DEFAULT_WINDOWS,
+  QUIET_HOURS,
+  BELOW_GOAL_RATIO,
+  REMINDER_TEXTS,
+  missingMeals,
+  planReminders,
+  runReminderTick,
+  type PlannedReminder,
+  type PushFn,
+  type ReminderDeps,
+  type ReminderKind,
+  type ReminderWindows,
+} from './reminders';

@@ -673,4 +673,60 @@ CREATE INDEX IF NOT EXISTS idx_food_log_pending_expiry
   ON food_log_pending(expires_at) WHERE consumed_at IS NULL;
 `,
   },
+  {
+    name: '0028_patient_reminder',
+    sql: `
+-- Lembretes PROATIVOS (E16 Fase 3): o bot deixa de ser só reativo e passa a
+-- INICIAR contato — 16h (consumo do dia abaixo da meta) e 22h (refeição sem
+-- registro). Vai ao ar DESLIGADO: ligar depende do parecer do CJ-14.
+--
+-- patient_reminder_log é a trava de "já mandei". Sem ela: um restart no meio da
+-- janela reenviaria, e se algum dia houver 2 instâncias o paciente recebe em
+-- dobro. O UNIQUE + ON CONFLICT DO NOTHING RETURNING é um CLAIM em UM statement,
+-- porque o SqlExecutor não expõe transação (Pool compartilhado em produção) —
+-- mesmo princípio do consumo do código de pareamento.
+--
+-- TRADE-OFF ASSUMIDO: claim ANTES de enviar torna a entrega "no máximo uma vez".
+-- Se a Bot API falhar depois do claim, o lembrete daquele dia se perde. O inverso
+-- (enviar e depois marcar) é "pelo menos uma vez" e gera duplicata. Para um
+-- cutucão de aderência, um lembrete perdido é MUITO melhor que um repetido:
+-- repetir "não recebi seu café da manhã" soa acusatório e quebra a confiança.
+--
+-- local_day é o dia LOCAL do paciente (BR), não UTC: às 22h em Brasília já é o
+-- dia seguinte em UTC, e a trava tem que casar com o dia que o paciente vive.
+--
+-- Sem values_enc: a linha não guarda nutriente nem alimento. \`detail\` guarda no
+-- máximo o RÓTULO da refeição faltante — mesma classe de metadado da coluna
+-- food_log_entry.meal (0026), e pelos mesmos motivos.
+CREATE TABLE IF NOT EXISTS patient_reminder_log (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  patient_id uuid NOT NULL REFERENCES patient(id),
+  kind       text NOT NULL,
+  local_day  date NOT NULL,
+  chat_id    text NOT NULL,
+  detail     text,
+  sent_at    timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (patient_id, kind, local_day)
+);
+CREATE INDEX IF NOT EXISTS idx_patient_reminder_day
+  ON patient_reminder_log(local_day, kind);
+
+-- Opt-in do lembrete, no CANAL (não no paciente): a preferência é sobre o canal,
+-- e revogar o canal já desliga tudo junto.
+--
+-- DEFAULT FALSE, e isso é o ponto: mensagem proativa é FINALIDADE NOVA sob a
+-- LGPD. O texto de pareamento que os pacientes atuais aceitaram descrevia um bot
+-- que RESPONDE — não um que inicia contato. Ninguém é migrado para "sim"; o
+-- médico liga paciente a paciente, após o paciente re-consentir (CJ-14).
+ALTER TABLE telegram_link ADD COLUMN IF NOT EXISTS reminders_enabled boolean NOT NULL DEFAULT false;
+
+-- 'private' | 'group' | 'supergroup'. Preenchido no pareamento a partir do
+-- update do Telegram. Serve para NÃO mandar mensagem proativa em GRUPO: um
+-- lembrete de aderência num grupo com nutrólogo e nutricionista é divulgação de
+-- dado de saúde a terceiros que o paciente não iniciou naquele momento.
+-- Vínculo legado sem o valor cai no heurístico do id negativo (grupos no
+-- Telegram têm chat_id < 0).
+ALTER TABLE telegram_link ADD COLUMN IF NOT EXISTS chat_type text;
+`,
+  },
 ];

@@ -60,6 +60,7 @@ describe('Migrations 0001 — schema base (AC1, AC3)', () => {
       '0025_consultation_form',
       '0026_food_log_meal',
       '0027_food_log_pending',
+      '0028_patient_reminder',
     ]);
   });
 

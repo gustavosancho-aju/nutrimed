@@ -30,6 +30,22 @@ export interface ChannelConsent {
   readonly chatId: string;
   readonly patientId: string;
   readonly granted: boolean;
+  /**
+   * O canal é um GRUPO (paciente + equipe)? A ficha usa isto para avisar que os
+   * lembretes proativos ficarão visíveis para todos os participantes.
+   *
+   * Vale para vínculo LEGADO: os pareados antes da migration 0028 têm
+   * `chat_type` nulo, então caímos no sinal do próprio Telegram — id de grupo é
+   * negativo. Sem esse fallback, justamente os canais mais antigos (que são os
+   * do piloto) apareceriam como privados.
+   */
+  readonly isGroup: boolean;
+}
+
+/** Grupos no Telegram têm chat_id negativo; chat privado, positivo. */
+export function isGroupChat(chatId: string, chatType?: string | null): boolean {
+  if (chatType) return chatType === 'group' || chatType === 'supergroup';
+  return chatId.startsWith('-');
 }
 
 /** Resultado do resgate — sucesso com paciente, ou falha com motivo. */
@@ -87,6 +103,14 @@ export async function redeemPairingCode(
   db: SqlExecutor,
   chatId: string,
   code: string,
+  /**
+   * Tipo do chat, vindo do update do Telegram. Guardado para o lembrete proativo
+   * NUNCA sair em grupo (E16 Fase 3): num chat com nutrólogo e nutricionista, um
+   * lembrete de aderência é divulgação de dado de saúde a terceiros que o
+   * paciente não iniciou. Ausente ⇒ null, e o filtro cai no heurístico do
+   * chat_id negativo (grupos no Telegram têm id < 0).
+   */
+  chatType?: string,
 ): Promise<RedeemResult> {
   const res = await db.query<{
     id: string;
@@ -126,16 +150,17 @@ export async function redeemPairingCode(
   );
   // Ativa (consentido) o vínculo deste chat; reativa se já existia revogado.
   await db.query(
-    `INSERT INTO telegram_link (chat_id, patient_id, consent_granted, linked_by_user_id, linked_at)
-     VALUES ($1, $2, true, $3, now())
+    `INSERT INTO telegram_link (chat_id, patient_id, consent_granted, linked_by_user_id, linked_at, chat_type)
+     VALUES ($1, $2, true, $3, now(), $4)
      ON CONFLICT (chat_id) DO UPDATE
        SET patient_id = EXCLUDED.patient_id,
            consent_granted = true,
            linked_by_user_id = EXCLUDED.linked_by_user_id,
            linked_at = now(),
            revoked_at = NULL,
+           chat_type = COALESCE(EXCLUDED.chat_type, telegram_link.chat_type),
            updated_at = now()`,
-    [chatId, row.patient_id, row.created_by_user_id],
+    [chatId, row.patient_id, row.created_by_user_id, chatType ?? null],
   );
   await writeAudit(db, row.patient_id, {
     triggeredBy: 'telegram-pairing-redeem',
@@ -199,8 +224,13 @@ export async function getLinkStatus(
   db: SqlExecutor,
   patientId: string,
 ): Promise<ChannelConsent | null> {
-  const res = await db.query<{ chat_id: string; patient_id: string; granted: boolean }>(
-    `SELECT chat_id, patient_id, (consent_granted AND revoked_at IS NULL) AS granted
+  const res = await db.query<{
+    chat_id: string;
+    patient_id: string;
+    granted: boolean;
+    chat_type: string | null;
+  }>(
+    `SELECT chat_id, patient_id, chat_type, (consent_granted AND revoked_at IS NULL) AS granted
      FROM telegram_link
      WHERE patient_id = $1 AND revoked_at IS NULL
      ORDER BY linked_at DESC NULLS LAST
@@ -208,5 +238,47 @@ export async function getLinkStatus(
     [patientId],
   );
   const row = res.rows[0];
-  return row ? { chatId: row.chat_id, patientId: row.patient_id, granted: row.granted } : null;
+  return row
+    ? {
+        chatId: row.chat_id,
+        patientId: row.patient_id,
+        granted: row.granted,
+        isGroup: isGroupChat(row.chat_id, row.chat_type),
+      }
+    : null;
+}
+
+/**
+ * Liga/desliga os lembretes PROATIVOS deste paciente (E16 Fase 3).
+ *
+ * Três atores mexem nisto, e de propósito:
+ *  - o MÉDICO, na ficha, depois do paciente re-consentir (é o gate clínico);
+ *  - o PACIENTE, por `/silenciar` — a LGPD (art. 18) exige que o titular consiga
+ *    se opor SEM depender de pedir a outra pessoa;
+ *  - o SISTEMA, ao receber 403 da Bot API: bloquear o bot é revogação de fato, e
+ *    continuar tentando é o tipo de coisa que a ANPD lê como desrespeito.
+ */
+export async function setRemindersEnabled(
+  db: SqlExecutor,
+  patientId: string,
+  enabled: boolean,
+  triggeredBy = 'telegram-reminders-toggle',
+): Promise<void> {
+  await db.query(
+    `UPDATE telegram_link SET reminders_enabled = $2, updated_at = now()
+     WHERE patient_id = $1 AND revoked_at IS NULL`,
+    [patientId, enabled],
+  );
+  await writeAudit(db, patientId, { triggeredBy, kbSources: [], modelVersion: 'human-edit' });
+}
+
+/** Os lembretes estão ligados para este paciente? */
+export async function areRemindersEnabled(db: SqlExecutor, patientId: string): Promise<boolean> {
+  const res = await db.query<{ on: boolean }>(
+    `SELECT reminders_enabled AS on FROM telegram_link
+     WHERE patient_id = $1 AND revoked_at IS NULL AND consent_granted = true
+     LIMIT 1`,
+    [patientId],
+  );
+  return res.rows[0]?.on ?? false;
 }

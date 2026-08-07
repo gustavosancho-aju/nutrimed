@@ -9,6 +9,7 @@ import {
   isChannelAuthorized,
   revokeChannel,
   getLinkStatus,
+  isGroupChat,
 } from './link';
 
 
@@ -76,6 +77,7 @@ describe('Telegram Link Service — pareamento + gate do canal (E12 — 12.3)', 
         chatId: 'chat-happy',
         patientId,
         granted: true,
+        isGroup: false,
       });
 
       const trail = await getAuditTrail(exec, patientId);
@@ -149,7 +151,25 @@ describe('Telegram Link Service — pareamento + gate do canal (E12 — 12.3)', 
         chatId: 'chat-B',
         patientId,
         granted: true,
+        isGroup: false,
       });
     });
+  });
+});
+
+describe('isGroupChat (E16 Fase 3)', () => {
+  it('usa o chat_type quando existe', () => {
+    expect(isGroupChat('123', 'group')).toBe(true);
+    expect(isGroupChat('123', 'supergroup')).toBe(true);
+    expect(isGroupChat('-123', 'private')).toBe(false);
+  });
+
+  it('cai no id negativo para vínculo LEGADO (chat_type nulo)', () => {
+    // Os canais pareados antes da migration 0028 têm chat_type nulo — e são
+    // justamente os do piloto. Sem este fallback eles apareceriam como privados
+    // e o aviso de grupo na ficha nunca surgiria para quem mais precisa dele.
+    expect(isGroupChat('-1002003000', null)).toBe(true);
+    expect(isGroupChat('-1002003000')).toBe(true);
+    expect(isGroupChat('987654321')).toBe(false);
   });
 });
