@@ -10,7 +10,7 @@ deploy e roadmap — a referência única do estado atual).
 **📋 Registro histórico do MVP (E1–E10): [`docs/IMPLEMENTATION-RECORD.md`](docs/IMPLEMENTATION-RECORD.md)**
 (rastreabilidade FR/NFR/ADR e evidências ao vivo do snapshot de 2026-06-11).
 
-## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-08-07, main @ e97c919, Fly v68 — E16 completo: precisão do alimento, pergunta da refeição e lembretes proativos LIGADOS para o piloto)
+## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-08-07, main @ b92133d, Fly v69 — E16 completo: precisão do alimento, pergunta da refeição e lembretes proativos LIGADOS para o piloto)
 
 **9 de 10 épicos com núcleo implementado e verificado ao vivo** (falta E8 — vídeos).
 **E11 (Pacientes & Dashboard) COMPLETO** (4 fases + extras: faixa ideal/meta nos gráficos e
@@ -247,7 +247,29 @@ propósito. Agora `unlabeledCount > 0` ⇒ o bot NÃO afirma falta; diz o que sa
 **Flake pego pelo CI e não pelo local:** teste usava dia UTC onde precisava do dia LOCAL — só
 quebraria entre 21h e meia-noite, e o CI rodou às 21h11. Um 2º caso tinha o mesmo defeito e era pior
 (afirmava `toBe(0)`, então o dia errado o faria passar VAZIO). Helper `hojeLocal()` é a fonte única.
-Suíte: **1019 PASS (+1 skip)** (era 818; +201 no E16) · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
+**3ª leva de alimentos (2026-08-07, v69).** Varredura do cardápio: **14 → 5 falhas**. Entraram 8 do
+USDA SR Legacy (domínio público, `fdcId` na proveniência): granola, quinoa cozida, chia, salsicha,
+sorvete, vinho tinto, pizza de mussarela e panqueca.
+**⚠️ ARMADILHA DE UNIDADE DO USDA — a mais perigosa desta rodada:** o campo `Energy` aparece DUAS
+vezes na resposta do FDC, em **kJ e em kcal**. Extrair "o último" devolve kJ para vários alimentos
+(salsicha 1350, sorvete 868, pizza 1120) — valores que, embarcados, **TRIPLICARIAM** a energia do
+registro. A unidade foi determinada pelos PRÓPRIOS MACROS, que vêm em gramas e não são ambíguos
+(4·P+4·C+9·G = 322 para a salsicha; 1350 ÷ 4,184 = 322,6 ⇒ era kJ). Guarda nova: teste barra
+qualquer item acima de **900 kcal/100 g** — nenhum alimento real passa disso (óleo puro = 884), então
+acima é kJ disfarçado. **Ao acrescentar alimento do USDA, sempre filtrar `Energy` por `unitName`.**
+**ÁLCOOL virou campo próprio** (`alcohol`): tem 7 kcal/g e não aparece em nenhum macro. Sem ele o
+teste de Atwater reprovaria o vinho (85 kcal contra 11 "esperadas") — um dado CORRETO. É também por
+isso que álcool é a caloria mais fácil de esquecer num diário.
+**Dois bugs que só o USO revelou** (apareceram ao testar com porções reais, não com gramas):
+(1) `2 salsichas` dava 200 g em vez de 100 — a regra de porção casava por SUBSTRING, e *salsi-CHA-*
+batia com a regra de "chá" (1 xícara = 100 g); a mesma armadilha espreitava `ovo` em "novo" e `mel`
+em "melancia". Agora casa PALAVRA (fronteira não-alfanumérica, não ``, porque a descrição vem
+normalizada sem acento). (2) `1 bola de sorvete` não resolvia — "bola" não era unidade reconhecida,
+então o alimento virava "bola de sorvete".
+**Os 5 que restam são intencionais:** `requeijão` (bloqueado, sem fonte de licença compatível — única
+lacuna real), `barra de proteína` (ambíguo: 294–504 kcal/100 g pelo sabor), `água` (não é alimento),
+`sopa` e `crepioca` (receita variável demais ⇒ a foto é o caminho honesto).
+Suíte: **1032 PASS (+1 skip)** (era 818; +214 no E16) · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
 CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) **verde de novo desde
 2026-07-30** — ficou VERMELHO de 22 a 30/07 (~20 commits) sem ninguém notar, e ninguém notou
 porque esta linha dizia "verde": o job de código sempre passou, quem reprovava era o
@@ -486,7 +508,7 @@ packages/telegram-bot    E12/E16: lógica pura do bot (foto/comandos + pergunta 
 packages/taco            E13: tabela TACO 4ª ed. embarcada (591 alimentos) + busca lexical + porções caseiras (regen: scripts/gen-taco.mjs)
 packages/nutrition-report E13: recordatório (LLM) → mapeamento TACO → cálculo determinístico → relatório cifrado+auditado
 packages/lab-catalog     E14: catálogo canônico de exames (slug+sinônimos) + leitura da faixa de referência DO LAUDO — puro, sem faixa clínica própria
-packages/food-catalog    E16: catálogo canônico de ALIMENTOS (termo do paciente → item TACO) + tabela própria p/ o que a TACO não tem (suplementos) — resolveFood() é o único ponto de entrada
+packages/food-catalog    E16: catálogo canônico de ALIMENTOS (132 alias / 398 sinônimos) + tabela própria de 25 itens que a TACO não tem (suplementos, leite líquido, macarrão cozido, modernos) — resolveFood() é o único ponto de entrada; corpus de regressão + scripts/varredura-cardapio.mts para achar lacunas
 packages/body-projection Projeção corporal por foto (IBodyProjector: Gemini imagem+texto→imagem + fake) — nunca persiste
 packages/consultation-form Ficha de consulta (anamnese de nutrologia): schema dos 12 blocos + extração por IA + persistência cifrada
 ```
@@ -495,14 +517,16 @@ Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build`
 
 ## Pendências (ordem sugerida)
 
-0. **Destravar os 4 alimentos BLOQUEADOS do E16** — `leite líquido`, `macarrão cozido`, `tilápia` e
-   `grão-de-bico cozido` estão em `BLOCKED_TERMS` (`packages/food-catalog/src/catalog.ts`) porque a
-   TACO não os tem numa forma comível (só leite em PÓ, só massa CRUA, só grão-de-bico CRU) e a
-   tentativa de buscar os valores no USDA em 2026-08-06 bateu no rate limit da `DEMO_KEY` (reseta em
-   ~11 h; para uso recorrente, pegar chave própria grátis em data.gov). Fluxo: pegar os fdcId no
-   USDA (CC0), acrescentar em `extra-foods.ts` com `source: 'usda-cc0'`, mover os termos de
-   `BLOCKED_TERMS` para `FOOD_CATALOG` e trocar o caso do corpus de `BLOQUEADO` para o esperado.
-   Leite é o mais urgente: é item de todo café da manhã.
+0. **`requeijão` — última lacuna real do catálogo.** Segue em `BLOCKED_TERMS`
+   (`packages/food-catalog/src/catalog.ts`) porque não achei fonte de licença compatível: a TACO não
+   tem, e "cream cheese" do USDA é outro produto (o requeijão cremoso brasileiro é bem mais leve).
+   Resolve com um rótulo ANVISA (Catupiry/Danúbio/Vigor). Fluxo, igual ao que já foi feito 12 vezes:
+   acrescentar em `extra-foods.ts` com `source` e `origin`, mover o termo de `BLOCKED_TERMS` para
+   `FOOD_CATALOG`, e trocar o caso do corpus de `BLOQUEADO` para o esperado.
+   *(Leite, macarrão, tilápia e grão-de-bico já foram destravados em 2026-08-06/07.)*
+   **Dica p/ o USDA:** a `DEMO_KEY` esgota em ~30 req/h; chave própria é grátis em data.gov. E SEMPRE
+   filtrar `Energy` por `unitName === 'kcal'` — ver a armadilha de kJ documentada acima.
+   Para achar a próxima lacuna: `cd packages/food-catalog && npx tsx scripts/varredura-cardapio.mts`.
 1. **Parecer jurídico (CJ-1..CJ-13)** — bloqueia o piloto com pacientes reais e o áudio real da
    POC 2.5. O **brief técnico** (`docs/architecture/project-decisions/brief-tecnico-juridico.md`)
    deixa a consultoria turnkey; falta o parecer de advogado + regras de negócio (retenção +
