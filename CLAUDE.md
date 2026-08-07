@@ -10,7 +10,7 @@ deploy e roadmap — a referência única do estado atual).
 **📋 Registro histórico do MVP (E1–E10): [`docs/IMPLEMENTATION-RECORD.md`](docs/IMPLEMENTATION-RECORD.md)**
 (rastreabilidade FR/NFR/ADR e evidências ao vivo do snapshot de 2026-06-11).
 
-## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-08-06, Fly v64 — E16 F1 precisão do alimento + F2 pergunta da refeição)
+## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-08-07, main @ e97c919, Fly v68 — E16 completo: precisão do alimento, pergunta da refeição e lembretes proativos LIGADOS para o piloto)
 
 **9 de 10 épicos com núcleo implementado e verificado ao vivo** (falta E8 — vídeos).
 **E11 (Pacientes & Dashboard) COMPLETO** (4 fases + extras: faixa ideal/meta nos gráficos e
@@ -221,7 +221,33 @@ entrega "no máximo uma vez" — trade-off deliberado, porque repetir "não rece
 soa acusatório e perder um cutucão não. `listMealCoverageForDay` resolve o dia em UMA consulta e
 **não recebe a chave de cifra** — é o dividendo da coluna `meal` clara.
 **CJ-14 criado** (6 questões, 🔴 bloqueante para ATIVAR, não para desenvolver).
-Suíte: **1009 PASS (+1 skip)** (era 818; +191 no E16) · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
+**E16 F3 em campo — 4 correções que só o USO revelou (2026-08-06/07).** As três primeiras vieram de
+perguntas do Gustavo usando o bot como paciente real; nenhum teste meu as pegaria.
+(1) **Tom acolhedor.** A copy nasceu factual demais. A regra que destravou o meio-termo virou a
+**regra 7**: reconhecer o REGISTRO é seguro (comportamento com o bot); elogiar a ESCOLHA ALIMENTAR
+não é (juízo clínico sem médico no circuito). "Vi que você registrou o almoço, obrigado" ✅ ·
+"Que ótima escolha!" ❌.
+(2) **Dia completo ganhou reconhecimento** em vez de silêncio — silêncio como recompensa por fazer
+certo é sinal fraco. Ironia útil: minha própria blacklist proibia "parabéns". Estava grossa demais —
+o proibido é comemorar RESULTADO CLÍNICO ("bateu a meta"), não ADESÃO AO DIÁRIO. Suprimido se já
+cobramos hoje: "obrigado por manter em dia" 10 min depois de cobrar soa vazio.
+(3) **GRUPO desbloqueado.** Eu excluía grupo no SQL e o piloto perguntou "o bot está num grupo, será
+que não consegue enviar?" — não conseguia, em silêncio, e sem contorno (1 canal ativo por paciente).
+O argumento "divulgação a terceiros" é bom em geral e FRACO no caso: a equipe do grupo já vê o diário
+inteiro no dashboard. O que resta é CONSTRANGIMENTO, escolha do paciente com o médico — não regra do
+banco. Gate virou opt-in + aviso explícito na ficha (`isGroupChat`, com fallback de id negativo para
+vínculo legado).
+(4) **🔥 "Registro sem rótulo" lido como "refeição não aconteceu"** — o bot afirmou ao piloto "não
+chegou o registro do café da manhã" quando o registro CHEGOU e só não tinha `meal` (era anterior à
+0026). Afirmação FALSA, pior que áspera, e contra a regra 1. **É a 4ª aparição do mesmo padrão neste
+projeto — AUSÊNCIA DE DADO TRATADA COMO VALOR** (case review lendo silêncio como pausa · "não
+registrou = não bateu" do E15 · cartões de métrica contando dia vazio como zero · e agora este).
+Não é raro: TODO registro anterior à 0026 tem `meal` nulo, e o pendente que expira grava assim de
+propósito. Agora `unlabeledCount > 0` ⇒ o bot NÃO afirma falta; diz o que sabe e oferece `/refeicao`.
+**Flake pego pelo CI e não pelo local:** teste usava dia UTC onde precisava do dia LOCAL — só
+quebraria entre 21h e meia-noite, e o CI rodou às 21h11. Um 2º caso tinha o mesmo defeito e era pior
+(afirmava `toBe(0)`, então o dia errado o faria passar VAZIO). Helper `hojeLocal()` é a fonte única.
+Suíte: **1019 PASS (+1 skip)** (era 818; +201 no E16) · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
 CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) **verde de novo desde
 2026-07-30** — ficou VERMELHO de 22 a 30/07 (~20 commits) sem ninguém notar, e ninguém notou
 porque esta linha dizia "verde": o job de código sempre passou, quem reprovava era o
@@ -250,7 +276,7 @@ Deploy: Fly.io GRU (`flyctl deploy --remote-only -a nutrimed`) + Neon sa-east-1 
 | E9 Documentação Clínica | ✅ | E11 Pacientes & Dashboard | ✅ completo (4 fases) |
 | E12 Bot de Telegram (foto→nutrição vs metas) | ✅ completo (9 stories + grupo + texto; só alimentação) | E13 Relatório Nutricional (TACO) | ✅ completo (em produção) |
 | E14 Painel Laboratorial dinâmico (laudo completo + apresentação) | ✅ completo (verificado no navegador) | E15 Histórico mês a mês (plano de 12 meses) | ✅ completo (4 fases, em produção) |
-| E16 F1 precisão + F2 pergunta a refeição | ✅ EM PRODUÇÃO (v64) | E16 F3 lembretes 16h/22h | ✅ código pronto, DESLIGADO (bloqueia CJ-14) |
+| E16 F1 precisão + F2 pergunta a refeição | ✅ EM PRODUÇÃO (PRs #18/#20) | E16 F3 lembretes 16h/22h | ✅ EM PRODUÇÃO e LIGADO só p/ o piloto (PR #21; pacientes do médico bloqueados pelo CJ-14) |
 | Transcrição Confiável (léxico + revisão do médico + POC) | ✅ completo (falta áudio real p/ POC) | Projeção Corporal por foto (IA) | ✅ gpt-image-2 + geração assíncrona (falta navegador) |
 
 **Projeção Corporal por foto (2026-07-28).** O médico sobe uma foto do paciente, informa peso atual
