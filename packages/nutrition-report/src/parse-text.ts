@@ -48,6 +48,7 @@ const UNIT = [
   'bifes?',
   'postas?',
   'potes?',
+  'bolas?',
   'gramas?',
   'gr',
   'g',

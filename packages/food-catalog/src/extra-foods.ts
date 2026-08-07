@@ -229,6 +229,81 @@ export const EXTRA_FOODS: readonly ExtraFood[] = [
     per100g: { kcal: 164, protein: 8.86, carbs: 27.4, fat: 2.59, fiber: 7.6 },
   },
 
+  // ── Modernos e industrializados que a TACO de 2011 não alcançou ──────────
+  // Todos do USDA SR Legacy (domínio público). ATENÇÃO ao extrair do FDC: o
+  // campo `Energy` aparece DUAS vezes, em kJ e em kcal. Pegar "o último"
+  // devolve kJ para vários alimentos (salsicha 1350, sorvete 868, pizza 1120) —
+  // valores que, embarcados, triplicariam a energia do registro. Onde o número
+  // abaixo veio de kJ, a conversão (÷ 4,184) está anotada e confere com Atwater.
+  {
+    id: 'nm-granola',
+    description: 'Granola tradicional',
+    category: 'Cereais e derivados',
+    source: 'usda-cc0',
+    origin: 'USDA FDC 171646 (Cereals ready-to-eat, granola, homemade)',
+    per100g: { kcal: 489, protein: 13.7, carbs: 53.9, fat: 24.3, fiber: 8.9 },
+  },
+  {
+    id: 'nm-quinoa-cozida',
+    description: 'Quinoa cozida',
+    category: 'Cereais e derivados',
+    source: 'usda-cc0',
+    origin: 'USDA FDC 168917 (Quinoa, cooked)',
+    per100g: { kcal: 120, protein: 4.4, carbs: 21.3, fat: 1.92, fiber: 2.8 },
+  },
+  {
+    id: 'nm-chia',
+    description: 'Chia, semente seca',
+    category: 'Nozes e sementes',
+    source: 'usda-cc0',
+    origin: 'USDA FDC 170554 (Seeds, chia seeds, dried)',
+    per100g: { kcal: 486, protein: 16.5, carbs: 42.1, fat: 30.7, fiber: 34.4 },
+  },
+  {
+    id: 'nm-salsicha',
+    description: 'Salsicha (tipo hot dog)',
+    category: 'Carnes e derivados',
+    source: 'usda-cc0',
+    origin: 'USDA FDC 174614 (Frankfurter, beef, heated) — 1350 kJ ÷ 4,184 = 323 kcal',
+    per100g: { kcal: 323, protein: 11.7, carbs: 2.66, fat: 29.4 },
+  },
+  {
+    id: 'nm-sorvete',
+    description: 'Sorvete de creme',
+    category: 'Produtos açucarados',
+    source: 'usda-cc0',
+    origin: 'USDA FDC 167575 (Ice creams, vanilla) — 868 kJ ÷ 4,184 = 207 kcal',
+    per100g: { kcal: 207, protein: 3.5, carbs: 23.6, fat: 11, fiber: 0.7 },
+  },
+  {
+    id: 'nm-pizza-mussarela',
+    description: 'Pizza de mussarela, assada',
+    category: 'Alimentos preparados',
+    source: 'usda-cc0',
+    origin: 'USDA FDC 170317 (Pizza, cheese topping, regular crust) — 1120 kJ ÷ 4,184 = 268 kcal',
+    per100g: { kcal: 268, protein: 10.4, carbs: 29, fat: 12.3, fiber: 2.2 },
+  },
+  {
+    id: 'nm-panqueca',
+    description: 'Panqueca simples (massa, sem recheio)',
+    category: 'Alimentos preparados',
+    source: 'usda-cc0',
+    origin: 'USDA FDC 175009 (Pancakes, plain, prepared from recipe)',
+    per100g: { kcal: 227, protein: 6.4, carbs: 28.3, fat: 9.7 },
+  },
+  {
+    // ÁLCOOL tem 7 kcal/g e NÃO aparece em proteína/carbo/gordura: sem o campo
+    // `alcohol`, a checagem de Atwater acusaria 85 kcal contra 11 "esperadas" e
+    // reprovaria um dado correto. É também o motivo de o vinho ser fácil de
+    // esquecer numa dieta — a energia não está em nenhum macro.
+    id: 'nm-vinho-tinto',
+    description: 'Vinho tinto de mesa',
+    category: 'Bebidas (alcoólicas e não alcoólicas)',
+    source: 'usda-cc0',
+    origin: 'USDA FDC 173190 (Alcoholic beverage, wine, table, red)',
+    per100g: { kcal: 85, protein: 0.07, carbs: 2.61, fat: 0, alcohol: 10.6 },
+  },
+
   // ── Iogurte grego: DOIS alimentos sob o mesmo nome ───────────────────────
   // Não existe padrão de identidade legal para "iogurte grego" no Brasil (a IN
   // 46/2007 do MAPA regula leite fermentado genericamente). Por isso o rótulo

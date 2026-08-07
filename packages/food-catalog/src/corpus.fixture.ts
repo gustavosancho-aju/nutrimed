@@ -223,6 +223,16 @@ export const CORPUS: readonly CorpusCase[] = [
 
   // ── 2ª varredura: não é alimento ────────────────────────────────────────
   { term: 'agua', expect: 'BLOQUEADO', nota: 'caía em "Coco, água de"; e água não entra na contagem' },
+
+  // ── 3ª leva (2026-08-07): modernos e preparados que a TACO de 2011 não tem ──
+  { term: 'granola', expect: 'Granola' },
+  { term: 'quinoa', expect: 'Quinoa cozida', reject: 'crua' },
+  { term: 'chia', expect: 'Chia' },
+  { term: 'salsicha', expect: 'Salsicha', nota: 'USDA publica 1350 kJ; embarcado como 323 kcal' },
+  { term: 'sorvete', expect: 'Sorvete', nota: 'USDA publica 868 kJ; embarcado como 207 kcal' },
+  { term: 'pizza', expect: 'Pizza', nota: 'USDA publica 1120 kJ; embarcado como 268 kcal' },
+  { term: 'panqueca', expect: 'Panqueca' },
+  { term: 'vinho', expect: 'Vinho tinto', nota: 'álcool: 7 kcal/g fora de todo macro' },
 ];
 
 /** Marcador de que o termo deve ser RECUSADO, não resolvido. */

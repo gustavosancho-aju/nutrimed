@@ -124,20 +124,32 @@ describe('tabela de extensão (alimentos fora da TACO)', () => {
     expect(sobremesa.food.per100g.carbs).toBeGreaterThan(proteico.food.per100g.carbs! * 3);
   });
 
-  it('todo item respeita Atwater (kcal ≈ 4P + 4C + 9G) dentro de 10%', () => {
-    // Regra de sanidade que pega erro de transcrição de rótulo. Vale para tudo
-    // que não é gordura pura nem tem álcool/poliol — nenhum item aqui é.
+  it('todo item respeita Atwater (kcal ≈ 4P + 4C + 9G + 7álcool) dentro de 10%', () => {
+    // Regra de sanidade que pega erro de transcrição — e que pegaria também o
+    // erro de UNIDADE: o USDA publica `Energy` em kJ e em kcal, e extrair o
+    // valor errado triplica a energia (salsicha 1350 kJ = 323 kcal).
+    //
+    // O ÁLCOOL entra com 7 kcal/g porque não aparece em nenhum macro: sem ele,
+    // o vinho acusaria 85 kcal contra 11 "esperadas" e um dado CORRETO seria
+    // reprovado.
     const fora: string[] = [];
     for (const f of EXTRA_FOODS) {
-      const { kcal = 0, protein = 0, carbs = 0, fat = 0 } = f.per100g;
+      const { kcal = 0, protein = 0, carbs = 0, fat = 0, alcohol = 0 } = f.per100g;
       if (kcal === 0) continue; // creatina: 0 por regra da IN 75/2020
-      const estimado = 4 * protein + 4 * carbs + 9 * fat;
+      const estimado = 4 * protein + 4 * carbs + 9 * fat + 7 * alcohol;
       const desvio = Math.abs(estimado - kcal) / kcal;
       if (desvio > 0.1) {
         fora.push(`${f.id}: rótulo ${kcal} kcal vs Atwater ${estimado.toFixed(0)} (${(desvio * 100).toFixed(0)}%)`);
       }
     }
     expect(fora, `itens fora de Atwater:\n${fora.join('\n')}`).toEqual([]);
+  });
+
+  it('nenhum item ficou com energia em kJ por engano', () => {
+    // Guarda direta contra o erro de extração do USDA. Nenhum alimento comum
+    // passa de ~900 kcal/100 g (óleo puro = 884); acima disso é kJ disfarçado.
+    const suspeitos = EXTRA_FOODS.filter((f) => (f.per100g.kcal ?? 0) > 900).map((f) => f.id);
+    expect(suspeitos, 'valores acima de 900 kcal/100 g são kJ, não kcal').toEqual([]);
   });
 
   it('nenhum item soma mais de 100 g de macros por 100 g', () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { searchFood, TACO_MATCH_THRESHOLD } from './search';
+import { defaultPortionGrams } from './portions';
 
 /**
  * Testes da BUSCA LEXICAL isolada — sem o catálogo curado do
@@ -102,5 +103,31 @@ describe('limiar de confiança', () => {
     for (const q of ['banana', 'arroz', 'morango', 'aveia', 'feijao', 'ovo']) {
       for (const m of searchFood(q, 5)) expect(m.score).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+describe('porção padrão casa PALAVRA, não pedaço de palavra', () => {
+  it('"Salsicha" não herda a porção de "chá"', () => {
+    // Bug real (2026-08-07): a regra usava `includes`, e salsi-CHA- casava com
+    // a regra de chá (1 xícara = 100 g). "2 salsichas" virava 200 g em vez de
+    // 100 g. A mesma armadilha espreita "ovo" em "novo" e "mel" em "melancia".
+    const salsicha = { id: 'x', description: 'Salsicha (tipo hot dog)', category: 'Carnes e derivados', per100g: {} };
+    expect(defaultPortionGrams(salsicha).grams).toBe(50);
+  });
+
+  it('as palavras-chave legítimas continuam casando', () => {
+    const cafe = { id: 'x', description: 'Café, infusão 10%', category: 'Bebidas', per100g: {} };
+    expect(defaultPortionGrams(cafe).grams).toBe(100);
+
+    const ovo = { id: 'y', description: 'Ovo, de galinha, inteiro, cozido/10minutos', category: 'Ovos e derivados', per100g: {} };
+    expect(defaultPortionGrams(ovo).grams).toBe(50);
+
+    const arroz = { id: 'z', description: 'Arroz, tipo 1, cozido', category: 'Cereais e derivados', per100g: {} };
+    expect(defaultPortionGrams(arroz).grams).toBe(100);
+  });
+
+  it('"melancia" não herda a porção de "mel"', () => {
+    const melancia = { id: 'w', description: 'Melancia, crua', category: 'Frutas e derivados', per100g: {} };
+    expect(defaultPortionGrams(melancia).grams).toBe(100); // fruta, não colher de mel
   });
 });
