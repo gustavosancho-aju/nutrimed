@@ -35,6 +35,13 @@ const KEYWORD_RULES: readonly PortionRule[] = [
   { keywords: ['creatina'], portion: { grams: 3, label: '1 dose (3 g)' } },
   { keywords: ['pasta de amendoim'], portion: { grams: 20, label: '1 colher de sopa (20 g)' } },
   { keywords: ['goma de tapioca'], portion: { grams: 80, label: '1 tapioca média (80 g)' } },
+  // Alimentos da tabela própria cuja porção usual difere muito da categoria.
+  { keywords: ['granola', 'chia'], portion: { grams: 30, label: '2 colheres de sopa (30 g)' } },
+  { keywords: ['sorvete'], portion: { grams: 60, label: '1 bola (60 g)' } },
+  { keywords: ['vinho'], portion: { grams: 150, label: '1 taça (150 ml)' } },
+  { keywords: ['salsicha'], portion: { grams: 50, label: '1 unidade (50 g)' } },
+  { keywords: ['pizza'], portion: { grams: 100, label: '1 fatia (100 g)' } },
+  { keywords: ['panqueca'], portion: { grams: 80, label: '1 unidade (80 g)' } },
 ];
 
 const CATEGORY_PORTIONS: Readonly<Record<string, Portion>> = {
@@ -59,11 +66,27 @@ function normalize(text: string): string {
   return text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
+/**
+ * A palavra-chave casa como PALAVRA, não como pedaço de outra.
+ *
+ * Com `includes` puro, "Salsicha" casava com a regra de "chá" (salsi-CHA-) e
+ * herdava a porção de 1 xícara — "2 salsichas" virava 200 g em vez de 100 g.
+ * A mesma armadilha espreita "ovo" em "novo", "mel" em "melancia" e "cha" em
+ * qualquer palavra com essas letras juntas.
+ *
+ * A fronteira é não-alfanumérica em vez de `\b` porque a descrição já vem
+ * normalizada sem acento, e queremos casar dentro de "Arroz, tipo 1, cozido".
+ */
+function hasWord(desc: string, keyword: string): boolean {
+  const kw = normalize(keyword).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^a-z0-9])${kw}([^a-z0-9]|$)`).test(desc);
+}
+
 /** Porção padrão para quando o paciente não informou quantidade. */
 export function defaultPortionGrams(food: TacoFood): Portion {
   const desc = normalize(food.description);
   for (const rule of KEYWORD_RULES) {
-    if (rule.keywords?.some((kw) => desc.includes(normalize(kw)))) return rule.portion;
+    if (rule.keywords?.some((kw) => hasWord(desc, kw))) return rule.portion;
   }
   return CATEGORY_PORTIONS[food.category] ?? DEFAULT_PORTION;
 }
@@ -83,7 +106,7 @@ const UNIT_KEYWORD_GRAMS: readonly { match: (u: string) => boolean; grams: numbe
   { match: (u) => /^ml$/.test(u) || /^(g|grama|gramas)$/.test(u), grams: 1 },
 ];
 
-const FOOD_SIZED_UNIT_KEYWORDS = ['unidade', 'fatia', 'file', 'pedaco', 'porcao', 'bife', 'posta', 'pote'];
+const FOOD_SIZED_UNIT_KEYWORDS = ['unidade', 'fatia', 'file', 'pedaco', 'porcao', 'bife', 'posta', 'pote', 'bola'];
 
 /**
  * Converte quantidade+unidade relatadas em gramas. Retorna null quando a unidade é

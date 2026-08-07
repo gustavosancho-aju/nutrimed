@@ -99,3 +99,13 @@ describe('separador "com" (E16 — 2026-08-06)', () => {
     expect(itens.map((i) => i.food)).toEqual(['arroz', 'feijao']);
   });
 });
+
+describe('unidade "bola" (E16 — 2026-08-07)', () => {
+  it('"1 bola de sorvete" separa a unidade do alimento', () => {
+    // Sem "bola" na lista de unidades, o alimento virava "bola de sorvete" e
+    // não casava com nada — o paciente recebia "não conheço esse alimento".
+    const [item] = parseFoodText('1 bola de sorvete');
+    expect(item?.food).toBe('sorvete');
+    expect(item?.quantity).toBe(1);
+  });
+});

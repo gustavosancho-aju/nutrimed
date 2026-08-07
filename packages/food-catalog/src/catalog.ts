@@ -161,6 +161,10 @@ export const FOOD_CATALOG: readonly FoodAlias[] = [
   },
   { slug: 'polvilho-doce', ref: taco('146'), synonyms: ['polvilho', 'polvilho doce', 'fecula de mandioca'] },
   { slug: 'cuscuz-milho', ref: taco('533'), synonyms: ['cuscuz', 'cuscuz de milho', 'cuscuz nordestino'] },
+  { slug: 'granola', ref: nm('nm-granola'), synonyms: ['granola', 'granola tradicional'] },
+  { slug: 'quinoa', ref: nm('nm-quinoa-cozida'), synonyms: ['quinoa', 'quinua', 'quinoa cozida'] },
+  { slug: 'panqueca', ref: nm('nm-panqueca'), synonyms: ['panqueca', 'panquecas', 'panqueca simples'] },
+  { slug: 'pizza', ref: nm('nm-pizza-mussarela'), synonyms: ['pizza', 'pizza de mussarela', 'fatia de pizza'] },
   { slug: 'farinha-mandioca', ref: taco('122'), synonyms: ['farinha', 'farinha de mandioca', 'farofa pronta'] },
   { slug: 'mandioca-cozida', ref: taco('129'), synonyms: ['mandioca', 'mandioca cozida', 'aipim', 'macaxeira'] },
   { slug: 'milho-verde', ref: taco('45'), synonyms: ['milho', 'milho verde', 'milho em conserva', 'milho enlatado'] },
@@ -254,6 +258,7 @@ export const FOOD_CATALOG: readonly FoodAlias[] = [
   // corta o 's' final e produz "noze", que não existe em lugar nenhum.
   { slug: 'noz', ref: taco('597'), synonyms: ['nozes', 'noz', 'noz crua'] },
   { slug: 'amendoa', ref: taco('586'), synonyms: ['amendoa', 'amendoas'] },
+  { slug: 'chia', ref: nm('nm-chia'), synonyms: ['chia', 'semente de chia'] },
 
   // ── Tubérculos e legumes ─────────────────────────────────────────────────
   { slug: 'batata-cozida', ref: taco('91'), synonyms: ['batata', 'batata inglesa', 'batata cozida', 'batata inglesa cozida'] },
@@ -318,9 +323,18 @@ export const FOOD_CATALOG: readonly FoodAlias[] = [
   { slug: 'estrogonofe-carne', ref: taco('537'), synonyms: ['estrogonofe', 'strogonoff', 'estrogonofe de carne', 'strogonoff de carne'] },
   { slug: 'estrogonofe-frango', ref: taco('538'), synonyms: ['estrogonofe de frango', 'strogonoff de frango'] },
   { slug: 'toucinho', ref: taco('445'), synonyms: ['bacon', 'toucinho', 'toucinho frito'] },
+  { slug: 'salsicha', ref: nm('nm-salsicha'), synonyms: ['salsicha', 'salsichas', 'cachorro quente'] },
+  { slug: 'sorvete', ref: nm('nm-sorvete'), synonyms: ['sorvete', 'sorvete de creme', 'sorvete de baunilha'] },
 
   // ── Bebidas ──────────────────────────────────────────────────────────────
   { slug: 'cafe', ref: taco('471'), synonyms: ['cafe', 'cafe preto', 'cafe coado', 'cafezinho'] },
+  {
+    // Álcool tem 7 kcal/g e não aparece em nenhum macro — é a energia mais fácil
+    // de esquecer num diário alimentar, e por isso vale estar aqui.
+    slug: 'vinho-tinto',
+    ref: nm('nm-vinho-tinto'),
+    synonyms: ['vinho', 'vinho tinto', 'taca de vinho'],
+  },
 ];
 
 /**
