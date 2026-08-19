@@ -73,8 +73,11 @@ export function LabPanelSection({
     presentedIniciais.filter((s) => existentes.has(s)),
   );
   const [busca, setBusca] = useState('');
-  const [salvo, setSalvo] = useState<readonly string[]>(() =>
-    presentedIniciais.filter((s) => existentes.has(s)),
+  // Não é estado: o componente é remontado (via `key`) quando a seleção salva no
+  // servidor muda, então basta derivar do prop — nunca precisa de setter.
+  const salvo = useMemo(
+    () => presentedIniciais.filter((s) => existentes.has(s)),
+    [presentedIniciais, existentes],
   );
 
   const porSlug = useMemo(() => new Map(series.map((s) => [s.slug, s])), [series]);
@@ -303,7 +306,6 @@ export function LabPanelSection({
           <button
             type="submit"
             disabled={!pendente}
-            onClick={() => setSalvo(selecionados)}
             className="rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-on-brand shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
           >
             Salvar seleção
