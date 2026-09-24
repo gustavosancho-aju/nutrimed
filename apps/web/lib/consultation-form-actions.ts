@@ -9,8 +9,7 @@ import {
   type ConsultationForm,
 } from '@nutrimed/consultation-form';
 import { loadPatient, computeAge, listBodyComposition } from '@nutrimed/patients';
-import { AnthropicLlmProvider } from '@nutrimed/llm-anthropic';
-import { KimiLlmProvider } from '@nutrimed/llm-kimi';
+import { buildDocumentLlm } from './document-llm';
 import { FakeLlmProvider, FakeTextCompleter, type ILlmProvider } from '@nutrimed/providers';
 import { getCurrentUser } from './auth';
 import { getDb } from './db';
@@ -29,18 +28,9 @@ import { toActionResult, type ActionResult } from './action-result';
  */
 
 function buildFormLlm(): ILlmProvider {
-  // Mesma escolha de provedor da nota clínica: Kimi assume os documentos longos
-  // quando há key, Claude é o fallback (ver note-actions.ts).
-  if (process.env.KIMI_API_KEY) {
-    return new KimiLlmProvider({
-      apiKey: process.env.KIMI_API_KEY,
-      personaId: 'aurelio',
-      longForm: true,
-    });
-  }
-  if (process.env.ANTHROPIC_API_KEY) {
-    return new AnthropicLlmProvider({ apiKey: process.env.ANTHROPIC_API_KEY, personaId: 'aurelio' });
-  }
+  // Kimi K3 primário, Claude reserva automático (ver document-llm.ts).
+  const real = buildDocumentLlm();
+  if (real) return real;
   const fake = new FakeLlmProvider('aurelio', 'sintese');
   const texts = new FakeTextCompleter([
     JSON.stringify({

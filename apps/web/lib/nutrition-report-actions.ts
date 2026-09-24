@@ -10,8 +10,7 @@ import {
   type ReportPatientContext,
 } from '@nutrimed/nutrition-report';
 import { listBodyComposition, loadCurrentNutritionGoal } from '@nutrimed/patients';
-import { AnthropicLlmProvider } from '@nutrimed/llm-anthropic';
-import { KimiLlmProvider } from '@nutrimed/llm-kimi';
+import { buildDocumentLlm } from './document-llm';
 import { FakeLlmProvider, FakeTextCompleter, type ILlmProvider } from '@nutrimed/providers';
 import { getCurrentUser } from './auth';
 import { getDb } from './db';
@@ -27,20 +26,9 @@ import { toActionResult, type ActionResult } from './action-result';
  */
 
 function buildLlm(): ILlmProvider {
-  // Kimi K3 assume os DOCUMENTOS LONGOS (decisão 2026-07-21) — ver note-actions.
-  if (process.env.KIMI_API_KEY) {
-    return new KimiLlmProvider({
-      apiKey: process.env.KIMI_API_KEY,
-      personaId: 'aurelio',
-      longForm: true,
-    });
-  }
-  if (process.env.ANTHROPIC_API_KEY) {
-    return new AnthropicLlmProvider({
-      apiKey: process.env.ANTHROPIC_API_KEY,
-      personaId: 'aurelio',
-    });
-  }
+  // Kimi K3 primário, Claude reserva automático (ver document-llm.ts).
+  const real = buildDocumentLlm();
+  if (real) return real;
   // dev sem key: extração roteirizada + redação fake determinística — o roteiro
   // segue a ordem das chamadas de completeText (1ª extração, 2ª redação)
   const fake = new FakeLlmProvider('aurelio', 'sintese');

@@ -510,8 +510,13 @@ export default async function DashboardPage({
                     + Importar laudo
                   </Link>
                 </div>
-                {/* Lista como visão padrão; o médico marca o que vira gráfico. */}
+                {/* Lista como visão padrão; o médico marca o que vira gráfico.
+                    `key` força remount quando a seleção salva no servidor muda
+                    (ex.: após "Salvar seleção" + redirect) — sem isso o estado
+                    local `salvo`/`selecionados` não se resincronizaria com o
+                    prop novo, e o botão nunca voltaria a mostrar "salvo". */}
                 <LabPanelSection
+                  key={labPrefs.presented.join('|')}
                   patientId={id}
                   series={analyteSeries}
                   presentedIniciais={labPrefs.presented}
