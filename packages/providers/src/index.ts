@@ -31,5 +31,8 @@ export {
   FakeVideoAssetProvider,
 } from './fakes';
 
+// Primário → reserva quando o primário falha (Kimi → Claude)
+export { FallbackLlmProvider } from './fallback';
+
 // Utilitário de parsing de saída de LLM (strip de cercas de código)
 export { stripJsonFences } from './json';
