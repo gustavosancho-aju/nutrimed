@@ -10,7 +10,40 @@ deploy e roadmap — a referência única do estado atual).
 **📋 Registro histórico do MVP (E1–E10): [`docs/IMPLEMENTATION-RECORD.md`](docs/IMPLEMENTATION-RECORD.md)**
 (rastreabilidade FR/NFR/ADR e evidências ao vivo do snapshot de 2026-06-11).
 
-## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-08-07, main @ b92133d, Fly v69 — E16 completo: precisão do alimento, pergunta da refeição e lembretes proativos LIGADOS para o piloto)
+## Estado: EM PRODUÇÃO — https://nutrimed.fly.dev (2026-09-25, main @ 5097395, Fly v74 — SÓ Claude: Kimi removido, Sonnet 5 em laudos+documentos, Next 16.3.6 fechando RCE crítico)
+
+**🔥 Rodada 2026-09-24/25 — IA fora do ar + RCE no Next (PRs #30 e #31, EM PRODUÇÃO na v72).**
+O piloto viu "O serviço de IA está indisponível" em **Gerar nota** E **Preencher ficha**. Causa medida
+com chamada mínima às duas APIs: a **conta do Kimi foi SUSPENSA POR SALDO** (`429
+exceeded_current_quota_error`, "insufficient balance") enquanto o Claude respondia 200. Não era
+instabilidade: era 100% das chamadas, e o código não tinha plano B (a pendência 5 previa exatamente isso).
+**Correção (#30):** `FallbackLlmProvider` em `@nutrimed/providers` (primário → reserva em QUALQUER
+falha, a mesma chamada) + `apps/web/lib/document-llm.ts` como fonte ÚNICA do provedor de nota,
+relatório e ficha (eram 3 cópias do mesmo `if`). Decisões: **sem circuito aberto** (o 429 de cota
+volta em ms, e tentar o Kimi a cada chamada faz o sistema VOLTAR SOZINHO após a recarga, sem deploy);
+`modelVersion` é o de quem RESPONDEU (auditoria NFR10); o log `[document-llm] Kimi falhou, usando
+Claude:` leva só a mensagem do provedor, **nunca o prompt** (dado clínico). Verificado com as chaves
+reais: 429 do Kimi → `claude-haiku-4-5` respondeu. **Enquanto o Kimi estiver sem saldo, os documentos
+saem pelo HAIKU** (superado no mesmo dia: Kimi removido e documentos no Sonnet — ver abaixo).
+**Achado de carona (#31) — o mais grave:** o `pnpm audit --prod` do CI estava vermelho e, ao abrir,
+eram **2 CRÍTICOS de RCE não autenticado no próprio Next** (`>=16.0.0 <16.3.3`; prod rodava 16.2.11)
++ `sharp <0.35.4` (libheif) + `nanoid <3.3.18` (via next › postcss). Next → **16.3.6** e overrides
+`sharp>=0.35.4` / `nanoid@<3.3.18 → ^3.3.18` (o Next FIXA as transitivas — mesma lição de julho).
+Resta 1 moderado, abaixo do gate `--audit-level high`. Build limpo + 1036 testes + CI todo verde.
+**Lição:** CI vermelho em check "que não é do meu PR" merece ser ABERTO, não ignorado — desta vez era
+RCE em produção. O `flyctl` estava deslogado na sessão (logs de prod inacessíveis); o diagnóstico saiu
+de pingar as APIs com a chave local, que é a MESMA de prod.
+**Decisão do Gustavo (2026-09-25): FOCAR TUDO NO CLAUDE.** `KIMI_API_KEY` removido de produção
+(`flyctl secrets unset`, v73) — o Kimi NÃO volta a ser recarregado; o código dele e o fallback ficam
+(religar é só setar a key). Sem a key, `buildDocumentLlm` devolve o Claude direto, sem a ida inútil
+ao 429. **PR #34 (v74): modelo por USO, não um modelo só** — `claude-sonnet-5` onde o erro custa
+caro e o médico espera na tela: **leitura de laudos** (`DEFAULT_LAB_MODEL` em `lab-import`; o
+laudo real tem ~70 analitos, faixas por sexo/idade e títulos agrupando grandezas) e **nota,
+relatório e ficha** (`DOCUMENT_MODEL` em `document-llm.ts`). **Haiku fica onde a latência manda:**
+board ao vivo e foto do prato no bot. Sonnet é mais caro por chamada — o teto real segue sendo o
+limite por chave no Console da Anthropic. **Não medido ainda:** um laudo real lido pelo Sonnet
+(`scripts/poc-lab-panel.mjs` aceita o modelo; baseline do Haiku: 70/70 reconhecidos, 66/70 com
+faixa, ~US$ 0,09 — a comparação que importa é a dívida da faixa copiada da linha vizinha).
 
 **9 de 10 épicos com núcleo implementado e verificado ao vivo** (falta E8 — vídeos).
 **E11 (Pacientes & Dashboard) COMPLETO** (4 fases + extras: faixa ideal/meta nos gráficos e
@@ -107,7 +140,8 @@ reordenável persistindo a ordem; Apresentação obedecendo essa ordem; e a impo
 Semear um laudo real localmente: `cd apps/web && npx tsx --env-file=.env.local
 scripts/seed-laudo-real.mjs <laudo.pdf> ["Nome do paciente"]` (passa pelo MESMO caminho de código da
 server action; extração cacheada ao lado do PDF — **o cache contém dado clínico, apague depois**).
-Dívida conhecida: o modelo às vezes **copia a referência da linha vizinha** quando o laudo agrupa
+Dívida conhecida (medida no HAIKU; desde 2026-09-25 a leitura é no Sonnet 5 — reavaliar com laudo
+real): o modelo às vezes **copia a referência da linha vizinha** quando o laudo agrupa
 grandezas sob um título só (o tempo de protrombina herdou o "> 70%" da atividade) — a tabela de
 confirmação mostra a faixa interpretada justamente para o médico flagrar isso.
 **E15 (Histórico mês a mês do plano de 12 meses) COMPLETO e em produção (2026-07-28)** — o médico
@@ -269,7 +303,7 @@ então o alimento virava "bola de sorvete".
 **Os 5 que restam são intencionais:** `requeijão` (bloqueado, sem fonte de licença compatível — única
 lacuna real), `barra de proteína` (ambíguo: 294–504 kcal/100 g pelo sabor), `água` (não é alimento),
 `sopa` e `crepioca` (receita variável demais ⇒ a foto é o caminho honesto).
-Suíte: **1032 PASS (+1 skip)** (era 818; +214 no E16) · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
+Suíte: **1041 PASS (+1 skip)** (era 818; +214 no E16; +9 do fallback e do Sonnet em 2026-09-24/25) · gates `lint`/`typecheck`/`test`/`build` todos PASS ·
 CI GitHub (lint·typecheck·test·build, CodeQL, pnpm audit, gitleaks) **verde de novo desde
 2026-07-30** — ficou VERMELHO de 22 a 30/07 (~20 commits) sem ninguém notar, e ninguém notou
 porque esta linha dizia "verde": o job de código sempre passou, quem reprovava era o
@@ -488,11 +522,11 @@ packages/db              Migrations 0001–0022 (0021 soft-delete do food log ·
 packages/auth            scrypt + sessões DB-backed
 packages/consent         Gate de gravação FR20 (servidor, default NEGA)
 packages/audit           Trilha append-only com proveniência (NFR10)
-packages/providers       4 interfaces NFR8 + fakes
+packages/providers       4 interfaces NFR8 + fakes + FallbackLlmProvider (primário → reserva)
 packages/stt-deepgram    Adapter Deepgram (WS nativo, keywords)
 packages/stt-openai      Adapter OpenAI Realtime (candidato B)
-packages/llm-anthropic   Adapter Claude (Haiku default, longForm, onUsage)
-packages/llm-kimi        Adapter Kimi/Moonshot (kimi-k3, 1M ctx, reasoning_effort low) — nota+relatório quando KIMI_API_KEY presente
+packages/llm-anthropic   Adapter Claude (Haiku default p/ o board; documentos passam model=claude-sonnet-5 via apps/web/lib/document-llm.ts)
+packages/llm-kimi        Adapter Kimi/Moonshot (kimi-k3) — INATIVO desde 2026-09-25 (key removida de prod); se voltar, é primário dos documentos com Claude de reserva
 packages/session         ConsultationSession (retry/backoff, gate 1.4)
 packages/engines         E4: triggers + score/gate + rate-limit + dedup + pausa
 packages/kb              E5: namespaces isolados + ingestão versionada + Reasoner
@@ -501,7 +535,7 @@ packages/board-gateway   WS autenticado /board + /audio
 packages/clinical-notes  E9: nota cifrada+auditada + transcript persistido/revisado (Transcrição Confiável: saveTranscriptReview)
 packages/telemetry       E10: custo/gate/latência/ruído + Quiet Board trigger
 packages/patients        E11: paciente cifrado + medições (bioimpedância/exames) + computeAge
-packages/lab-import      E11: extração de laudo PDF (ILabExtractor: Claude nativo + fake) — ADR-012
+packages/lab-import      E11: extração de laudo PDF (ILabExtractor: Claude Sonnet 5 nativo + fake) — ADR-012
 packages/food-vision     E12: estimativa nutricional por foto (IFoodEstimator: Claude visão + fake) — ADR-015
 packages/telegram-link   E12: pareamento por código + gate de consentimento do canal (default NEGA) — ADR-013/014
 packages/telegram-bot    E12/E16: lógica pura do bot (foto/comandos + pergunta da refeição + lembretes proativos)
@@ -538,10 +572,10 @@ Comandos: `npm run lint` · `npm run typecheck` · `npm test` · `npm run build`
 4. 🔐 **Rotação das keys** — Gustavo optou por NÃO rotacionar em 2026-07-04 ("confio no chat").
    Reavaliar antes de qualquer ambiente compartilhado/comercialização; trocar o token do bot no
    `apps/web/.env.local` por um bot de TESTE segue recomendado (incidente do webhook 2026-07-02).
-5. **Fallback Kimi→Claude no 429** — em 2026-07-30 ~20:38Z um `generateNoteAction` REAL falhou em
-   prod com 429 do Kimi ("engine overloaded"); o erro chegou tratado ao usuário, mas a nota não
-   saiu. Hoje o Kimi assume nota+relatório sempre que `KIMI_API_KEY` existe, sem plano B — se o
-   429 recorrer, cair para o Claude na hora vale mais que a economia.
+5. ~~**Fallback Kimi→Claude no 429**~~ ✅ **FEITO 2026-09-24 (PR #30, v72)** — recorreu como conta
+   suspensa por saldo e derrubou nota+ficha. Depois o Kimi foi REMOVIDO (tudo no Claude, v73/v74).
+   Resta: conferir a 1ª nota e o 1º laudo lidos pelo **Sonnet 5** em produção (faixas de exames
+   agrupados, ex.: protrombina) e o gasto no Console da Anthropic após a troca de modelo.
 6. **PRs do Dependabot abertos** (avaliados 2026-07-31): **#10 vitest 3→4.1.10** — 5 checks verdes,
    785 testes passando na major nova, é devDependency; mergeável pelo mérito de sair de major
    defasada, mas ganho de segurança ZERO (audit idêntico ao da main). **#11 eslint 9→10** é o que
