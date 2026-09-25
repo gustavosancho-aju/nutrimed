@@ -42,7 +42,15 @@ export class LabExtractorError extends Error {
 }
 
 const DEFAULT_ENDPOINT = 'https://api.anthropic.com/v1/messages';
-const DEFAULT_MODEL = 'claude-haiku-4-5';
+/**
+ * SONNET, não Haiku (decisão 2026-09-25): a leitura do laudo é onde o erro
+ * custa mais caro — um laudo real tem 70 analitos, faixas por sexo/idade e
+ * títulos que agrupam grandezas (o Haiku chegou a copiar o "> 70%" da
+ * atividade de protrombina para o TEMPO, em segundos). A extração é única por
+ * laudo e o médico espera na tela de confirmação, então qualidade > latência.
+ */
+export const DEFAULT_LAB_MODEL = 'claude-sonnet-5';
+const DEFAULT_MODEL = DEFAULT_LAB_MODEL;
 
 /**
  * Sinônimos/rótulos comuns em laudos de bioimpedância (InBody, Tanita etc.) que
