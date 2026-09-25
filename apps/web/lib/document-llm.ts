@@ -9,10 +9,20 @@ import { FallbackLlmProvider, type ILlmProvider } from '@nutrimed/providers';
  * Claude é o RESERVA automático: em 2026-09-24 a conta do Kimi foi suspensa por
  * saldo e nota + ficha pararam em produção com o Claude funcionando ao lado.
  * Retorna `null` sem nenhuma key — cada action decide seu fake de dev.
+ *
+ * Os documentos usam o SONNET, não o Haiku do board (decisão 2026-09-25): são
+ * os textos que o médico mais lê e corrige, e ali qualidade vale mais que
+ * latência. O board ao vivo segue no Haiku, onde a velocidade manda.
  */
+export const DOCUMENT_MODEL = 'claude-sonnet-5';
+
 export function buildDocumentLlm(): ILlmProvider | null {
   const claude = process.env.ANTHROPIC_API_KEY
-    ? new AnthropicLlmProvider({ apiKey: process.env.ANTHROPIC_API_KEY, personaId: 'aurelio' })
+    ? new AnthropicLlmProvider({
+        apiKey: process.env.ANTHROPIC_API_KEY,
+        personaId: 'aurelio',
+        model: DOCUMENT_MODEL,
+      })
     : null;
   if (!process.env.KIMI_API_KEY) return claude;
 
