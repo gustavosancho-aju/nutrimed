@@ -14,7 +14,12 @@ export {
   sanitizeExtraction,
   sanitizePanel,
 } from './extractor';
-export { ClaudeLabExtractor, LabExtractorError, type ClaudeExtractorConfig } from './claude-extractor';
+export {
+  ClaudeLabExtractor,
+  LabExtractorError,
+  DEFAULT_LAB_MODEL,
+  type ClaudeExtractorConfig,
+} from './claude-extractor';
 export { FakeLabExtractor } from './fake-extractor';
 
 /**
